@@ -5,7 +5,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the unquoted argument `$B` cannot be resolved: `$B` is set in this command to a value the guard cannot resolve. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: the unquoted argument `$B` cannot be resolved: `$B` is set in this command to a value the guard cannot resolve. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -118,7 +118,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the `bash -c` script `$UNSET_SCRIPT` cannot be resolved: `$UNSET_SCRIPT` is unset. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: the `bash -c` script `$UNSET_SCRIPT` cannot be resolved: `$UNSET_SCRIPT` is unset. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -127,7 +127,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/x. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/x. To use a different root set ONEX_WORKTREES_ROOT. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -136,7 +136,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/x. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/x. To use a different root set ONEX_WORKTREES_ROOT. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -145,7 +145,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/x. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/x. To use a different root set ONEX_WORKTREES_ROOT. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -155,7 +155,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/x. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/x. To use a different root set ONEX_WORKTREES_ROOT. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -191,7 +191,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/x. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/x. To use a different root set ONEX_WORKTREES_ROOT. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -224,7 +224,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the worktree path `omni_worktrees/T/r` is relative, and the directory it resolves against cannot be determined (`$NOPE` is unset). To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: the worktree path `omni_worktrees/T/r` is relative, and the directory it resolves against cannot be determined (`$NOPE` is unset). A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -290,7 +290,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the worktree path `$PWD/x` cannot be resolved: `$PWD` is set by the shell as the command runs, not by this environment. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: the worktree path `$PWD/x` cannot be resolved: `$PWD` is set by the shell as the command runs, not by this environment. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -396,7 +396,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: `bash` reads its script from standard input here, so a `worktree add` it runs cannot be judged. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: `bash` reads its script from standard input here, so a `worktree add` it runs cannot be judged. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -408,7 +408,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: `git worktree add` is run by another program here and its path is not on the command line, so the destination cannot be judged. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: `git worktree add` is run by another program here and its path is not on the command line, so the destination cannot be judged. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -758,7 +758,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the worktree path `omni_worktrees/T/r` is relative, and the directory it resolves against cannot be determined (the `git -C` directory `$NOPE` cannot be resolved: `$NOPE` is unset). To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: the worktree path `omni_worktrees/T/r` is relative, and the directory it resolves against cannot be determined (the `git -C` directory `$NOPE` cannot be resolved: `$NOPE` is unset). A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -794,7 +794,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: {WS}/second-clone/omni_worktrees/OMN-19236/second-clone (the relative path `omni_worktrees/OMN-19236/second-clone` resolves against `{WS}/second-clone`, where git runs). {WS}/second-clone/omni_worktrees is a stray worktree root, not a sanctioned one; nothing is ever created there. Build the path from ${WSENV}, never from memory or from a redefined {WSENV}. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: {WS}/second-clone/omni_worktrees/OMN-19236/second-clone (the relative path `omni_worktrees/OMN-19236/second-clone` resolves against `{WS}/second-clone`, where git runs). {WS}/second-clone/omni_worktrees is a stray worktree root, not a sanctioned one; nothing is ever created there. Build the path from ${WSENV}, never from memory or from a redefined {WSENV}. To use a different root set ONEX_WORKTREES_ROOT. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -803,7 +803,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: {REG}/omnibase_infra/omni_worktrees/OMN-19113/omnibase_infra (the relative path `omni_worktrees/OMN-19113/omnibase_infra` resolves against `{REG}/omnibase_infra`, where git runs). {REG}/omnibase_infra/omni_worktrees is a stray worktree root, not a sanctioned one; nothing is ever created there. Build the path from ${WSENV}, never from memory or from a redefined {WSENV}. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: {REG}/omnibase_infra/omni_worktrees/OMN-19113/omnibase_infra (the relative path `omni_worktrees/OMN-19113/omnibase_infra` resolves against `{REG}/omnibase_infra`, where git runs). {REG}/omnibase_infra/omni_worktrees is a stray worktree root, not a sanctioned one; nothing is ever created there. Build the path from ${WSENV}, never from memory or from a redefined {WSENV}. To use a different root set ONEX_WORKTREES_ROOT. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -812,7 +812,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: {REG}/omnibase_infra/omni_worktrees/X/omnibase_infra (the relative path `omni_worktrees/X/omnibase_infra` resolves against `{REG}/omnibase_infra`, where git runs). {REG}/omnibase_infra/omni_worktrees is a stray worktree root, not a sanctioned one; nothing is ever created there. Build the path from ${WSENV}, never from memory or from a redefined {WSENV}. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: {REG}/omnibase_infra/omni_worktrees/X/omnibase_infra (the relative path `omni_worktrees/X/omnibase_infra` resolves against `{REG}/omnibase_infra`, where git runs). {REG}/omnibase_infra/omni_worktrees is a stray worktree root, not a sanctioned one; nothing is ever created there. Build the path from ${WSENV}, never from memory or from a redefined {WSENV}. To use a different root set ONEX_WORKTREES_ROOT. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -1119,7 +1119,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/y. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/y. To use a different root set ONEX_WORKTREES_ROOT. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -1144,7 +1144,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the worktree path `$(mktemp -d)` cannot be resolved: command substitution `$(...)` is never executed by the guard. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: the worktree path `$(mktemp -d)` cannot be resolved: command substitution `$(...)` is never executed by the guard. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -1153,7 +1153,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the worktree path `$WT` cannot be resolved: `$WT` is unset. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: the worktree path `$WT` cannot be resolved: `$WT` is unset. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -1162,7 +1162,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the worktree path `${WT:-/tmp}` cannot be resolved: parameter expansion `${WT:-/tmp}` is not resolved by the guard. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: the worktree path `${WT:-/tmp}` cannot be resolved: parameter expansion `${WT:-/tmp}` is not resolved by the guard. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -1172,7 +1172,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: {REG}/$WT (the relative path `$WT` resolves against `{REG}`, where git runs). To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: {REG}/$WT (the relative path `$WT` resolves against `{REG}`, where git runs). To use a different root set ONEX_WORKTREES_ROOT. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -1181,7 +1181,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: this command names `worktree add` but cannot be split into words (unterminated single quote), so its destination cannot be judged. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: this command names `worktree add` but cannot be split into words (unterminated single quote), so its destination cannot be judged. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -1191,7 +1191,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: `--bogus` is not a `git worktree add` option this guard can read. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: `--bogus` is not a `git worktree add` option this guard can read. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -1203,7 +1203,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: `--lock` takes no value, but `--lock=yes` gives one. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: `--lock` takes no value, but `--lock=yes` gives one. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -1219,7 +1219,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: `-x` (in `-x`) is not a `git worktree add` option this guard can read. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: `-x` (in `-x`) is not a `git worktree add` option this guard can read. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -1228,7 +1228,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/elsewhere/x. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/elsewhere/x. To use a different root set ONEX_WORKTREES_ROOT. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -1244,7 +1244,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/onex-x. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/onex-x. To use a different root set ONEX_WORKTREES_ROOT. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -1254,7 +1254,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: {WS}/omni_worktrees. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: {WS}/omni_worktrees. To use a different root set ONEX_WORKTREES_ROOT. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -1263,7 +1263,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the worktree path `{WS}/omni_worktrees/*/x` cannot be resolved: unquoted glob characters in `{WS}/omni_worktrees/*/x` are not resolved by the guard. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: the worktree path `{WS}/omni_worktrees/*/x` cannot be resolved: unquoted glob characters in `{WS}/omni_worktrees/*/x` are not resolved by the guard. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -1272,7 +1272,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: {WS}/omnibase_infra/x. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: {WS}/omnibase_infra/x. To use a different root set ONEX_WORKTREES_ROOT. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -1281,7 +1281,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: {ROOT}/home/x (`~/x` expands to `{ROOT}/home/x`). To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: {ROOT}/home/x (`~/x` expands to `{ROOT}/home/x`). To use a different root set ONEX_WORKTREES_ROOT. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -1344,7 +1344,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the `mkdir` destination `$UNSET_BASE/omni_worktrees/OMN-1` names a worktrees directory but cannot be resolved: `$UNSET_BASE` is unset. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: the `mkdir` destination `$UNSET_BASE/omni_worktrees/OMN-1` names a worktrees directory but cannot be resolved: `$UNSET_BASE` is unset. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -1412,7 +1412,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the unquoted argument `$B` cannot be resolved: `$B` is set in this command to a value the guard cannot resolve. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: the unquoted argument `$B` cannot be resolved: `$B` is set in this command to a value the guard cannot resolve. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -1525,7 +1525,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the `bash -c` script `$UNSET_SCRIPT` cannot be resolved: `$UNSET_SCRIPT` is unset. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: the `bash -c` script `$UNSET_SCRIPT` cannot be resolved: `$UNSET_SCRIPT` is unset. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -1534,7 +1534,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/x. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/x. To use a different root set ONEX_WORKTREES_ROOT. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -1543,7 +1543,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/x. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/x. To use a different root set ONEX_WORKTREES_ROOT. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -1552,7 +1552,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/x. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/x. To use a different root set ONEX_WORKTREES_ROOT. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -1562,7 +1562,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/x. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/x. To use a different root set ONEX_WORKTREES_ROOT. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -1598,7 +1598,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/x. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/x. To use a different root set ONEX_WORKTREES_ROOT. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -1631,7 +1631,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the worktree path `omni_worktrees/T/r` is relative, and the directory it resolves against cannot be determined (`$NOPE` is unset). To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: the worktree path `omni_worktrees/T/r` is relative, and the directory it resolves against cannot be determined (`$NOPE` is unset). A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -1697,7 +1697,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the worktree path `$PWD/x` cannot be resolved: `$PWD` is set by the shell as the command runs, not by this environment. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: the worktree path `$PWD/x` cannot be resolved: `$PWD` is set by the shell as the command runs, not by this environment. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -1811,7 +1811,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: `bash` reads its script from standard input here, so a `worktree add` it runs cannot be judged. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: `bash` reads its script from standard input here, so a `worktree add` it runs cannot be judged. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -1823,7 +1823,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: `git worktree add` is run by another program here and its path is not on the command line, so the destination cannot be judged. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: `git worktree add` is run by another program here and its path is not on the command line, so the destination cannot be judged. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -2173,7 +2173,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the worktree path `omni_worktrees/T/r` is relative, and the directory it resolves against cannot be determined (the `git -C` directory `$NOPE` cannot be resolved: `$NOPE` is unset). To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: the worktree path `omni_worktrees/T/r` is relative, and the directory it resolves against cannot be determined (the `git -C` directory `$NOPE` cannot be resolved: `$NOPE` is unset). A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -2209,7 +2209,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: {WS}/second-clone/omni_worktrees/OMN-19236/second-clone (the relative path `omni_worktrees/OMN-19236/second-clone` resolves against `{WS}/second-clone`, where git runs). {WS}/second-clone/omni_worktrees is a stray worktree root, not a sanctioned one; nothing is ever created there. Build the path from ${WSENV}, never from memory or from a redefined {WSENV}. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: {WS}/second-clone/omni_worktrees/OMN-19236/second-clone (the relative path `omni_worktrees/OMN-19236/second-clone` resolves against `{WS}/second-clone`, where git runs). {WS}/second-clone/omni_worktrees is a stray worktree root, not a sanctioned one; nothing is ever created there. Build the path from ${WSENV}, never from memory or from a redefined {WSENV}. To use a different root set ONEX_WORKTREES_ROOT. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -2646,7 +2646,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/y. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/y. To use a different root set ONEX_WORKTREES_ROOT. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -2671,7 +2671,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the worktree path `$(mktemp -d)` cannot be resolved: command substitution `$(...)` is never executed by the guard. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: the worktree path `$(mktemp -d)` cannot be resolved: command substitution `$(...)` is never executed by the guard. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -2680,7 +2680,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the worktree path `$WT` cannot be resolved: `$WT` is unset. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: the worktree path `$WT` cannot be resolved: `$WT` is unset. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -2689,7 +2689,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the worktree path `${WT:-/tmp}` cannot be resolved: parameter expansion `${WT:-/tmp}` is not resolved by the guard. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: the worktree path `${WT:-/tmp}` cannot be resolved: parameter expansion `${WT:-/tmp}` is not resolved by the guard. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -2700,7 +2700,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: this command names `worktree add` but cannot be split into words (unterminated single quote), so its destination cannot be judged. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: this command names `worktree add` but cannot be split into words (unterminated single quote), so its destination cannot be judged. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -2710,7 +2710,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: `--bogus` is not a `git worktree add` option this guard can read. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: `--bogus` is not a `git worktree add` option this guard can read. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -2722,7 +2722,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: `--lock` takes no value, but `--lock=yes` gives one. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: `--lock` takes no value, but `--lock=yes` gives one. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -2738,7 +2738,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: `-x` (in `-x`) is not a `git worktree add` option this guard can read. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: `-x` (in `-x`) is not a `git worktree add` option this guard can read. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -2747,7 +2747,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/elsewhere/x. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/elsewhere/x. To use a different root set ONEX_WORKTREES_ROOT. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -2763,7 +2763,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/onex-x. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: /tmp/onex-x. To use a different root set ONEX_WORKTREES_ROOT. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -2773,7 +2773,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: {WS}/omni_worktrees. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: {WS}/omni_worktrees. To use a different root set ONEX_WORKTREES_ROOT. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -2782,7 +2782,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the worktree path `{WS}/omni_worktrees/*/x` cannot be resolved: unquoted glob characters in `{WS}/omni_worktrees/*/x` are not resolved by the guard. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: the worktree path `{WS}/omni_worktrees/*/x` cannot be resolved: unquoted glob characters in `{WS}/omni_worktrees/*/x` are not resolved by the guard. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -2791,7 +2791,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: {WS}/omnibase_infra/x. To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: {WS}/omnibase_infra/x. To use a different root set ONEX_WORKTREES_ROOT. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -2800,7 +2800,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: {ROOT}/home/x (`~/x` expands to `{ROOT}/home/x`). To use a different root set ONEX_WORKTREES_ROOT. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: Worktrees must be created under {WS}/omni_worktrees. Got: {ROOT}/home/x (`~/x` expands to `{ROOT}/home/x`). To use a different root set ONEX_WORKTREES_ROOT. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }
@@ -2863,7 +2863,7 @@
    "pre_tool_use_worktree_guard.sh": {
     "out": {
      "decision": "block",
-     "reason": "BLOCKED: the `mkdir` destination `$UNSET_BASE/omni_worktrees/OMN-1` names a worktrees directory but cannot be resolved: `$UNSET_BASE` is unset. To disable this guard: onex hooks disable WORKTREE_GUARD"
+     "reason": "BLOCKED: the `mkdir` destination `$UNSET_BASE/omni_worktrees/OMN-1` names a worktrees directory but cannot be resolved: `$UNSET_BASE` is unset. A form that passes is one literal command per repo with an absolute destination: git -C ${WSENV}/<repo> worktree add ${WSENV}/omni_worktrees/<ticket>/<repo> -b <branch> <base> (no relative path, loop variable, $PWD or $(...)). To disable this guard: onex hooks disable WORKTREE_GUARD"
     },
     "rc": 2
    }

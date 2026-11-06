@@ -60,6 +60,12 @@ handler_routing:
       event_model:
         name: ModelLaneGithubReadRequest
         module: omniclaude.nodes.node_lane_github_read_guard_effect.models
+    - handler:
+        name: handle
+        module: omniclaude.nodes.node_lane_github_read_guard_effect.handlers.handler_runner_placement_snapshot_policy
+      event_model:
+        name: ModelRunnerPlacementSnapshotRequest
+        module: omniclaude.models.model_runner_placement_snapshot_request
 
 descriptor:
   node_archetype: effect
@@ -75,8 +81,10 @@ capabilities:
 event_bus:
   subscribe_topics:
     - onex.cmd.omniclaude.lane-github-read-check.v1
+    - onex.cmd.omniclaude.runner-placement-snapshot-check.v1
   publish_topics:
     - onex.evt.omniclaude.lane-github-read-checked.v1
+    - onex.evt.omniclaude.runner-placement-snapshot-checked.v1
 
 runtime_dispatch:
   command_topic: onex.cmd.omniclaude.lane-github-read-check.v1

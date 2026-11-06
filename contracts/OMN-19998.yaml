@@ -58,6 +58,8 @@ requirements:
     statement: "The gh shim repairs a lane read budget directory or hour file that the lane itself owns and that is read-only, keeps the hour's count, and still refuses with its cause when the file cannot be written."
   - id: req-omn19998-sibling-pins-precommit-hook
     statement: "The internal-sibling-pins handler runs as a local pre-commit hook on the lockfile as well as in the CI job, so a refused sibling pin stops at commit time."
+  - id: req-omn19998-public-reusables-leave-lab
+    statement: "A public repository's job never reaches a lab runner through a reusable workflow of omniclaude: the fleet route is taken only by a private caller, and the runner label gate runs GitHub-hosted."
   - id: req-omn19998-worktree-guard-bare-interpreter
     statement: "The worktree guard decision core resolves the omniclaude source root itself, so a hook interpreter with no omniclaude install still judges a destination instead of refusing every sanctioned worktree add."
 evidence_requirements:
@@ -118,6 +120,14 @@ dod_evidence:
           | python3 -c 'import sys; source = sys.stdin.read(); assert "_ROOTS = (_HOOKS_LIB.parents[3]" in source; assert "Path(os.environ.get(" in source; assert "OMNI_HOME" in source; assert source.index("sys.path += [str(r /") < source.index("from omniclaude.nodes.node_git_effect")'
     binds_ac:
       - "AC16"
+  - id: dod-omn19998-lane-commit-snapshot-only
+    description: "The lane-commit regressions run the hook as pre-commit does, with a stub gh that records any call, a hosted value, a stale snapshot, a snapshot missing a scope and a lane with no snapshot as controls. A lane commit resolves repository visibility and both variable scopes from the snapshot with no gh call."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_lane_omn20141.py -q --no-cov -k lane_commit"
+    binds_ac:
+      - "AC3"
   - id: dod-omn19998-linux-drainer-recovery
     description: "The installer preview, installed user unit and rendered drainer CLI are exercised against recorded quiet-host rows, with ordinary eviction as a positive control. Real host installation and fresh capture readback remain required separately."
     source: manual
@@ -142,6 +152,14 @@ dod_evidence:
         check_value: "uv run pytest tests/hooks/test_hostile_reviewer_retry_budget_omn19998.py -q -k \"job_ceiling or share_of_the_ceiling\""
     binds_ac:
       - AC2
+  - id: dod-omn19998-hostile-reviewer-accept-agent-receipt
+    description: "The accept step, its trusted-run guard, its source (the omnimarket clone, never the checkout under review) and the enforcement step that fails a degraded quorum are held by structural tests; a degraded quorum fails the job unless the accept decision is pass_agent."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q --no-cov -k \"enforcement_step or accept_and_verifier or degraded_quorum\""
+    binds_ac:
+      - AC1
   - id: dod-omn19998-hosted-eligible-listed
     description: "A listed hosted job passes the placement gate and its unlisted twin fails."
     source: manual
@@ -265,6 +283,14 @@ dod_evidence:
         check_value: "uv run pytest tests/ci/test_internal_sibling_pins_precommit_omn19998.py -q --no-cov"
     binds_ac:
       - "AC20"
+  - id: dod-omn19998-public-reusables-leave-lab
+    description: "A public caller of a fleet-naming reusable workflow takes the hosted fallback whatever the seam variables hold. Binds AC3, the placement criterion, the one of the live ticket's AC1 to AC3 that this runner-placement change belongs to."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_public_runner_placement_omn19998.py -q --no-cov -k reusable_lab_route"
+    binds_ac:
+      - AC3
   - id: dod-omn19998-contract-only-retirement
     description: Retires the claims of the contract-only criteria OMN-19998 never carried on the live ticket (15 labels). Each retired item's checks run here as a regression guard, and this item binds no criterion.
     source: manual

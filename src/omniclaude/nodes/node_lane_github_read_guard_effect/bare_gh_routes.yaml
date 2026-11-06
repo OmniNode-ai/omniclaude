@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# OMN-22539: what a bare gh from a lane is refused in favour of, when the first gh on the
+# hook's PATH is the real binary and not the shim. On the operator's Mac the shim left PATH
+# on 2026-10-25 (lanes-only directory), so a lane's bare gh ran on the operator's login with
+# nothing to refuse it. A gh shape with no row here has no node route yet and is allowed.
+# `gh` rows match group and verb; `api` rows match a GET endpoint, shell variables included.
+gh:
+  "pr view": pr-view
+  "pr list": pr-list
+  "pr checks": pr-checks
+  "pr create": pr-create
+  "pr edit": pr-edit
+  "pr ready": pr-ready
+  "pr close": pr-close
+  "pr comment": pr-comment
+  "run view": run-view
+  "run list": run-list
+  "run download": run-download
+  "release list": release-list
+  "workflow run": workflow-run
+api:
+  - {endpoint: '^repos/[^/]+/[^/]+/pulls/[^/]+$', scm: pr-view}
+  - {endpoint: '^repos/[^/]+/[^/]+/pulls$', scm: pr-list}
+  - {endpoint: '^repos/[^/]+/[^/]+/pulls/[^/]+/reviews$', scm: pr-review}
+  - {endpoint: '^repos/[^/]+/[^/]+/pulls/[^/]+/commits$', scm: pr-commits}
+  - {endpoint: '^repos/[^/]+/[^/]+/commits/[^/]+/check-runs$', scm: commit-check-runs}
+  - {endpoint: '^repos/[^/]+/[^/]+/commits/[^/]+$', scm: commit-view}
+  - {endpoint: '^repos/[^/]+/[^/]+/actions/runs$', scm: run-list}
+  - {endpoint: '^repos/[^/]+/[^/]+/actions/runs/[^/]+(/jobs)?$', scm: run-view}
+  - {endpoint: '^repos/[^/]+/[^/]+/actions/jobs/[^/]+/logs$', scm: job-log}
+  - {endpoint: '^repos/[^/]+/[^/]+/branches/[^/]+/protection(/required_status_checks)?$', scm: branch-protection}
+  - {endpoint: '^repos/[^/]+/[^/]+/contents/.+$', scm: file-read}
+  - {endpoint: '^repos/[^/]+/[^/]+/releases$', scm: release-list}

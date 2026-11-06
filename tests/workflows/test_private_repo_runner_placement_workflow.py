@@ -5,7 +5,7 @@
 Two properties are asserted mechanically because both were learned the
 expensive way elsewhere in this estate.
 
-The gate job is PINNED to the fleet. A job that judges private repositories
+The gate job is PINNED to the fleet for a private caller. A job that judges private repositories
 cannot itself be placed on a hosted runner: it would have to break the
 invariant it enforces in order to run. Routing it through a seam would be
 worse still, because it would then share fate with the variable it reads.
@@ -37,10 +37,18 @@ def _document() -> dict:
 
 def test_the_gate_job_is_pinned_to_the_fleet() -> None:
     job = _document()["jobs"]["private-repo-runner-placement"]
-    assert job["runs-on"] == ["self-hosted", "omnibase-ci"], (
+    runs_on = " ".join(job["runs-on"].split())
+    assert (
+        """github.event.repository.private && (fromJSON('["self-hosted","omnibase-ci"]'))"""
+        in (runs_on)
+    ), (
         "the job that enforces 'private repos never run hosted' must not run "
-        "hosted, and must not resolve through a routing variable either: it "
-        "would share fate with the value it reads"
+        "hosted for a private caller, and must not resolve through a routing "
+        "variable either: it would share fate with the value it reads"
+    )
+    assert "vars." not in runs_on
+    assert runs_on.endswith("|| 'ubuntu-latest' }}"), (
+        "a public repository never reaches a lab runner through this workflow"
     )
 
 

@@ -6,7 +6,7 @@
     "guard": "pre_tool_use_shared_tree_git_guard.sh",
     "key": "31f1d3b7e55b",
     "reason": "unauthorised-shared-tree-git-mutation",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=unauthorised-shared-tree-git-mutation | lane_source=registry | dedupe=31f1d3b7e55b | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=unauthorised-shared-tree-git-mutation | lane_source=registry | dedupe=31f1d3b7e55b | class_key=hook.pre_tool_use_shared_tree_git_guard%2e;sh.template.603ac448e0 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "",
@@ -25,7 +25,7 @@
     "guard": "pre_tool_use_shared_tree_git_guard.sh",
     "key": "31f1d3b7e55b",
     "reason": "unauthorised-shared-tree-git-mutation",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=unauthorised-shared-tree-git-mutation | lane_source=unresolved | dedupe=31f1d3b7e55b | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=unauthorised-shared-tree-git-mutation | lane_source=unresolved | dedupe=31f1d3b7e55b | class_key=hook.pre_tool_use_shared_tree_git_guard%2e;sh.template.603ac448e0 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "",
@@ -44,7 +44,7 @@
     "guard": "pre_tool_use_shared_tree_git_guard.sh",
     "key": "ef2b2805a9ba",
     "reason": "branch-refused-at-line",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=branch-refused-at-line | lane_source=registry | dedupe=ef2b2805a9ba | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=branch-refused-at-line | lane_source=registry | dedupe=ef2b2805a9ba | class_key=hook.pre_tool_use_shared_tree_git_guard%2e;sh.template.c5bcd07f2e | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "short detail",
@@ -63,7 +63,7 @@
     "guard": "pre_tool_use_shared_tree_git_guard.sh",
     "key": "ef2b2805a9ba",
     "reason": "branch-refused-at-line",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=branch-refused-at-line | lane_source=unresolved | dedupe=ef2b2805a9ba | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=branch-refused-at-line | lane_source=unresolved | dedupe=ef2b2805a9ba | class_key=hook.pre_tool_use_shared_tree_git_guard%2e;sh.template.c5bcd07f2e | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "short detail",
@@ -82,7 +82,7 @@
     "guard": "pre_tool_use_shared_tree_git_guard.sh",
     "key": "0b5f6ee23c95",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=unspecified | lane_source=registry | dedupe=0b5f6ee23c95 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=unspecified | lane_source=registry | dedupe=0b5f6ee23c95 | class_key=hook.pre_tool_use_shared_tree_git_guard%2e;sh.template.e3b0c44298 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -101,7 +101,7 @@
     "guard": "pre_tool_use_shared_tree_git_guard.sh",
     "key": "0b5f6ee23c95",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=unspecified | lane_source=unresolved | dedupe=0b5f6ee23c95 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=unspecified | lane_source=unresolved | dedupe=0b5f6ee23c95 | class_key=hook.pre_tool_use_shared_tree_git_guard%2e;sh.template.e3b0c44298 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -120,7 +120,7 @@
     "guard": "pre_tool_use_shared_tree_git_guard.sh",
     "key": "8ee1370d72ec",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=unspecified | lane_source=registry | dedupe=8ee1370d72ec | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=unspecified | lane_source=registry | dedupe=8ee1370d72ec | class_key=hook.pre_tool_use_shared_tree_git_guard%2e;sh.template.e3b0c44298 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "pipe | and\nnewline\r\nsplit",
@@ -139,7 +139,7 @@
     "guard": "pre_tool_use_shared_tree_git_guard.sh",
     "key": "8ee1370d72ec",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=unspecified | lane_source=unresolved | dedupe=8ee1370d72ec | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=unspecified | lane_source=unresolved | dedupe=8ee1370d72ec | class_key=hook.pre_tool_use_shared_tree_git_guard%2e;sh.template.e3b0c44298 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "pipe | and\nnewline\r\nsplit",
@@ -158,7 +158,7 @@
     "guard": "pre_tool_use_shared_tree_git_guard.sh",
     "key": "d135dc6a8f6b",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=unspecified | lane_source=registry | dedupe=d135dc6a8f6b | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=unspecified | lane_source=registry | dedupe=d135dc6a8f6b | class_key=hook.pre_tool_use_shared_tree_git_guard%2e;sh.template.3963e13924 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "token=abc.def bearer sk-aaaaaaaaaaaaaaaaaaaaaaaa AKIABBBBBBBBBBBBBBBB",
@@ -177,7 +177,7 @@
     "guard": "pre_tool_use_shared_tree_git_guard.sh",
     "key": "d135dc6a8f6b",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=unspecified | lane_source=unresolved | dedupe=d135dc6a8f6b | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=unspecified | lane_source=unresolved | dedupe=d135dc6a8f6b | class_key=hook.pre_tool_use_shared_tree_git_guard%2e;sh.template.3963e13924 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "token=abc.def bearer sk-aaaaaaaaaaaaaaaaaaaaaaaa AKIABBBBBBBBBBBBBBBB",
@@ -196,7 +196,7 @@
     "guard": "pre_tool_use_shared_tree_git_guard.sh",
     "key": "55048742c8f1",
     "reason": "omn-compound-line-refused-times-in-17s",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=omn-compound-line-refused-times-in-17s | lane_source=registry | dedupe=55048742c8f1 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=omn-compound-line-refused-times-in-17s | lane_source=registry | dedupe=55048742c8f1 | class_key=hook.pre_tool_use_shared_tree_git_guard%2e;sh.template.8c0867793b | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "eyJaaaaaaaaaaaa.bbbbbbbbbbbb.cccccccccccc",
@@ -215,7 +215,7 @@
     "guard": "pre_tool_use_shared_tree_git_guard.sh",
     "key": "55048742c8f1",
     "reason": "omn-compound-line-refused-times-in-17s",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=omn-compound-line-refused-times-in-17s | lane_source=unresolved | dedupe=55048742c8f1 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=omn-compound-line-refused-times-in-17s | lane_source=unresolved | dedupe=55048742c8f1 | class_key=hook.pre_tool_use_shared_tree_git_guard%2e;sh.template.8c0867793b | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "eyJaaaaaaaaaaaa.bbbbbbbbbbbb.cccccccccccc",
@@ -234,7 +234,7 @@
     "guard": "pre_tool_use_shared_tree_git_guard.sh",
     "key": "fee0a1b65ff1",
     "reason": "redacted-leaked",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=redacted-leaked | lane_source=registry | dedupe=fee0a1b65ff1 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=redacted-leaked | lane_source=registry | dedupe=fee0a1b65ff1 | class_key=hook.pre_tool_use_shared_tree_git_guard%2e;sh.template.3f68575ef1 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "xoxb-1234567890-abcdef github_pat_zzzzzzzzzzzzzzzzzzzzzz",
@@ -253,7 +253,7 @@
     "guard": "pre_tool_use_shared_tree_git_guard.sh",
     "key": "fee0a1b65ff1",
     "reason": "redacted-leaked",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=redacted-leaked | lane_source=unresolved | dedupe=fee0a1b65ff1 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=redacted-leaked | lane_source=unresolved | dedupe=fee0a1b65ff1 | class_key=hook.pre_tool_use_shared_tree_git_guard%2e;sh.template.3f68575ef1 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "xoxb-1234567890-abcdef github_pat_zzzzzzzzzzzzzzzzzzzzzz",
@@ -272,7 +272,7 @@
     "guard": "pre_tool_use_shared_tree_git_guard.sh",
     "key": "c32a1435540e",
     "reason": "reason-with-breakers",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=reason-with-breakers | lane_source=registry | dedupe=c32a1435540e | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=reason-with-breakers | lane_source=registry | dedupe=c32a1435540e | class_key=hook.pre_tool_use_shared_tree_git_guard%2e;sh.template.9996f44998 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "  padded \"quoted\" detail  ",
@@ -291,7 +291,7 @@
     "guard": "pre_tool_use_shared_tree_git_guard.sh",
     "key": "c32a1435540e",
     "reason": "reason-with-breakers",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=reason-with-breakers | lane_source=unresolved | dedupe=c32a1435540e | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=reason-with-breakers | lane_source=unresolved | dedupe=c32a1435540e | class_key=hook.pre_tool_use_shared_tree_git_guard%2e;sh.template.9996f44998 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "  padded \"quoted\" detail  ",
@@ -310,7 +310,7 @@
     "guard": "pre_tool_use_shared_tree_git_guard.sh",
     "key": "c711d4565fd1",
     "reason": "very-very-very-very-very-very-very-very",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=very-very-very-very-very-very-very-very | lane_source=registry | dedupe=c711d4565fd1 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=very-very-very-very-very-very-very-very | lane_source=registry | dedupe=c711d4565fd1 | class_key=hook.pre_tool_use_shared_tree_git_guard%2e;sh.template.dafd03c423 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "",
@@ -329,7 +329,7 @@
     "guard": "pre_tool_use_shared_tree_git_guard.sh",
     "key": "c711d4565fd1",
     "reason": "very-very-very-very-very-very-very-very",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=very-very-very-very-very-very-very-very | lane_source=unresolved | dedupe=c711d4565fd1 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=very-very-very-very-very-very-very-very | lane_source=unresolved | dedupe=c711d4565fd1 | class_key=hook.pre_tool_use_shared_tree_git_guard%2e;sh.template.dafd03c423 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "",
@@ -348,7 +348,7 @@
     "guard": "pre_tool_use_shared_tree_git_guard.sh",
     "key": "1ec60fa8e4b4",
     "reason": "mixed-case-reason-with-numbers",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=mixed-case-reason-with-numbers | lane_source=registry | dedupe=1ec60fa8e4b4 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=mixed-case-reason-with-numbers | lane_source=registry | dedupe=1ec60fa8e4b4 | class_key=hook.pre_tool_use_shared_tree_git_guard%2e;sh.template.14adcac309 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "short detail",
@@ -367,7 +367,7 @@
     "guard": "pre_tool_use_shared_tree_git_guard.sh",
     "key": "1ec60fa8e4b4",
     "reason": "mixed-case-reason-with-numbers",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=mixed-case-reason-with-numbers | lane_source=unresolved | dedupe=1ec60fa8e4b4 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=mixed-case-reason-with-numbers | lane_source=unresolved | dedupe=1ec60fa8e4b4 | class_key=hook.pre_tool_use_shared_tree_git_guard%2e;sh.template.14adcac309 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "short detail",
@@ -386,7 +386,7 @@
     "guard": "pre_tool_use_shared_tree_git_guard.sh",
     "key": "4242287beb21",
     "reason": "redacted-refused",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=redacted-refused | lane_source=registry | dedupe=4242287beb21 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=redacted-refused | lane_source=registry | dedupe=4242287beb21 | class_key=hook.pre_tool_use_shared_tree_git_guard%2e;sh.template.fee6a185ab | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -405,7 +405,7 @@
     "guard": "pre_tool_use_shared_tree_git_guard.sh",
     "key": "4242287beb21",
     "reason": "redacted-refused",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=redacted-refused | lane_source=unresolved | dedupe=4242287beb21 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=redacted-refused | lane_source=unresolved | dedupe=4242287beb21 | class_key=hook.pre_tool_use_shared_tree_git_guard%2e;sh.template.fee6a185ab | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -424,7 +424,7 @@
     "guard": "pre_tool_use_shared_tree_git_guard.sh",
     "key": "d33de4dba6e6",
     "reason": "unicode-r-ason-n-code",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=unicode-r-ason-n-code | lane_source=registry | dedupe=d33de4dba6e6 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=unicode-r-ason-n-code | lane_source=registry | dedupe=d33de4dba6e6 | class_key=hook.pre_tool_use_shared_tree_git_guard%2e;sh.template.a928a29053 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "pipe | and\nnewline\r\nsplit",
@@ -443,7 +443,7 @@
     "guard": "pre_tool_use_shared_tree_git_guard.sh",
     "key": "d33de4dba6e6",
     "reason": "unicode-r-ason-n-code",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=unicode-r-ason-n-code | lane_source=unresolved | dedupe=d33de4dba6e6 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=pre_tool_use_shared_tree_git_guard.sh | reason=unicode-r-ason-n-code | lane_source=unresolved | dedupe=d33de4dba6e6 | class_key=hook.pre_tool_use_shared_tree_git_guard%2e;sh.template.a928a29053 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "pipe | and\nnewline\r\nsplit",
@@ -462,7 +462,7 @@
     "guard": "subagent_stop_secret_leak_guard.sh",
     "key": "22f38079a63e",
     "reason": "unauthorised-shared-tree-git-mutation",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=unauthorised-shared-tree-git-mutation | lane_source=registry | dedupe=22f38079a63e | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=unauthorised-shared-tree-git-mutation | lane_source=registry | dedupe=22f38079a63e | class_key=hook.subagent_stop_secret_leak_guard%2e;sh.template.603ac448e0 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "short detail",
@@ -481,7 +481,7 @@
     "guard": "subagent_stop_secret_leak_guard.sh",
     "key": "22f38079a63e",
     "reason": "unauthorised-shared-tree-git-mutation",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=unauthorised-shared-tree-git-mutation | lane_source=unresolved | dedupe=22f38079a63e | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=unauthorised-shared-tree-git-mutation | lane_source=unresolved | dedupe=22f38079a63e | class_key=hook.subagent_stop_secret_leak_guard%2e;sh.template.603ac448e0 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "short detail",
@@ -500,7 +500,7 @@
     "guard": "subagent_stop_secret_leak_guard.sh",
     "key": "6e1efff1ea89",
     "reason": "branch-refused-at-line",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=branch-refused-at-line | lane_source=registry | dedupe=6e1efff1ea89 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=branch-refused-at-line | lane_source=registry | dedupe=6e1efff1ea89 | class_key=hook.subagent_stop_secret_leak_guard%2e;sh.template.c5bcd07f2e | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -519,7 +519,7 @@
     "guard": "subagent_stop_secret_leak_guard.sh",
     "key": "6e1efff1ea89",
     "reason": "branch-refused-at-line",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=branch-refused-at-line | lane_source=unresolved | dedupe=6e1efff1ea89 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=branch-refused-at-line | lane_source=unresolved | dedupe=6e1efff1ea89 | class_key=hook.subagent_stop_secret_leak_guard%2e;sh.template.c5bcd07f2e | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -538,7 +538,7 @@
     "guard": "subagent_stop_secret_leak_guard.sh",
     "key": "84cb3593c53c",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=unspecified | lane_source=registry | dedupe=84cb3593c53c | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=unspecified | lane_source=registry | dedupe=84cb3593c53c | class_key=hook.subagent_stop_secret_leak_guard%2e;sh.template.e3b0c44298 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "pipe | and\nnewline\r\nsplit",
@@ -557,7 +557,7 @@
     "guard": "subagent_stop_secret_leak_guard.sh",
     "key": "84cb3593c53c",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=unspecified | lane_source=unresolved | dedupe=84cb3593c53c | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=unspecified | lane_source=unresolved | dedupe=84cb3593c53c | class_key=hook.subagent_stop_secret_leak_guard%2e;sh.template.e3b0c44298 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "pipe | and\nnewline\r\nsplit",
@@ -576,7 +576,7 @@
     "guard": "subagent_stop_secret_leak_guard.sh",
     "key": "833cd2991c28",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=unspecified | lane_source=registry | dedupe=833cd2991c28 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=unspecified | lane_source=registry | dedupe=833cd2991c28 | class_key=hook.subagent_stop_secret_leak_guard%2e;sh.template.e3b0c44298 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "token=abc.def bearer sk-aaaaaaaaaaaaaaaaaaaaaaaa AKIABBBBBBBBBBBBBBBB",
@@ -595,7 +595,7 @@
     "guard": "subagent_stop_secret_leak_guard.sh",
     "key": "833cd2991c28",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=unspecified | lane_source=unresolved | dedupe=833cd2991c28 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=unspecified | lane_source=unresolved | dedupe=833cd2991c28 | class_key=hook.subagent_stop_secret_leak_guard%2e;sh.template.e3b0c44298 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "token=abc.def bearer sk-aaaaaaaaaaaaaaaaaaaaaaaa AKIABBBBBBBBBBBBBBBB",
@@ -614,7 +614,7 @@
     "guard": "subagent_stop_secret_leak_guard.sh",
     "key": "b9a7bce92144",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=unspecified | lane_source=registry | dedupe=b9a7bce92144 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=unspecified | lane_source=registry | dedupe=b9a7bce92144 | class_key=hook.subagent_stop_secret_leak_guard%2e;sh.template.3963e13924 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "eyJaaaaaaaaaaaa.bbbbbbbbbbbb.cccccccccccc",
@@ -633,7 +633,7 @@
     "guard": "subagent_stop_secret_leak_guard.sh",
     "key": "b9a7bce92144",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=unspecified | lane_source=unresolved | dedupe=b9a7bce92144 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=unspecified | lane_source=unresolved | dedupe=b9a7bce92144 | class_key=hook.subagent_stop_secret_leak_guard%2e;sh.template.3963e13924 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "eyJaaaaaaaaaaaa.bbbbbbbbbbbb.cccccccccccc",
@@ -652,7 +652,7 @@
     "guard": "subagent_stop_secret_leak_guard.sh",
     "key": "47a1386dac32",
     "reason": "omn-compound-line-refused-times-in-17s",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=omn-compound-line-refused-times-in-17s | lane_source=registry | dedupe=47a1386dac32 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=omn-compound-line-refused-times-in-17s | lane_source=registry | dedupe=47a1386dac32 | class_key=hook.subagent_stop_secret_leak_guard%2e;sh.template.8c0867793b | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "xoxb-1234567890-abcdef github_pat_zzzzzzzzzzzzzzzzzzzzzz",
@@ -671,7 +671,7 @@
     "guard": "subagent_stop_secret_leak_guard.sh",
     "key": "47a1386dac32",
     "reason": "omn-compound-line-refused-times-in-17s",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=omn-compound-line-refused-times-in-17s | lane_source=unresolved | dedupe=47a1386dac32 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=omn-compound-line-refused-times-in-17s | lane_source=unresolved | dedupe=47a1386dac32 | class_key=hook.subagent_stop_secret_leak_guard%2e;sh.template.8c0867793b | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "xoxb-1234567890-abcdef github_pat_zzzzzzzzzzzzzzzzzzzzzz",
@@ -690,7 +690,7 @@
     "guard": "subagent_stop_secret_leak_guard.sh",
     "key": "684593e829d5",
     "reason": "redacted-leaked",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=redacted-leaked | lane_source=registry | dedupe=684593e829d5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=redacted-leaked | lane_source=registry | dedupe=684593e829d5 | class_key=hook.subagent_stop_secret_leak_guard%2e;sh.template.3f68575ef1 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "  padded \"quoted\" detail  ",
@@ -709,7 +709,7 @@
     "guard": "subagent_stop_secret_leak_guard.sh",
     "key": "684593e829d5",
     "reason": "redacted-leaked",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=redacted-leaked | lane_source=unresolved | dedupe=684593e829d5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=redacted-leaked | lane_source=unresolved | dedupe=684593e829d5 | class_key=hook.subagent_stop_secret_leak_guard%2e;sh.template.3f68575ef1 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "  padded \"quoted\" detail  ",
@@ -728,7 +728,7 @@
     "guard": "subagent_stop_secret_leak_guard.sh",
     "key": "1ee7cba17b20",
     "reason": "reason-with-breakers",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=reason-with-breakers | lane_source=registry | dedupe=1ee7cba17b20 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=reason-with-breakers | lane_source=registry | dedupe=1ee7cba17b20 | class_key=hook.subagent_stop_secret_leak_guard%2e;sh.template.9996f44998 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "",
@@ -747,7 +747,7 @@
     "guard": "subagent_stop_secret_leak_guard.sh",
     "key": "1ee7cba17b20",
     "reason": "reason-with-breakers",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=reason-with-breakers | lane_source=unresolved | dedupe=1ee7cba17b20 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=reason-with-breakers | lane_source=unresolved | dedupe=1ee7cba17b20 | class_key=hook.subagent_stop_secret_leak_guard%2e;sh.template.9996f44998 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "",
@@ -766,7 +766,7 @@
     "guard": "subagent_stop_secret_leak_guard.sh",
     "key": "0bd7edaecc5c",
     "reason": "very-very-very-very-very-very-very-very",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=very-very-very-very-very-very-very-very | lane_source=registry | dedupe=0bd7edaecc5c | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=very-very-very-very-very-very-very-very | lane_source=registry | dedupe=0bd7edaecc5c | class_key=hook.subagent_stop_secret_leak_guard%2e;sh.template.dafd03c423 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "short detail",
@@ -785,7 +785,7 @@
     "guard": "subagent_stop_secret_leak_guard.sh",
     "key": "0bd7edaecc5c",
     "reason": "very-very-very-very-very-very-very-very",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=very-very-very-very-very-very-very-very | lane_source=unresolved | dedupe=0bd7edaecc5c | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=very-very-very-very-very-very-very-very | lane_source=unresolved | dedupe=0bd7edaecc5c | class_key=hook.subagent_stop_secret_leak_guard%2e;sh.template.dafd03c423 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "short detail",
@@ -804,7 +804,7 @@
     "guard": "subagent_stop_secret_leak_guard.sh",
     "key": "2c0aa285c6bd",
     "reason": "mixed-case-reason-with-numbers",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=mixed-case-reason-with-numbers | lane_source=registry | dedupe=2c0aa285c6bd | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=mixed-case-reason-with-numbers | lane_source=registry | dedupe=2c0aa285c6bd | class_key=hook.subagent_stop_secret_leak_guard%2e;sh.template.14adcac309 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -823,7 +823,7 @@
     "guard": "subagent_stop_secret_leak_guard.sh",
     "key": "2c0aa285c6bd",
     "reason": "mixed-case-reason-with-numbers",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=mixed-case-reason-with-numbers | lane_source=unresolved | dedupe=2c0aa285c6bd | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=mixed-case-reason-with-numbers | lane_source=unresolved | dedupe=2c0aa285c6bd | class_key=hook.subagent_stop_secret_leak_guard%2e;sh.template.14adcac309 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -842,7 +842,7 @@
     "guard": "subagent_stop_secret_leak_guard.sh",
     "key": "532c14cce355",
     "reason": "redacted-refused",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=redacted-refused | lane_source=registry | dedupe=532c14cce355 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=redacted-refused | lane_source=registry | dedupe=532c14cce355 | class_key=hook.subagent_stop_secret_leak_guard%2e;sh.template.fee6a185ab | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "pipe | and\nnewline\r\nsplit",
@@ -861,7 +861,7 @@
     "guard": "subagent_stop_secret_leak_guard.sh",
     "key": "532c14cce355",
     "reason": "redacted-refused",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=redacted-refused | lane_source=unresolved | dedupe=532c14cce355 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=redacted-refused | lane_source=unresolved | dedupe=532c14cce355 | class_key=hook.subagent_stop_secret_leak_guard%2e;sh.template.fee6a185ab | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "pipe | and\nnewline\r\nsplit",
@@ -880,7 +880,7 @@
     "guard": "subagent_stop_secret_leak_guard.sh",
     "key": "aac884aa786d",
     "reason": "unicode-r-ason-n-code",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=unicode-r-ason-n-code | lane_source=registry | dedupe=aac884aa786d | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=unicode-r-ason-n-code | lane_source=registry | dedupe=aac884aa786d | class_key=hook.subagent_stop_secret_leak_guard%2e;sh.template.a928a29053 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "token=abc.def bearer sk-aaaaaaaaaaaaaaaaaaaaaaaa AKIABBBBBBBBBBBBBBBB",
@@ -899,7 +899,7 @@
     "guard": "subagent_stop_secret_leak_guard.sh",
     "key": "aac884aa786d",
     "reason": "unicode-r-ason-n-code",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=unicode-r-ason-n-code | lane_source=unresolved | dedupe=aac884aa786d | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=subagent_stop_secret_leak_guard.sh | reason=unicode-r-ason-n-code | lane_source=unresolved | dedupe=aac884aa786d | class_key=hook.subagent_stop_secret_leak_guard%2e;sh.template.a928a29053 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "token=abc.def bearer sk-aaaaaaaaaaaaaaaaaaaaaaaa AKIABBBBBBBBBBBBBBBB",
@@ -918,7 +918,7 @@
     "guard": "unknown-guard",
     "key": "b19cf592a595",
     "reason": "unauthorised-shared-tree-git-mutation",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=unauthorised-shared-tree-git-mutation | lane_source=registry | dedupe=b19cf592a595 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=unauthorised-shared-tree-git-mutation | lane_source=registry | dedupe=b19cf592a595 | class_key=hook.unknown-guard.template.603ac448e0 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -937,7 +937,7 @@
     "guard": "unknown-guard",
     "key": "b19cf592a595",
     "reason": "unauthorised-shared-tree-git-mutation",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=unauthorised-shared-tree-git-mutation | lane_source=unresolved | dedupe=b19cf592a595 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=unauthorised-shared-tree-git-mutation | lane_source=unresolved | dedupe=b19cf592a595 | class_key=hook.unknown-guard.template.603ac448e0 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -956,7 +956,7 @@
     "guard": "unknown-guard",
     "key": "5f09f5bf7ed9",
     "reason": "branch-refused-at-line",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=branch-refused-at-line | lane_source=registry | dedupe=5f09f5bf7ed9 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=branch-refused-at-line | lane_source=registry | dedupe=5f09f5bf7ed9 | class_key=hook.unknown-guard.template.c5bcd07f2e | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "pipe | and\nnewline\r\nsplit",
@@ -975,7 +975,7 @@
     "guard": "unknown-guard",
     "key": "5f09f5bf7ed9",
     "reason": "branch-refused-at-line",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=branch-refused-at-line | lane_source=unresolved | dedupe=5f09f5bf7ed9 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=branch-refused-at-line | lane_source=unresolved | dedupe=5f09f5bf7ed9 | class_key=hook.unknown-guard.template.c5bcd07f2e | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "pipe | and\nnewline\r\nsplit",
@@ -994,7 +994,7 @@
     "guard": "unknown-guard",
     "key": "25ea4a60d14c",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=unspecified | lane_source=registry | dedupe=25ea4a60d14c | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=unspecified | lane_source=registry | dedupe=25ea4a60d14c | class_key=hook.unknown-guard.template.e3b0c44298 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "token=abc.def bearer sk-aaaaaaaaaaaaaaaaaaaaaaaa AKIABBBBBBBBBBBBBBBB",
@@ -1013,7 +1013,7 @@
     "guard": "unknown-guard",
     "key": "25ea4a60d14c",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=unspecified | lane_source=unresolved | dedupe=25ea4a60d14c | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=unspecified | lane_source=unresolved | dedupe=25ea4a60d14c | class_key=hook.unknown-guard.template.e3b0c44298 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "token=abc.def bearer sk-aaaaaaaaaaaaaaaaaaaaaaaa AKIABBBBBBBBBBBBBBBB",
@@ -1032,7 +1032,7 @@
     "guard": "unknown-guard",
     "key": "be18532e962d",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=unspecified | lane_source=registry | dedupe=be18532e962d | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=unspecified | lane_source=registry | dedupe=be18532e962d | class_key=hook.unknown-guard.template.e3b0c44298 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "eyJaaaaaaaaaaaa.bbbbbbbbbbbb.cccccccccccc",
@@ -1051,7 +1051,7 @@
     "guard": "unknown-guard",
     "key": "be18532e962d",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=unspecified | lane_source=unresolved | dedupe=be18532e962d | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=unspecified | lane_source=unresolved | dedupe=be18532e962d | class_key=hook.unknown-guard.template.e3b0c44298 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "eyJaaaaaaaaaaaa.bbbbbbbbbbbb.cccccccccccc",
@@ -1070,7 +1070,7 @@
     "guard": "unknown-guard",
     "key": "cd8e737589d2",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=unspecified | lane_source=registry | dedupe=cd8e737589d2 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=unspecified | lane_source=registry | dedupe=cd8e737589d2 | class_key=hook.unknown-guard.template.3963e13924 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "xoxb-1234567890-abcdef github_pat_zzzzzzzzzzzzzzzzzzzzzz",
@@ -1089,7 +1089,7 @@
     "guard": "unknown-guard",
     "key": "cd8e737589d2",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=unspecified | lane_source=unresolved | dedupe=cd8e737589d2 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=unspecified | lane_source=unresolved | dedupe=cd8e737589d2 | class_key=hook.unknown-guard.template.3963e13924 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "xoxb-1234567890-abcdef github_pat_zzzzzzzzzzzzzzzzzzzzzz",
@@ -1108,7 +1108,7 @@
     "guard": "unknown-guard",
     "key": "1654881f4eb5",
     "reason": "omn-compound-line-refused-times-in-17s",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=omn-compound-line-refused-times-in-17s | lane_source=registry | dedupe=1654881f4eb5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=omn-compound-line-refused-times-in-17s | lane_source=registry | dedupe=1654881f4eb5 | class_key=hook.unknown-guard.template.8c0867793b | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "  padded \"quoted\" detail  ",
@@ -1127,7 +1127,7 @@
     "guard": "unknown-guard",
     "key": "1654881f4eb5",
     "reason": "omn-compound-line-refused-times-in-17s",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=omn-compound-line-refused-times-in-17s | lane_source=unresolved | dedupe=1654881f4eb5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=omn-compound-line-refused-times-in-17s | lane_source=unresolved | dedupe=1654881f4eb5 | class_key=hook.unknown-guard.template.8c0867793b | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "  padded \"quoted\" detail  ",
@@ -1146,7 +1146,7 @@
     "guard": "unknown-guard",
     "key": "1945d59cbbe6",
     "reason": "redacted-leaked",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=redacted-leaked | lane_source=registry | dedupe=1945d59cbbe6 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=redacted-leaked | lane_source=registry | dedupe=1945d59cbbe6 | class_key=hook.unknown-guard.template.3f68575ef1 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "",
@@ -1165,7 +1165,7 @@
     "guard": "unknown-guard",
     "key": "1945d59cbbe6",
     "reason": "redacted-leaked",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=redacted-leaked | lane_source=unresolved | dedupe=1945d59cbbe6 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=redacted-leaked | lane_source=unresolved | dedupe=1945d59cbbe6 | class_key=hook.unknown-guard.template.3f68575ef1 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "",
@@ -1184,7 +1184,7 @@
     "guard": "unknown-guard",
     "key": "faf98fa4a1af",
     "reason": "reason-with-breakers",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=reason-with-breakers | lane_source=registry | dedupe=faf98fa4a1af | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=reason-with-breakers | lane_source=registry | dedupe=faf98fa4a1af | class_key=hook.unknown-guard.template.9996f44998 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "short detail",
@@ -1203,7 +1203,7 @@
     "guard": "unknown-guard",
     "key": "faf98fa4a1af",
     "reason": "reason-with-breakers",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=reason-with-breakers | lane_source=unresolved | dedupe=faf98fa4a1af | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=reason-with-breakers | lane_source=unresolved | dedupe=faf98fa4a1af | class_key=hook.unknown-guard.template.9996f44998 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "short detail",
@@ -1222,7 +1222,7 @@
     "guard": "unknown-guard",
     "key": "72acb0734de3",
     "reason": "very-very-very-very-very-very-very-very",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=very-very-very-very-very-very-very-very | lane_source=registry | dedupe=72acb0734de3 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=very-very-very-very-very-very-very-very | lane_source=registry | dedupe=72acb0734de3 | class_key=hook.unknown-guard.template.dafd03c423 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -1241,7 +1241,7 @@
     "guard": "unknown-guard",
     "key": "72acb0734de3",
     "reason": "very-very-very-very-very-very-very-very",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=very-very-very-very-very-very-very-very | lane_source=unresolved | dedupe=72acb0734de3 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=very-very-very-very-very-very-very-very | lane_source=unresolved | dedupe=72acb0734de3 | class_key=hook.unknown-guard.template.dafd03c423 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -1260,7 +1260,7 @@
     "guard": "unknown-guard",
     "key": "114404c84809",
     "reason": "mixed-case-reason-with-numbers",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=mixed-case-reason-with-numbers | lane_source=registry | dedupe=114404c84809 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=mixed-case-reason-with-numbers | lane_source=registry | dedupe=114404c84809 | class_key=hook.unknown-guard.template.14adcac309 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "pipe | and\nnewline\r\nsplit",
@@ -1279,7 +1279,7 @@
     "guard": "unknown-guard",
     "key": "114404c84809",
     "reason": "mixed-case-reason-with-numbers",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=mixed-case-reason-with-numbers | lane_source=unresolved | dedupe=114404c84809 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=mixed-case-reason-with-numbers | lane_source=unresolved | dedupe=114404c84809 | class_key=hook.unknown-guard.template.14adcac309 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "pipe | and\nnewline\r\nsplit",
@@ -1298,7 +1298,7 @@
     "guard": "unknown-guard",
     "key": "84c2229db181",
     "reason": "redacted-refused",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=redacted-refused | lane_source=registry | dedupe=84c2229db181 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=redacted-refused | lane_source=registry | dedupe=84c2229db181 | class_key=hook.unknown-guard.template.fee6a185ab | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "token=abc.def bearer sk-aaaaaaaaaaaaaaaaaaaaaaaa AKIABBBBBBBBBBBBBBBB",
@@ -1317,7 +1317,7 @@
     "guard": "unknown-guard",
     "key": "84c2229db181",
     "reason": "redacted-refused",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=redacted-refused | lane_source=unresolved | dedupe=84c2229db181 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=redacted-refused | lane_source=unresolved | dedupe=84c2229db181 | class_key=hook.unknown-guard.template.fee6a185ab | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "token=abc.def bearer sk-aaaaaaaaaaaaaaaaaaaaaaaa AKIABBBBBBBBBBBBBBBB",
@@ -1336,7 +1336,7 @@
     "guard": "unknown-guard",
     "key": "184af9fad01d",
     "reason": "unicode-r-ason-n-code",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=unicode-r-ason-n-code | lane_source=registry | dedupe=184af9fad01d | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=unicode-r-ason-n-code | lane_source=registry | dedupe=184af9fad01d | class_key=hook.unknown-guard.template.a928a29053 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "eyJaaaaaaaaaaaa.bbbbbbbbbbbb.cccccccccccc",
@@ -1355,7 +1355,7 @@
     "guard": "unknown-guard",
     "key": "184af9fad01d",
     "reason": "unicode-r-ason-n-code",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=unicode-r-ason-n-code | lane_source=unresolved | dedupe=184af9fad01d | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=unknown-guard | reason=unicode-r-ason-n-code | lane_source=unresolved | dedupe=184af9fad01d | class_key=hook.unknown-guard.template.a928a29053 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "eyJaaaaaaaaaaaa.bbbbbbbbbbbb.cccccccccccc",
@@ -1374,7 +1374,7 @@
     "guard": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
     "key": "457de675d5bb",
     "reason": "unauthorised-shared-tree-git-mutation",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=unauthorised-shared-tree-git-mutation | lane_source=registry | dedupe=457de675d5bb | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=unauthorised-shared-tree-git-mutation | lane_source=registry | dedupe=457de675d5bb | class_key=hook.gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg.template.603ac448e0 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "pipe | and\nnewline\r\nsplit",
@@ -1393,7 +1393,7 @@
     "guard": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
     "key": "457de675d5bb",
     "reason": "unauthorised-shared-tree-git-mutation",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=unauthorised-shared-tree-git-mutation | lane_source=unresolved | dedupe=457de675d5bb | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=unauthorised-shared-tree-git-mutation | lane_source=unresolved | dedupe=457de675d5bb | class_key=hook.gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg.template.603ac448e0 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "pipe | and\nnewline\r\nsplit",
@@ -1412,7 +1412,7 @@
     "guard": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
     "key": "0d361ea87f17",
     "reason": "branch-refused-at-line",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=branch-refused-at-line | lane_source=registry | dedupe=0d361ea87f17 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=branch-refused-at-line | lane_source=registry | dedupe=0d361ea87f17 | class_key=hook.gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg.template.c5bcd07f2e | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "token=abc.def bearer sk-aaaaaaaaaaaaaaaaaaaaaaaa AKIABBBBBBBBBBBBBBBB",
@@ -1431,7 +1431,7 @@
     "guard": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
     "key": "0d361ea87f17",
     "reason": "branch-refused-at-line",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=branch-refused-at-line | lane_source=unresolved | dedupe=0d361ea87f17 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=branch-refused-at-line | lane_source=unresolved | dedupe=0d361ea87f17 | class_key=hook.gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg.template.c5bcd07f2e | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "token=abc.def bearer sk-aaaaaaaaaaaaaaaaaaaaaaaa AKIABBBBBBBBBBBBBBBB",
@@ -1450,7 +1450,7 @@
     "guard": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
     "key": "605e4c7e8924",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=unspecified | lane_source=registry | dedupe=605e4c7e8924 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=unspecified | lane_source=registry | dedupe=605e4c7e8924 | class_key=hook.gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg.template.e3b0c44298 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "eyJaaaaaaaaaaaa.bbbbbbbbbbbb.cccccccccccc",
@@ -1469,7 +1469,7 @@
     "guard": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
     "key": "605e4c7e8924",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=unspecified | lane_source=unresolved | dedupe=605e4c7e8924 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=unspecified | lane_source=unresolved | dedupe=605e4c7e8924 | class_key=hook.gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg.template.e3b0c44298 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "eyJaaaaaaaaaaaa.bbbbbbbbbbbb.cccccccccccc",
@@ -1488,7 +1488,7 @@
     "guard": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
     "key": "0c5adeefeaae",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=unspecified | lane_source=registry | dedupe=0c5adeefeaae | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=unspecified | lane_source=registry | dedupe=0c5adeefeaae | class_key=hook.gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg.template.e3b0c44298 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "xoxb-1234567890-abcdef github_pat_zzzzzzzzzzzzzzzzzzzzzz",
@@ -1507,7 +1507,7 @@
     "guard": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
     "key": "0c5adeefeaae",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=unspecified | lane_source=unresolved | dedupe=0c5adeefeaae | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=unspecified | lane_source=unresolved | dedupe=0c5adeefeaae | class_key=hook.gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg.template.e3b0c44298 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "xoxb-1234567890-abcdef github_pat_zzzzzzzzzzzzzzzzzzzzzz",
@@ -1526,7 +1526,7 @@
     "guard": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
     "key": "98d125c0c52b",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=unspecified | lane_source=registry | dedupe=98d125c0c52b | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=unspecified | lane_source=registry | dedupe=98d125c0c52b | class_key=hook.gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg.template.3963e13924 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "  padded \"quoted\" detail  ",
@@ -1545,7 +1545,7 @@
     "guard": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
     "key": "98d125c0c52b",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=unspecified | lane_source=unresolved | dedupe=98d125c0c52b | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=unspecified | lane_source=unresolved | dedupe=98d125c0c52b | class_key=hook.gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg.template.3963e13924 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "  padded \"quoted\" detail  ",
@@ -1564,7 +1564,7 @@
     "guard": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
     "key": "ff0cbd5858f2",
     "reason": "omn-compound-line-refused-times-in-17s",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=omn-compound-line-refused-times-in-17s | lane_source=registry | dedupe=ff0cbd5858f2 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=omn-compound-line-refused-times-in-17s | lane_source=registry | dedupe=ff0cbd5858f2 | class_key=hook.gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg.template.8c0867793b | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "",
@@ -1583,7 +1583,7 @@
     "guard": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
     "key": "ff0cbd5858f2",
     "reason": "omn-compound-line-refused-times-in-17s",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=omn-compound-line-refused-times-in-17s | lane_source=unresolved | dedupe=ff0cbd5858f2 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=omn-compound-line-refused-times-in-17s | lane_source=unresolved | dedupe=ff0cbd5858f2 | class_key=hook.gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg.template.8c0867793b | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "",
@@ -1602,7 +1602,7 @@
     "guard": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
     "key": "4bf36239dd49",
     "reason": "redacted-leaked",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=redacted-leaked | lane_source=registry | dedupe=4bf36239dd49 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=redacted-leaked | lane_source=registry | dedupe=4bf36239dd49 | class_key=hook.gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg.template.3f68575ef1 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "short detail",
@@ -1621,7 +1621,7 @@
     "guard": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
     "key": "4bf36239dd49",
     "reason": "redacted-leaked",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=redacted-leaked | lane_source=unresolved | dedupe=4bf36239dd49 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=redacted-leaked | lane_source=unresolved | dedupe=4bf36239dd49 | class_key=hook.gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg.template.3f68575ef1 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "short detail",
@@ -1640,7 +1640,7 @@
     "guard": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
     "key": "dba5b975725f",
     "reason": "reason-with-breakers",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=reason-with-breakers | lane_source=registry | dedupe=dba5b975725f | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=reason-with-breakers | lane_source=registry | dedupe=dba5b975725f | class_key=hook.gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg.template.9996f44998 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -1659,7 +1659,7 @@
     "guard": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
     "key": "dba5b975725f",
     "reason": "reason-with-breakers",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=reason-with-breakers | lane_source=unresolved | dedupe=dba5b975725f | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=reason-with-breakers | lane_source=unresolved | dedupe=dba5b975725f | class_key=hook.gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg.template.9996f44998 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -1678,7 +1678,7 @@
     "guard": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
     "key": "9112ffcc4062",
     "reason": "very-very-very-very-very-very-very-very",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=very-very-very-very-very-very-very-very | lane_source=registry | dedupe=9112ffcc4062 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=very-very-very-very-very-very-very-very | lane_source=registry | dedupe=9112ffcc4062 | class_key=hook.gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg.template.dafd03c423 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "pipe | and\nnewline\r\nsplit",
@@ -1697,7 +1697,7 @@
     "guard": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
     "key": "9112ffcc4062",
     "reason": "very-very-very-very-very-very-very-very",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=very-very-very-very-very-very-very-very | lane_source=unresolved | dedupe=9112ffcc4062 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=very-very-very-very-very-very-very-very | lane_source=unresolved | dedupe=9112ffcc4062 | class_key=hook.gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg.template.dafd03c423 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "pipe | and\nnewline\r\nsplit",
@@ -1716,7 +1716,7 @@
     "guard": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
     "key": "580fc4db7071",
     "reason": "mixed-case-reason-with-numbers",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=mixed-case-reason-with-numbers | lane_source=registry | dedupe=580fc4db7071 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=mixed-case-reason-with-numbers | lane_source=registry | dedupe=580fc4db7071 | class_key=hook.gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg.template.14adcac309 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "token=abc.def bearer sk-aaaaaaaaaaaaaaaaaaaaaaaa AKIABBBBBBBBBBBBBBBB",
@@ -1735,7 +1735,7 @@
     "guard": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
     "key": "580fc4db7071",
     "reason": "mixed-case-reason-with-numbers",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=mixed-case-reason-with-numbers | lane_source=unresolved | dedupe=580fc4db7071 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=mixed-case-reason-with-numbers | lane_source=unresolved | dedupe=580fc4db7071 | class_key=hook.gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg.template.14adcac309 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "token=abc.def bearer sk-aaaaaaaaaaaaaaaaaaaaaaaa AKIABBBBBBBBBBBBBBBB",
@@ -1754,7 +1754,7 @@
     "guard": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
     "key": "1b5b88f1180d",
     "reason": "redacted-refused",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=redacted-refused | lane_source=registry | dedupe=1b5b88f1180d | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=redacted-refused | lane_source=registry | dedupe=1b5b88f1180d | class_key=hook.gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg.template.fee6a185ab | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "eyJaaaaaaaaaaaa.bbbbbbbbbbbb.cccccccccccc",
@@ -1773,7 +1773,7 @@
     "guard": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
     "key": "1b5b88f1180d",
     "reason": "redacted-refused",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=redacted-refused | lane_source=unresolved | dedupe=1b5b88f1180d | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=redacted-refused | lane_source=unresolved | dedupe=1b5b88f1180d | class_key=hook.gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg.template.fee6a185ab | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "eyJaaaaaaaaaaaa.bbbbbbbbbbbb.cccccccccccc",
@@ -1792,7 +1792,7 @@
     "guard": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
     "key": "2a3c8953428a",
     "reason": "unicode-r-ason-n-code",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=unicode-r-ason-n-code | lane_source=registry | dedupe=2a3c8953428a | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=unicode-r-ason-n-code | lane_source=registry | dedupe=2a3c8953428a | class_key=hook.gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg.template.a928a29053 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "xoxb-1234567890-abcdef github_pat_zzzzzzzzzzzzzzzzzzzzzz",
@@ -1811,7 +1811,7 @@
     "guard": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
     "key": "2a3c8953428a",
     "reason": "unicode-r-ason-n-code",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=unicode-r-ason-n-code | lane_source=unresolved | dedupe=2a3c8953428a | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg | reason=unicode-r-ason-n-code | lane_source=unresolved | dedupe=2a3c8953428a | class_key=hook.gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg.template.a928a29053 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "xoxb-1234567890-abcdef github_pat_zzzzzzzzzzzzzzzzzzzzzz",
@@ -1830,7 +1830,7 @@
     "guard": "guard with pipe",
     "key": "61a18b22b86b",
     "reason": "unauthorised-shared-tree-git-mutation",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=unauthorised-shared-tree-git-mutation | lane_source=registry | dedupe=61a18b22b86b | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=unauthorised-shared-tree-git-mutation | lane_source=registry | dedupe=61a18b22b86b | class_key=hook.guard%20;with%20;pipe.template.603ac448e0 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "token=abc.def bearer sk-aaaaaaaaaaaaaaaaaaaaaaaa AKIABBBBBBBBBBBBBBBB",
@@ -1849,7 +1849,7 @@
     "guard": "guard with pipe",
     "key": "61a18b22b86b",
     "reason": "unauthorised-shared-tree-git-mutation",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=unauthorised-shared-tree-git-mutation | lane_source=unresolved | dedupe=61a18b22b86b | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=unauthorised-shared-tree-git-mutation | lane_source=unresolved | dedupe=61a18b22b86b | class_key=hook.guard%20;with%20;pipe.template.603ac448e0 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "token=abc.def bearer sk-aaaaaaaaaaaaaaaaaaaaaaaa AKIABBBBBBBBBBBBBBBB",
@@ -1868,7 +1868,7 @@
     "guard": "guard with pipe",
     "key": "1bac3ed50e56",
     "reason": "branch-refused-at-line",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=branch-refused-at-line | lane_source=registry | dedupe=1bac3ed50e56 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=branch-refused-at-line | lane_source=registry | dedupe=1bac3ed50e56 | class_key=hook.guard%20;with%20;pipe.template.c5bcd07f2e | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "eyJaaaaaaaaaaaa.bbbbbbbbbbbb.cccccccccccc",
@@ -1887,7 +1887,7 @@
     "guard": "guard with pipe",
     "key": "1bac3ed50e56",
     "reason": "branch-refused-at-line",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=branch-refused-at-line | lane_source=unresolved | dedupe=1bac3ed50e56 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=branch-refused-at-line | lane_source=unresolved | dedupe=1bac3ed50e56 | class_key=hook.guard%20;with%20;pipe.template.c5bcd07f2e | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "eyJaaaaaaaaaaaa.bbbbbbbbbbbb.cccccccccccc",
@@ -1906,7 +1906,7 @@
     "guard": "guard with pipe",
     "key": "bc66cd1fe17f",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=unspecified | lane_source=registry | dedupe=bc66cd1fe17f | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=unspecified | lane_source=registry | dedupe=bc66cd1fe17f | class_key=hook.guard%20;with%20;pipe.template.e3b0c44298 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "xoxb-1234567890-abcdef github_pat_zzzzzzzzzzzzzzzzzzzzzz",
@@ -1925,7 +1925,7 @@
     "guard": "guard with pipe",
     "key": "bc66cd1fe17f",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=unspecified | lane_source=unresolved | dedupe=bc66cd1fe17f | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=unspecified | lane_source=unresolved | dedupe=bc66cd1fe17f | class_key=hook.guard%20;with%20;pipe.template.e3b0c44298 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "xoxb-1234567890-abcdef github_pat_zzzzzzzzzzzzzzzzzzzzzz",
@@ -1944,7 +1944,7 @@
     "guard": "guard with pipe",
     "key": "be8c5eaa040b",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=unspecified | lane_source=registry | dedupe=be8c5eaa040b | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=unspecified | lane_source=registry | dedupe=be8c5eaa040b | class_key=hook.guard%20;with%20;pipe.template.e3b0c44298 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "  padded \"quoted\" detail  ",
@@ -1963,7 +1963,7 @@
     "guard": "guard with pipe",
     "key": "be8c5eaa040b",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=unspecified | lane_source=unresolved | dedupe=be8c5eaa040b | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=unspecified | lane_source=unresolved | dedupe=be8c5eaa040b | class_key=hook.guard%20;with%20;pipe.template.e3b0c44298 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "  padded \"quoted\" detail  ",
@@ -1982,7 +1982,7 @@
     "guard": "guard with pipe",
     "key": "e514381fd08f",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=unspecified | lane_source=registry | dedupe=e514381fd08f | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=unspecified | lane_source=registry | dedupe=e514381fd08f | class_key=hook.guard%20;with%20;pipe.template.3963e13924 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "",
@@ -2001,7 +2001,7 @@
     "guard": "guard with pipe",
     "key": "e514381fd08f",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=unspecified | lane_source=unresolved | dedupe=e514381fd08f | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=unspecified | lane_source=unresolved | dedupe=e514381fd08f | class_key=hook.guard%20;with%20;pipe.template.3963e13924 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "",
@@ -2020,7 +2020,7 @@
     "guard": "guard with pipe",
     "key": "fdcd218fe5ae",
     "reason": "omn-compound-line-refused-times-in-17s",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=omn-compound-line-refused-times-in-17s | lane_source=registry | dedupe=fdcd218fe5ae | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=omn-compound-line-refused-times-in-17s | lane_source=registry | dedupe=fdcd218fe5ae | class_key=hook.guard%20;with%20;pipe.template.8c0867793b | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "short detail",
@@ -2039,7 +2039,7 @@
     "guard": "guard with pipe",
     "key": "fdcd218fe5ae",
     "reason": "omn-compound-line-refused-times-in-17s",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=omn-compound-line-refused-times-in-17s | lane_source=unresolved | dedupe=fdcd218fe5ae | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=omn-compound-line-refused-times-in-17s | lane_source=unresolved | dedupe=fdcd218fe5ae | class_key=hook.guard%20;with%20;pipe.template.8c0867793b | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "short detail",
@@ -2058,7 +2058,7 @@
     "guard": "guard with pipe",
     "key": "36b737dd8d12",
     "reason": "redacted-leaked",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=redacted-leaked | lane_source=registry | dedupe=36b737dd8d12 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=redacted-leaked | lane_source=registry | dedupe=36b737dd8d12 | class_key=hook.guard%20;with%20;pipe.template.3f68575ef1 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -2077,7 +2077,7 @@
     "guard": "guard with pipe",
     "key": "36b737dd8d12",
     "reason": "redacted-leaked",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=redacted-leaked | lane_source=unresolved | dedupe=36b737dd8d12 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=redacted-leaked | lane_source=unresolved | dedupe=36b737dd8d12 | class_key=hook.guard%20;with%20;pipe.template.3f68575ef1 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -2096,7 +2096,7 @@
     "guard": "guard with pipe",
     "key": "2c9d8e1b9517",
     "reason": "reason-with-breakers",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=reason-with-breakers | lane_source=registry | dedupe=2c9d8e1b9517 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=reason-with-breakers | lane_source=registry | dedupe=2c9d8e1b9517 | class_key=hook.guard%20;with%20;pipe.template.9996f44998 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "pipe | and\nnewline\r\nsplit",
@@ -2115,7 +2115,7 @@
     "guard": "guard with pipe",
     "key": "2c9d8e1b9517",
     "reason": "reason-with-breakers",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=reason-with-breakers | lane_source=unresolved | dedupe=2c9d8e1b9517 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=reason-with-breakers | lane_source=unresolved | dedupe=2c9d8e1b9517 | class_key=hook.guard%20;with%20;pipe.template.9996f44998 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "pipe | and\nnewline\r\nsplit",
@@ -2134,7 +2134,7 @@
     "guard": "guard with pipe",
     "key": "ec7216492750",
     "reason": "very-very-very-very-very-very-very-very",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=very-very-very-very-very-very-very-very | lane_source=registry | dedupe=ec7216492750 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=very-very-very-very-very-very-very-very | lane_source=registry | dedupe=ec7216492750 | class_key=hook.guard%20;with%20;pipe.template.dafd03c423 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "token=abc.def bearer sk-aaaaaaaaaaaaaaaaaaaaaaaa AKIABBBBBBBBBBBBBBBB",
@@ -2153,7 +2153,7 @@
     "guard": "guard with pipe",
     "key": "ec7216492750",
     "reason": "very-very-very-very-very-very-very-very",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=very-very-very-very-very-very-very-very | lane_source=unresolved | dedupe=ec7216492750 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=very-very-very-very-very-very-very-very | lane_source=unresolved | dedupe=ec7216492750 | class_key=hook.guard%20;with%20;pipe.template.dafd03c423 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "token=abc.def bearer sk-aaaaaaaaaaaaaaaaaaaaaaaa AKIABBBBBBBBBBBBBBBB",
@@ -2172,7 +2172,7 @@
     "guard": "guard with pipe",
     "key": "a69478eb63b4",
     "reason": "mixed-case-reason-with-numbers",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=mixed-case-reason-with-numbers | lane_source=registry | dedupe=a69478eb63b4 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=mixed-case-reason-with-numbers | lane_source=registry | dedupe=a69478eb63b4 | class_key=hook.guard%20;with%20;pipe.template.14adcac309 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "eyJaaaaaaaaaaaa.bbbbbbbbbbbb.cccccccccccc",
@@ -2191,7 +2191,7 @@
     "guard": "guard with pipe",
     "key": "a69478eb63b4",
     "reason": "mixed-case-reason-with-numbers",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=mixed-case-reason-with-numbers | lane_source=unresolved | dedupe=a69478eb63b4 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=mixed-case-reason-with-numbers | lane_source=unresolved | dedupe=a69478eb63b4 | class_key=hook.guard%20;with%20;pipe.template.14adcac309 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "eyJaaaaaaaaaaaa.bbbbbbbbbbbb.cccccccccccc",
@@ -2210,7 +2210,7 @@
     "guard": "guard with pipe",
     "key": "f053dc988620",
     "reason": "redacted-refused",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=redacted-refused | lane_source=registry | dedupe=f053dc988620 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=redacted-refused | lane_source=registry | dedupe=f053dc988620 | class_key=hook.guard%20;with%20;pipe.template.fee6a185ab | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "xoxb-1234567890-abcdef github_pat_zzzzzzzzzzzzzzzzzzzzzz",
@@ -2229,7 +2229,7 @@
     "guard": "guard with pipe",
     "key": "f053dc988620",
     "reason": "redacted-refused",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=redacted-refused | lane_source=unresolved | dedupe=f053dc988620 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=redacted-refused | lane_source=unresolved | dedupe=f053dc988620 | class_key=hook.guard%20;with%20;pipe.template.fee6a185ab | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "xoxb-1234567890-abcdef github_pat_zzzzzzzzzzzzzzzzzzzzzz",
@@ -2248,7 +2248,7 @@
     "guard": "guard with pipe",
     "key": "3c5077495a38",
     "reason": "unicode-r-ason-n-code",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=unicode-r-ason-n-code | lane_source=registry | dedupe=3c5077495a38 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=unicode-r-ason-n-code | lane_source=registry | dedupe=3c5077495a38 | class_key=hook.guard%20;with%20;pipe.template.a928a29053 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "  padded \"quoted\" detail  ",
@@ -2267,7 +2267,7 @@
     "guard": "guard with pipe",
     "key": "3c5077495a38",
     "reason": "unicode-r-ason-n-code",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=unicode-r-ason-n-code | lane_source=unresolved | dedupe=3c5077495a38 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=guard with pipe | reason=unicode-r-ason-n-code | lane_source=unresolved | dedupe=3c5077495a38 | class_key=hook.guard%20;with%20;pipe.template.a928a29053 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "  padded \"quoted\" detail  ",
@@ -2286,7 +2286,7 @@
     "guard": "[redacted] guard",
     "key": "05f993babaa9",
     "reason": "unauthorised-shared-tree-git-mutation",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=unauthorised-shared-tree-git-mutation | lane_source=registry | dedupe=05f993babaa9 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=unauthorised-shared-tree-git-mutation | lane_source=registry | dedupe=05f993babaa9 | class_key=hook.%5b;redacted%5d;%20;guard.template.603ac448e0 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "eyJaaaaaaaaaaaa.bbbbbbbbbbbb.cccccccccccc",
@@ -2305,7 +2305,7 @@
     "guard": "[redacted] guard",
     "key": "05f993babaa9",
     "reason": "unauthorised-shared-tree-git-mutation",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=unauthorised-shared-tree-git-mutation | lane_source=unresolved | dedupe=05f993babaa9 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=unauthorised-shared-tree-git-mutation | lane_source=unresolved | dedupe=05f993babaa9 | class_key=hook.%5b;redacted%5d;%20;guard.template.603ac448e0 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "eyJaaaaaaaaaaaa.bbbbbbbbbbbb.cccccccccccc",
@@ -2324,7 +2324,7 @@
     "guard": "[redacted] guard",
     "key": "634c294c944a",
     "reason": "branch-refused-at-line",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=branch-refused-at-line | lane_source=registry | dedupe=634c294c944a | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=branch-refused-at-line | lane_source=registry | dedupe=634c294c944a | class_key=hook.%5b;redacted%5d;%20;guard.template.c5bcd07f2e | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "xoxb-1234567890-abcdef github_pat_zzzzzzzzzzzzzzzzzzzzzz",
@@ -2343,7 +2343,7 @@
     "guard": "[redacted] guard",
     "key": "634c294c944a",
     "reason": "branch-refused-at-line",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=branch-refused-at-line | lane_source=unresolved | dedupe=634c294c944a | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=branch-refused-at-line | lane_source=unresolved | dedupe=634c294c944a | class_key=hook.%5b;redacted%5d;%20;guard.template.c5bcd07f2e | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "xoxb-1234567890-abcdef github_pat_zzzzzzzzzzzzzzzzzzzzzz",
@@ -2362,7 +2362,7 @@
     "guard": "[redacted] guard",
     "key": "9a373b9ca321",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=unspecified | lane_source=registry | dedupe=9a373b9ca321 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=unspecified | lane_source=registry | dedupe=9a373b9ca321 | class_key=hook.%5b;redacted%5d;%20;guard.template.e3b0c44298 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "  padded \"quoted\" detail  ",
@@ -2381,7 +2381,7 @@
     "guard": "[redacted] guard",
     "key": "9a373b9ca321",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=unspecified | lane_source=unresolved | dedupe=9a373b9ca321 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=unspecified | lane_source=unresolved | dedupe=9a373b9ca321 | class_key=hook.%5b;redacted%5d;%20;guard.template.e3b0c44298 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "  padded \"quoted\" detail  ",
@@ -2400,7 +2400,7 @@
     "guard": "[redacted] guard",
     "key": "3d8854ebd862",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=unspecified | lane_source=registry | dedupe=3d8854ebd862 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=unspecified | lane_source=registry | dedupe=3d8854ebd862 | class_key=hook.%5b;redacted%5d;%20;guard.template.e3b0c44298 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "",
@@ -2419,7 +2419,7 @@
     "guard": "[redacted] guard",
     "key": "3d8854ebd862",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=unspecified | lane_source=unresolved | dedupe=3d8854ebd862 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=unspecified | lane_source=unresolved | dedupe=3d8854ebd862 | class_key=hook.%5b;redacted%5d;%20;guard.template.e3b0c44298 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "",
@@ -2438,7 +2438,7 @@
     "guard": "[redacted] guard",
     "key": "3d6420cceb2a",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=unspecified | lane_source=registry | dedupe=3d6420cceb2a | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=unspecified | lane_source=registry | dedupe=3d6420cceb2a | class_key=hook.%5b;redacted%5d;%20;guard.template.3963e13924 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "short detail",
@@ -2457,7 +2457,7 @@
     "guard": "[redacted] guard",
     "key": "3d6420cceb2a",
     "reason": "unspecified",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=unspecified | lane_source=unresolved | dedupe=3d6420cceb2a | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=unspecified | lane_source=unresolved | dedupe=3d6420cceb2a | class_key=hook.%5b;redacted%5d;%20;guard.template.3963e13924 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"short detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "short detail",
@@ -2476,7 +2476,7 @@
     "guard": "[redacted] guard",
     "key": "284ad9f3b6ec",
     "reason": "omn-compound-line-refused-times-in-17s",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=omn-compound-line-refused-times-in-17s | lane_source=registry | dedupe=284ad9f3b6ec | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=omn-compound-line-refused-times-in-17s | lane_source=registry | dedupe=284ad9f3b6ec | class_key=hook.%5b;redacted%5d;%20;guard.template.8c0867793b | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -2495,7 +2495,7 @@
     "guard": "[redacted] guard",
     "key": "284ad9f3b6ec",
     "reason": "omn-compound-line-refused-times-in-17s",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=omn-compound-line-refused-times-in-17s | lane_source=unresolved | dedupe=284ad9f3b6ec | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=omn-compound-line-refused-times-in-17s | lane_source=unresolved | dedupe=284ad9f3b6ec | class_key=hook.%5b;redacted%5d;%20;guard.template.8c0867793b | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -2514,7 +2514,7 @@
     "guard": "[redacted] guard",
     "key": "7e55a7157cb3",
     "reason": "redacted-leaked",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=redacted-leaked | lane_source=registry | dedupe=7e55a7157cb3 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=redacted-leaked | lane_source=registry | dedupe=7e55a7157cb3 | class_key=hook.%5b;redacted%5d;%20;guard.template.3f68575ef1 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "pipe | and\nnewline\r\nsplit",
@@ -2533,7 +2533,7 @@
     "guard": "[redacted] guard",
     "key": "7e55a7157cb3",
     "reason": "redacted-leaked",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=redacted-leaked | lane_source=unresolved | dedupe=7e55a7157cb3 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=redacted-leaked | lane_source=unresolved | dedupe=7e55a7157cb3 | class_key=hook.%5b;redacted%5d;%20;guard.template.3f68575ef1 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"pipe   and newline split\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "pipe | and\nnewline\r\nsplit",
@@ -2552,7 +2552,7 @@
     "guard": "[redacted] guard",
     "key": "50eeda81e784",
     "reason": "reason-with-breakers",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=reason-with-breakers | lane_source=registry | dedupe=50eeda81e784 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=reason-with-breakers | lane_source=registry | dedupe=50eeda81e784 | class_key=hook.%5b;redacted%5d;%20;guard.template.9996f44998 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "token=abc.def bearer sk-aaaaaaaaaaaaaaaaaaaaaaaa AKIABBBBBBBBBBBBBBBB",
@@ -2571,7 +2571,7 @@
     "guard": "[redacted] guard",
     "key": "50eeda81e784",
     "reason": "reason-with-breakers",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=reason-with-breakers | lane_source=unresolved | dedupe=50eeda81e784 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane x y | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=reason-with-breakers | lane_source=unresolved | dedupe=50eeda81e784 | class_key=hook.%5b;redacted%5d;%20;guard.template.9996f44998 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] bearer [redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "token=abc.def bearer sk-aaaaaaaaaaaaaaaaaaaaaaaa AKIABBBBBBBBBBBBBBBB",
@@ -2590,7 +2590,7 @@
     "guard": "[redacted] guard",
     "key": "3efbbae0c18b",
     "reason": "very-very-very-very-very-very-very-very",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=very-very-very-very-very-very-very-very | lane_source=registry | dedupe=3efbbae0c18b | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=very-very-very-very-very-very-very-very | lane_source=registry | dedupe=3efbbae0c18b | class_key=hook.%5b;redacted%5d;%20;guard.template.dafd03c423 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "eyJaaaaaaaaaaaa.bbbbbbbbbbbb.cccccccccccc",
@@ -2609,7 +2609,7 @@
     "guard": "[redacted] guard",
     "key": "3efbbae0c18b",
     "reason": "very-very-very-very-very-very-very-very",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=very-very-very-very-very-very-very-very | lane_source=unresolved | dedupe=3efbbae0c18b | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=tokeeen=zzz | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=very-very-very-very-very-very-very-very | lane_source=unresolved | dedupe=3efbbae0c18b | class_key=hook.%5b;redacted%5d;%20;guard.template.dafd03c423 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"[redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "eyJaaaaaaaaaaaa.bbbbbbbbbbbb.cccccccccccc",
@@ -2628,7 +2628,7 @@
     "guard": "[redacted] guard",
     "key": "7b8940edd4ac",
     "reason": "mixed-case-reason-with-numbers",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=mixed-case-reason-with-numbers | lane_source=registry | dedupe=7b8940edd4ac | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=mixed-case-reason-with-numbers | lane_source=registry | dedupe=7b8940edd4ac | class_key=hook.%5b;redacted%5d;%20;guard.template.14adcac309 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "xoxb-1234567890-abcdef github_pat_zzzzzzzzzzzzzzzzzzzzzz",
@@ -2647,7 +2647,7 @@
     "guard": "[redacted] guard",
     "key": "7b8940edd4ac",
     "reason": "mixed-case-reason-with-numbers",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=mixed-case-reason-with-numbers | lane_source=unresolved | dedupe=7b8940edd4ac | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=mixed-case-reason-with-numbers | lane_source=unresolved | dedupe=7b8940edd4ac | class_key=hook.%5b;redacted%5d;%20;guard.template.14adcac309 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"[redacted] [redacted]\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "xoxb-1234567890-abcdef github_pat_zzzzzzzzzzzzzzzzzzzzzz",
@@ -2666,7 +2666,7 @@
     "guard": "[redacted] guard",
     "key": "b6f0847dda71",
     "reason": "redacted-refused",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=redacted-refused | lane_source=registry | dedupe=b6f0847dda71 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=redacted-refused | lane_source=registry | dedupe=b6f0847dda71 | class_key=hook.%5b;redacted%5d;%20;guard.template.fee6a185ab | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "  padded \"quoted\" detail  ",
@@ -2685,7 +2685,7 @@
     "guard": "[redacted] guard",
     "key": "b6f0847dda71",
     "reason": "redacted-refused",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=redacted-refused | lane_source=unresolved | dedupe=b6f0847dda71 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=unresolved | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=redacted-refused | lane_source=unresolved | dedupe=b6f0847dda71 | class_key=hook.%5b;redacted%5d;%20;guard.template.fee6a185ab | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=3 | detail=\"padded \"quoted\" detail\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "  padded \"quoted\" detail  ",
@@ -2704,7 +2704,7 @@
     "guard": "[redacted] guard",
     "key": "f6519b6ebebc",
     "reason": "unicode-r-ason-n-code",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=unicode-r-ason-n-code | lane_source=registry | dedupe=f6519b6ebebc | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=unicode-r-ason-n-code | lane_source=registry | dedupe=f6519b6ebebc | class_key=hook.%5b;redacted%5d;%20;guard.template.a928a29053 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "",
@@ -2723,7 +2723,7 @@
     "guard": "[redacted] guard",
     "key": "f6519b6ebebc",
     "reason": "unicode-r-ason-n-code",
-    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=unicode-r-ason-n-code | lane_source=unresolved | dedupe=f6519b6ebebc | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
+    "row": "2026-10-09T06:00:00Z | FRICTION | lane=lane-a | actor=hook | model=none | class=refusal | guard=[redacted] guard | reason=unicode-r-ason-n-code | lane_source=unresolved | dedupe=f6519b6ebebc | class_key=hook.%5b;redacted%5d;%20;guard.template.a928a29053 | key_version=4f9a31c00dcb5dd989f3e694eff35a98d75faa70832fe7c4334f6770d08de7a5 | refusal_count=1 | suppressed_since_last_row=0 | detail=\"\" | existing=OMN-18946 | cost=~1 lane-minute | This row exists because a hook refusal is otherwise terminal-only and unaggregated (OMN-18946)"
    },
    "request": {
     "detail": "",
@@ -2738,5 +2738,5 @@
   }
  ],
  "secret_guard": "subagent_stop_secret_leak_guard.sh",
- "source": "omniclaude plugins/onex/hooks/lib/hook_refusal_recorder.py @ ad0aa0ddc18fc788a0297c382405b134d03b2895"
+ "source": "omnimarket node_hook_refusal_row_compute (OMN-20685) at dev-20261106062827-a4798bc9d618; rows carried from omniclaude plugins/onex/hooks/lib/hook_refusal_recorder.py @ ad0aa0ddc18fc788a0297c382405b134d03b2895 with only the class_key and key_version cells added"
 }
