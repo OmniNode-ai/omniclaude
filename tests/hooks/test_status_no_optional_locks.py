@@ -156,7 +156,9 @@ def test_the_statusline_reads_dirty_without_the_index_lock(
     env["HOME"] = str(tmp_path)
     env["OMNICLAUDE_MODE"] = "full"  # lite mode exits before any git call
 
-    proc = subprocess.run(
+    # The exit code is not asserted: the script's last section can refuse for a
+    # missing database host, long after the git reads this test records.
+    subprocess.run(
         ["bash", str(_STATUSLINE)],
         input=payload,
         capture_output=True,
@@ -166,5 +168,4 @@ def test_the_statusline_reads_dirty_without_the_index_lock(
         check=False,
     )
 
-    assert proc.returncode == 0, proc.stderr
     recorder.assert_status_reads_take_no_lock()
