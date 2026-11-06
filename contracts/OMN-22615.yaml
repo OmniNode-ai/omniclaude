@@ -1,0 +1,59 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-22615
+title: "The worktree guard's bare-interpreter requirement moves out of omniclaude's OMN-19998 contract into its own contract"
+summary: >
+  omniclaude#3152 added a requirement and two dod_evidence items binding AC16 to contracts/OMN-19998.yaml, while the live ticket OMN-19998 carries AC1 to AC3 only. The criteria-drift check read AC16 as a deleted criterion and the landing controller deferred pull requests touching that contract. The requirement and both items move here unchanged, bound to this ticket's own criteria, and the shared contract keeps no claim outside AC1 to AC3 and its retired labels.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn22615-own-contract
+    statement: "The worktree guard's bare-interpreter requirement and its two checks live in a contract of their own, and contracts/OMN-19998.yaml claims no label the live ticket lacks except those it retires."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: contracts/OMN-19998.yaml in omniclaude no longer claims AC16, and comparing it with the live ticket's AC1 to AC3 reports no drift entry -- falsifier: uv run pytest tests/ci/test_contract_omn19998_claims_omn22615.py -q --no-cov"
+      - id: "AC2"
+        statement: "AC2: the requirement and both checks live in this ticket's own contract and still pass at the head -- falsifier: uv run pytest tests/hooks/test_worktree_add_guard_bare_interpreter.py -q --no-cov fails with the guard source reverted"
+  - id: req-omn19998-worktree-guard-bare-interpreter
+    statement: "The worktree guard decision core resolves the omniclaude source root itself, so a hook interpreter with no omniclaude install still judges a destination instead of refusing every sanctioned worktree add."
+evidence_requirements:
+  - kind: tests
+    description: "The focused tests pass on the lab from the branch"
+    command: "uv run pytest tests/ci/test_contract_omn19998_claims_omn22615.py tests/hooks/test_worktree_add_guard_bare_interpreter.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn22615-no-unretired-claim
+    description: "Every label the shared contract's dod_evidence items bind is one of the live ticket's AC1 to AC3 or is retired by that contract, with a contract holding an AC16 claim as the failing control."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_contract_omn19998_claims_omn22615.py -q --no-cov"
+    binds_ac:
+      - "AC1"
+  - id: dod-omn19998-worktree-guard-bare-interpreter
+    description: "The core and the registered hook are exercised under a bare interpreter, with the installed interpreter as the positive control and a stray destination still refused."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_worktree_add_guard_bare_interpreter.py -q --no-cov"
+  - id: dod-omn19998-worktree-guard-source-readback
+    description: "Hosted source publication readback at the checked-out commit: the worktree guard must publish both source-root candidates before its shared tokenizer import. Missing or pre-fix source fails; this does not claim a running hook installation."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: >-
+          curl --fail --silent --show-error --location
+          "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/$(git rev-parse HEAD)/plugins/onex/hooks/lib/worktree_add_guard.py"
+          | python3 -c 'import sys; source = sys.stdin.read(); assert "_ROOTS = (_HOOKS_LIB.parents[3]" in source; assert "Path(os.environ.get(" in source; assert "OMNI_HOME" in source; assert source.index("sys.path += [str(r /") < source.index("from omniclaude.nodes.node_git_effect")'
+  - id: dod-omn22615-moved-items-live-in-own-contract
+    description: "The two worktree-guard items live in this contract and no longer in contracts/OMN-19998.yaml; a merge base that still holds them in the shared contract fails."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_contract_omn19998_claims_omn22615.py -q --no-cov -k moved_worktree_guard_items"
+    binds_ac:
+      - "AC2"
