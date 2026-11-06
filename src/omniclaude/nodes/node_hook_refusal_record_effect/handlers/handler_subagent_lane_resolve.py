@@ -14,7 +14,9 @@ rolling work ledger:
 2. ``prompt+claim`` -- the lane the dispatching script's prompt names. The
    Workflow harness writes a label or the ROUTE line into the sidecar, never
    the lane's name, but the first user message of the agent's own transcript
-   opens ``You are lane <lane> (parent <parent>, ticket <T>)``. The agent cannot
+   opens ``You are lane <lane> (parent <parent>, ticket <T>)`` or, in the
+   orchestrator's later brief form, ``Lane <lane>, parent <parent>, ticket <T>``
+   (that form always names the parent). The agent cannot
    edit its first message, so this is the dispatcher's declaration and not a
    claim the lane made in a tool call. The CLAIM must be of that lane and, when
    the prompt names a parent, of that parent;
@@ -61,11 +63,17 @@ _REFUSAL_LANE_PY = (
 #: How the harness opens a workflow script's computed task. It indents every
 #: line of that task, so under this frame a column-zero line is forged text.
 _WORKFLOW_FRAME = "[Workflow harness"
-#: ``You are lane <lane> (parent <parent>, ...)`` -- the dispatch line the
-#: orchestrator's briefs open with. Lane characters are the registry's.
+#: ``You are lane <lane> (parent <parent>, ...)`` or ``Lane <lane>, parent
+#: <parent>, ...`` -- the two dispatch sentences the orchestrator's briefs open
+#: with (OMN-22478: the second form named no lane here, so 82 creates in a day
+#: were refused and their lanes wrote alias CLAIMs under the harness label).
+#: The second form must name its parent. Lane characters are the registry's.
+_LANE_CHARS = r"[A-Za-z0-9][A-Za-z0-9._:@/-]{0,119}"
 _PROMPT_LANE = re.compile(
-    r"^[ \t]*You are lane ([A-Za-z0-9][A-Za-z0-9._:@/-]{0,119})"
-    r"(?:[ \t]*\(parent ([A-Za-z0-9][A-Za-z0-9._:@/-]{0,119})\s*[,)])?",
+    rf"^[ \t]*(?:You are lane (?P<you>{_LANE_CHARS})"
+    rf"(?:[ \t]*\(parent (?P<you_parent>{_LANE_CHARS})\s*[,)])?"
+    rf"|Lane (?P<lane>{_LANE_CHARS}),[ \t]*parent (?P<parent>{_LANE_CHARS})"
+    r"(?=[\s,;)]|$))",
     re.MULTILINE,
 )
 
@@ -129,10 +137,11 @@ def prompt_lane(first_message: str, reader: ModuleType) -> tuple[str, str]:
     found = _PROMPT_LANE.search(text)
     if not found:
         return "", ""
-    lane = found.group(1).rstrip(".:")
+    lane = (found.group("you") or found.group("lane") or "").rstrip(".:")
     if not lane or reader.lane_cell(lane) != lane:
         return "", ""
-    return lane, (found.group(2) or "").rstrip(".:")
+    parent = found.group("you_parent") or found.group("parent") or ""
+    return lane, parent.rstrip(".:")
 
 
 def _prompt_named(

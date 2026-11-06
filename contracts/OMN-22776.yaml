@@ -1,0 +1,51 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-22776
+title: "The ticket create gate names a workflow lane from its \"Lane <lane>, parent <parent>\" dispatch sentence"
+summary: >
+  The create gate's prompt reader matched only "You are lane <lane> (parent
+  <parent>, ...)". Orchestrator briefs now open "Lane <lane>, parent <parent>,
+  ticket <T>.", so the reader named no lane and the gate refused the lane's
+  creates against its harness label. The reader accepts the second form, only
+  with its parent; the open CLAIM must still be of that lane and that parent.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn22776-lane-form-dispatch-names-the-lane
+    statement: A workflow subagent dispatched with "Lane <lane>, parent <parent>, ..." is named by that sentence, and admitted only while that lane holds an open CLAIM with that parent.
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: a workflow subagent whose first message opens \"Lane <lane>, parent <parent>, ...\" under the harness frame is admitted when that lane holds an open CLAIM with that parent -- falsifier: uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -k lane_form_dispatch_with_an_open_claim"
+      - id: "AC2"
+        statement: "AC2: the same sentence with no CLAIM, a CLAIM under another parent, no parent, or at column zero under the frame names no lane and is refused -- falsifier: uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -k \"lane_form and (refused or forged or without)\""
+      - id: "AC3"
+        statement: "AC3: the \"You are lane\" form is unchanged -- falsifier: uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py"
+evidence_requirements:
+  - kind: tests
+    description: "The lane intake tests pass, the new lane-form cases among them"
+    command: "uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn22776-lane-form-admitted
+    description: "A subagent dispatched with the Lane form and holding its CLAIM mints. Fails at the merge base, where the reader names no lane and the create is refused lane_identity_missing."
+    source: manual
+    binds_ac:
+      - "AC1"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -k lane_form_dispatch_with_an_open_claim -q --no-cov"
+        cwd: "."
+  - id: dod-omn22776-lane-form-still-closed
+    description: "The Lane form names nothing without its parent, at column zero under the frame, or for a CLAIM under another parent, and the You-are-lane cases are unchanged."
+    source: manual
+    binds_ac:
+      - "AC2"
+      - "AC3"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_ticket_creation_guard_lane_intake.py -q --no-cov"
+        cwd: "."
