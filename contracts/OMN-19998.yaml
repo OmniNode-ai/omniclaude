@@ -34,85 +34,38 @@ requirements:
       - id: "AC3"
         statement: |-
           AC3: The placement gate accepts a hosted job listed in .github/hosted-eligible-jobs.yaml under a ruling in config/private_repo_hosted_rulings.yaml, and still fails the unlisted twin beside it -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -k "listed_hosted_job_passes or unlisted_hosted_job_fails" with load_eligible returning {}
-      - id: "AC4"
-        statement: |-
-          AC4: An entry citing a ruling the registry does not carry, a ruling scoped to another repository, a ruling absent from a readable ledger, or a job no workflow defines is refused -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -k "unknown_ruling or does_not_scope or on_the_ledger or does_not_exist" with those checks removed
   - id: req-omn19998-public-runner-placement
     statement: "Operator RULING 2026-10-16T07:07:09Z: CI runners are for private repositories only. omniclaude is public, so no workflow routing fallback names the self-hosted fleet for a public caller, except the lab carve-outs (OMNI_HOSTILE_REVIEW_RUNS_ON_JSON, OMNI_LAB_BUS_RUNS_ON_JSON), and omnibase_core's check-public-runner-placement runs as a CI Summary strict job and as a pre-commit hook at one core release."
-    acceptance:
-      - id: "AC5"
-        statement: |-
-          AC5: no workflow line outside the carve-outs falls back to the self-hosted fleet for a public caller (a reusable workflow keeps it only for a private caller), the Public Runner Placement job is unconditional, hosted, carries a positive control and the same core release as the hook, and CI Summary requires its success -- falsifier: uv run pytest tests/ci/test_public_runner_placement_omn19998.py -q fails at the merge base, where 96 fallback lines name the fleet and neither the job nor the hook exists
   - id: "req-omn19998-dev-tag-sibling-pins"
     statement: "Operator RULINGs 2026-10-16T07:34:18Z and 2026-10-16T09:35:49Z: a consumer reads a sibling by tag instead of waiting for a PyPI release. The dep-provenance gate accepts a first-party sibling pinned through [tool.uv.sources] to its own OmniNode-ai repository by a dev merge tag dev-<UTC YYYYMMDDHHMMSS>-<sha12> alone, and keeps refusing a rev, a branch, a release tag, a malformed dev tag and another repository."
-    acceptance:
-      - id: "AC6"
-        statement: "AC6: scripts/check_dep_provenance.py exits 0 for omnibase-core, omnibase-infra, omnibase-spi and omnibase-compat pinned by git = their OmniNode-ai repository and tag = a dev merge tag, and exits 1 for a release tag, a malformed dev tag, another repository, a dev tag beside a rev or branch, and a branch pin to dev -- falsifier: uv run pytest tests/scripts/test_check_dep_provenance_dev_tag_omn19998.py -q fails at the merge base, where the two allow tests fail"
   - id: "req-omn19998-nightly-sibling-pin-train"
     statement: "RULING 2026-10-19T10:11:00Z: once a night, one bump PR per consumer moving every internal sibling pinned by a dev merge tag to its newest dev merge tag whose dev CI is green, plus a workflow_dispatch of the same train; no per-tag PRs. sibling-lock-refresh.yml runs scripts/relock_git_sources.py --dev-tag-train, which passes over red and unread tags, never moves a pin backwards and rewrites through omnimarket's node_dev_tag_pin_mover_compute; the PR step reuses one fixed branch and updates an open PR in place."
-    acceptance:
-      - id: "AC7"
-        statement: "AC7: the train picks the newest green dev tag newer than the pin, skips red and unread tags, moves every member in one plan, writes nothing on a dry run and refuses a member with no clone; the workflow runs the train before uv lock, honours dry_run and reuses one branch -- falsifier: uv run pytest tests/scripts/test_dev_tag_train_omn19998.py tests/workflows/test_sibling_pin_train_omn19998.py -q fails at the merge base"
   - id: "req-omn19998-guard-core-declared-venv"
     statement: "The Bash guard runner runs a decision core it cannot import under its own interpreter through the plugin's declared venvs (CLAUDE_PLUGIN_DATA/.venv, then the OMNI_HOME omniclaude venv), and refuses with the interpreters it tried when none can import it."
-    acceptance:
-      - id: "AC8"
-        statement: "AC8: run_core and the registered pre_tool_use_bash_guards.sh entrypoint run the core under CLAUDE_PLUGIN_DATA/.venv when PLUGIN_PYTHON_BIN cannot import it, and without a declared venv fail with 'guard core cannot be imported' and 'declared interpreters tried' -- falsifier: uv run pytest tests/hooks/test_git_admission_runtime.py tests/hooks/test_shared_tree_git_guard.py -q -k \"runs_missing_core_under_declared_venv or runs_the_core_under_the_declared_venv\" fails at the merge base, where no declared venv is tried"
   - id: "req-omn19998-local-public-repo-hygiene"
     statement: "omniclaude runs the exported public-repo-hygiene command locally before commit, with the repository policy deciding the enforced classes and scope as in CI."
-    acceptance:
-      - id: "AC8"
-        statement: "AC8: exactly one local public-repo-hygiene hook runs the exported command without narrowing its trigger or overriding the repository's enforced classes and added-lines scope, and the caller uses the reusable workflow in this checkout -- falsifier: uv run pytest tests/scripts/test_public_repo_hygiene_local_hook_omn19998.py -q fails at the merge base, where no local public-repo-hygiene hook is declared"
   - id: "req-omn19998-hostile-reviewer-lan-runners"
     statement: "The Hostile Reviewer fallback requires arch-amd64 to stay on LAN runners that can reach its review voters and exclude runners that cannot reach them."
-    acceptance:
-      - id: "AC9"
-        statement: "AC9: the hostile-review job's dedicated runner fallback requires self-hosted, omnibase-ci and arch-amd64, excluding runners that cannot reach the review voters -- falsifier: uv run pytest tests/workflows/test_hostile_reviewer_fleet_and_stderr.py tests/hooks/test_hostile_reviewer_workflow.py -q -k \"arch_amd64 or fleet_literal or self_hosted_runner or public_runner_branch\" fails at the merge base, where the fallback lacks arch-amd64"
   - id: "req-omn19998-test-job-timeout-headroom"
     statement: "The sharded test job's ceiling holds its slowest measured shard with headroom, so a slow runner cannot cancel a shard and turn Tests Gate red with no failing test."
-    acceptance:
-      - id: "AC10"
-        statement: "AC10: the ci.yml test job's timeout-minutes is at least 1.5 times the 903 s that cancelled Split 1/5 on dev head 9ee6e7f115a2 -- falsifier: uv run pytest tests/ci/test_test_job_timeout_headroom_omn19998.py -q fails with timeout-minutes at 15"
   - id: "req-omn19998-cross-repo-ref-policy-dev-tag"
     statement: "The cross-repo reusable ref policy (OMN-18494) admits a dev-merge tag dev-<UTC YYYYMMDDHHMMSS>-<sha12> beside @main and a full sha, since the repo's ruling of 2026-10-29T01:50:26Z pins reusables to dev-merge tags, and still refuses the bare dev branch and a malformed tag."
-    acceptance:
-      - id: "AC11"
-        statement: "AC11: tests/workflows/test_cross_repo_uses_ref_policy_omn18494.py passes with a receipt-gate.yml caller pinned at @dev-20261030152335-66d35d2283c3 and refuses @dev and a short-stamp tag -- falsifier: uv run pytest tests/workflows/test_cross_repo_uses_ref_policy_omn18494.py -q --no-cov fails at the merge base for the dev-merge-tag test, where DEV_MERGE_TAG_RE does not exist"
   - id: "req-omn19998-pypi-release-behind-dev-tag"
     statement: "RULING 2026-11-02T15:20:36Z (lane=orchestrator-1036, kind=process): internal-sibling-pins accepts a moved internal-sibling pin on a published PyPI release while the sibling's dev carries a newer merge tag, reads no dev tags for it, and still refuses a git release tag, a release off PyPI and a release the lock records no upload time for. scripts/check_dep_provenance.py (OMN-13873) is unchanged."
-    acceptance:
-      - id: "AC12"
-        statement: "AC12: handle() and the CLI return ALLOWED and exit 0 for a PyPI release of omnibase-core published 20261101145451 beside the newer dev merge tag dev-20261101233629-173cd14208fe, with no repository needing its tags read, and still REFUSE a git release tag, a release off PyPI and a PyPI release with no upload-time behind that tag, including beside an accepted release -- falsifier: uv run pytest tests/unit/handlers/test_handler_internal_sibling_pins_omn19998.py tests/unit/handlers/test_handler_internal_sibling_pins_omn21282.py -q --no-cov fails at the merge base, where the three acceptance tests and the mixed-lock test fail with omnibase-core REFUSED"
   - id: "req-omn19998-omnimarket-pin-newest-dev-tag"
     statement: "The omnimarket pin names the newest dev merge tag at the time of the change, so the first-party-ref and Pre-commit Suite sibling-pin staleness check passes on dev again."
-    acceptance:
-      - id: "AC13"
-        statement: "AC13: pyproject.toml pins omnimarket at dev-20261104010134-0b7b2bde8a56 or a later dev merge tag in override-dependencies and [tool.uv.sources], and uv.lock resolves that tag to its commit with matching override and requirement metadata -- falsifier: uv run pytest tests/ci/test_omnimarket_pin_floor_omn19998.py -q --no-cov fails over the merge base, which pins dev-20261102235857-65611aac6f14"
   - id: "req-omn19998-recorded-sibling-permission"
     statement: "Canonical clone refresh keeps processing a valid clone when a hidden sibling cannot be inspected, while unrelated storage errors remain visible."
-    acceptance:
-      - id: "AC14"
-        statement: "AC14: the refresh CLI advances a valid clone and reports one permission diagnostic for a denied child stat, .git probe or declared sibling; sibling discovery raises an unrelated EIO -- falsifier: uv run pytest tests/hooks/test_canonical_clone_sync_refresh.py -q --no-cov -k 'recorded_hidden_sibling or does_not_hide_an_unrelated' with the permission guard removed or widened to OSError"
   - id: req-omn19998-linux-drainer-recovery
     statement: "The Linux hook drainer installer carries the selected recovery mode and journal state root into the restarted systemd user unit."
-    acceptance:
-      - id: "AC15"
-        statement: "AC15: recovery preview and installation render --preserve-backlog exactly once and the selected absolute state root; invalid settings leave the installed unit untouched; recorded quiet-host journal rows survive a stalled recovery cycle while ordinary overflow eviction remains active -- falsifier: uv run pytest tests/scripts/test_install_hook_emit_drainer_systemd.py -q --no-cov with Linux recovery rendering removed"
   - id: req-omn19998-shared-clone-refusal-no-fetch-advice
     statement: "The shared-clone git refusal does not advise a fetch to a caller the lane git-fetch guard would refuse, and keeps its fetch advice outside a lane."
-    acceptance:
-      - id: "AC19"
-        statement: "AC19: inside a lane the shared-clone refusal text never recommends a fetch, and outside a lane it keeps the fetch advice -- falsifier: uv run pytest tests/hooks/test_git_fetch_guard.py -q --no-cov -k shared_clone_refusal fails at the merge base on the in-lane test"
   - id: req-omn19998-gh-shim-readonly-budget
     statement: "The gh shim repairs a lane read budget directory or hour file that the lane itself owns and that is read-only, keeps the hour's count, and still refuses with its cause when the file cannot be written."
-    acceptance:
-      - id: "AC18"
-        statement: "AC18: an owned read-only budget directory and an owned read-only hour file are repaired and the read is counted, and an unwritable hour file still refuses and names the cause -- falsifier: uv run pytest tests/scripts/test_gh_lane_read_fallback.py -q --no-cov -k 'owned_read_only or unwritable_hour_file' fails 3 of 3 at the merge base"
   - id: req-omn19998-sibling-pins-precommit-hook
     statement: "The internal-sibling-pins handler runs as a local pre-commit hook on the lockfile as well as in the CI job, so a refused sibling pin stops at commit time."
-    acceptance:
-      - id: "AC20"
-        statement: "AC20: a local pre-commit hook runs omniclaude.handlers.handler_internal_sibling_pins with --head-lock uv.lock at the pre-commit stage, passes on the checked-in lock, and the handler refuses a release pin that is not a published PyPI release -- falsifier: uv run pytest tests/ci/test_internal_sibling_pins_precommit_omn19998.py -q --no-cov fails at the merge base, where no pre-commit hook runs the handler"
+  - id: req-omn19998-worktree-guard-bare-interpreter
+    statement: "The worktree guard decision core resolves the omniclaude source root itself, so a hook interpreter with no omniclaude install still judges a destination instead of refusing every sanctioned worktree add."
 evidence_requirements:
   - kind: tests
     description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
@@ -152,6 +105,25 @@ dod_evidence:
         check_value: "uv run pytest tests/scripts/test_gh_lane_read_fallback.py -q --no-cov"
     binds_ac:
       - "AC18"
+  - id: dod-omn19998-worktree-guard-bare-interpreter
+    description: "The core and the registered hook are exercised under a bare interpreter, with the installed interpreter as the positive control and a stray destination still refused."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_worktree_add_guard_bare_interpreter.py -q --no-cov"
+    binds_ac:
+      - "AC16"
+  - id: dod-omn19998-worktree-guard-source-readback
+    description: "Hosted source publication readback at the checked-out commit: the worktree guard must publish both source-root candidates before its shared tokenizer import. Missing or pre-fix source fails; this does not claim a running hook installation."
+    source: manual
+    checks:
+      - check_type: command
+        check_value: >-
+          curl --fail --silent --show-error --location
+          "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/$(git rev-parse HEAD)/plugins/onex/hooks/lib/worktree_add_guard.py"
+          | python3 -c 'import sys; source = sys.stdin.read(); assert "_ROOTS = (_HOOKS_LIB.parents[3]" in source; assert "Path(os.environ.get(" in source; assert "OMNI_HOME" in source; assert source.index("sys.path += [str(r /") < source.index("from omniclaude.nodes.node_git_effect")'
+    binds_ac:
+      - "AC16"
   - id: dod-omn19998-linux-drainer-recovery
     description: "The installer preview, installed user unit and rendered drainer CLI are exercised against recorded quiet-host rows, with ordinary eviction as a positive control. Real host installation and fresh capture readback remain required separately."
     source: manual
@@ -307,3 +279,165 @@ dod_evidence:
         check_value: "uv run pytest tests/ci/test_internal_sibling_pins_precommit_omn19998.py -q --no-cov"
     binds_ac:
       - "AC20"
+  - id: dod-omn19998-contract-only-retirement
+    description: Retires the claims of the contract-only criteria OMN-19998 never carried on the live ticket (15 labels). Each retired item's checks run here as a regression guard, and this item binds no criterion.
+    source: manual
+    checks:
+    - check_type: test_passes
+      check_value: uv run pytest tests/hooks/test_git_fetch_guard.py -q --no-cov
+    - check_type: command
+      check_value: curl --fail --silent --show-error --location "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/$(git rev-parse HEAD)/src/omniclaude/nodes/node_git_effect/handlers/handler_git_refusal_advice.py" | python3 -c 'import sys; source = sys.stdin.read(); assert "class HandlerGitRefusalAdvice:" in source; assert "if request.lane:" in source; assert "canonical-clone-sync" in source; assert "<owner>/<repo> --wait" in source'
+    - check_type: test_passes
+      check_value: uv run pytest tests/scripts/test_gh_lane_read_fallback.py -q --no-cov
+    - check_type: test_passes
+      check_value: uv run pytest tests/scripts/test_install_hook_emit_drainer_systemd.py -q --no-cov
+    - check_type: test_passes
+      check_value: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -k "unknown_ruling or does_not_scope or on_the_ledger or does_not_exist"
+    - check_type: test_passes
+      check_value: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -k "shipped_registry or listed_hosted_job_passes or does_not_scope"
+    - check_type: test_passes
+      check_value: uv run pytest tests/ci/test_public_runner_placement_omn19998.py -q
+    - check_type: test_passes
+      check_value: uv run pytest tests/scripts/test_check_dep_provenance_dev_tag_omn19998.py tests/scripts/test_check_dep_provenance.py tests/scripts/test_check_dep_provenance_infra_omn17176.py -q
+    - check_type: test_passes
+      check_value: uv run pytest tests/scripts/test_dev_tag_train_omn19998.py tests/workflows/test_sibling_pin_train_omn19998.py tests/workflows/test_sibling_lock_refresh_syncs_capture_mirror.py -q
+    - check_type: test_passes
+      check_value: uv run pytest tests/hooks/test_git_admission_runtime.py tests/hooks/test_shared_tree_git_guard.py -q -k "runs_missing_core_under_declared_venv or runs_the_core_under_the_declared_venv"
+    - check_type: test_passes
+      check_value: uv run pytest tests/scripts/test_public_repo_hygiene_local_hook_omn19998.py -q
+    - check_type: test_passes
+      check_value: uv run pytest tests/workflows/test_hostile_reviewer_fleet_and_stderr.py tests/hooks/test_hostile_reviewer_workflow.py -q -k "arch_amd64 or fleet_literal or self_hosted_runner or public_runner_branch"
+    - check_type: test_passes
+      check_value: uv run pytest tests/ci/test_contract_omn19998_deployment_vocab.py -q
+    - check_type: test_passes
+      check_value: uv run pytest tests/ci/test_test_job_timeout_headroom_omn19998.py -q
+    - check_type: test_passes
+      check_value: uv run pytest tests/workflows/test_cross_repo_uses_ref_policy_omn18494.py -q --no-cov
+    - check_type: test_passes
+      check_value: uv run pytest tests/unit/handlers/test_handler_internal_sibling_pins_omn19998.py tests/unit/handlers/test_handler_internal_sibling_pins_omn21282.py tests/ci/test_core_dev_tag_pin_omn18595.py -q --no-cov
+    - check_type: test_passes
+      check_value: uv run pytest tests/ci/test_omnimarket_pin_floor_omn19998.py -q --no-cov
+    - check_type: test_passes
+      check_value: uv run pytest tests/hooks/test_canonical_clone_sync_refresh.py -q --no-cov -k 'recorded_hidden_sibling or does_not_hide_an_unrelated'
+    - check_type: test_passes
+      check_value: uv run pytest tests/ci/test_internal_sibling_pins_precommit_omn19998.py -q --no-cov
+    supersedes_ac_binding:
+    - item: dod-omn19998-shared-clone-refusal-no-fetch-advice
+      label: AC19
+      reason_kind: no_longer_applicable
+      reason: 'OMN-19998 carries only AC1 to AC3 on the live ticket (read 2026-11-05), so this label was never deleted from it: it is a criterion this repository''s contract declared on its own for another change. Its statement stays in this file''s history and its tests keep running under the carrier item.'
+      retired_by: public-off-lab-2240
+      retired_at: '2026-11-06T00:55:00Z'
+    - item: dod-omn19998-shared-clone-advice-source-readback
+      label: AC19
+      reason_kind: no_longer_applicable
+      reason: 'OMN-19998 carries only AC1 to AC3 on the live ticket (read 2026-11-05), so this label was never deleted from it: it is a criterion this repository''s contract declared on its own for another change. Its statement stays in this file''s history and its tests keep running under the carrier item.'
+      retired_by: public-off-lab-2240
+      retired_at: '2026-11-06T00:55:00Z'
+    - item: dod-omn19998-gh-shim-readonly-budget
+      label: AC18
+      reason_kind: no_longer_applicable
+      reason: 'OMN-19998 carries only AC1 to AC3 on the live ticket (read 2026-11-05), so this label was never deleted from it: it is a criterion this repository''s contract declared on its own for another change. Its statement stays in this file''s history and its tests keep running under the carrier item.'
+      retired_by: public-off-lab-2240
+      retired_at: '2026-11-06T00:55:00Z'
+    - item: dod-omn19998-linux-drainer-recovery
+      label: AC15
+      reason_kind: no_longer_applicable
+      reason: 'OMN-19998 carries only AC1 to AC3 on the live ticket (read 2026-11-05), so this label was never deleted from it: it is a criterion this repository''s contract declared on its own for another change. Its statement stays in this file''s history and its tests keep running under the carrier item.'
+      retired_by: public-off-lab-2240
+      retired_at: '2026-11-06T00:55:00Z'
+    - item: dod-omn19998-hosted-eligible-refusals
+      label: AC4
+      reason_kind: no_longer_applicable
+      reason: 'OMN-19998 carries only AC1 to AC3 on the live ticket (read 2026-11-05), so this label was never deleted from it: it is a criterion this repository''s contract declared on its own for another change. Its statement stays in this file''s history and its tests keep running under the carrier item.'
+      retired_by: public-off-lab-2240
+      retired_at: '2026-11-06T00:55:00Z'
+    - item: dod-omn19998-hosted-rulings-sha256
+      label: AC4
+      reason_kind: no_longer_applicable
+      reason: 'OMN-19998 carries only AC1 to AC3 on the live ticket (read 2026-11-05), so this label was never deleted from it: it is a criterion this repository''s contract declared on its own for another change. Its statement stays in this file''s history and its tests keep running under the carrier item.'
+      retired_by: public-off-lab-2240
+      retired_at: '2026-11-06T00:55:00Z'
+    - item: dod-omn19998-ac5-public-runner-placement
+      label: AC5
+      reason_kind: no_longer_applicable
+      reason: 'OMN-19998 carries only AC1 to AC3 on the live ticket (read 2026-11-05), so this label was never deleted from it: it is a criterion this repository''s contract declared on its own for another change. Its statement stays in this file''s history and its tests keep running under the carrier item.'
+      retired_by: public-off-lab-2240
+      retired_at: '2026-11-06T00:55:00Z'
+    - item: dod-omn19998-dev-tag-sibling-pins
+      label: AC6
+      reason_kind: no_longer_applicable
+      reason: 'OMN-19998 carries only AC1 to AC3 on the live ticket (read 2026-11-05), so this label was never deleted from it: it is a criterion this repository''s contract declared on its own for another change. Its statement stays in this file''s history and its tests keep running under the carrier item.'
+      retired_by: public-off-lab-2240
+      retired_at: '2026-11-06T00:55:00Z'
+    - item: dod-omn19998-nightly-sibling-pin-train
+      label: AC7
+      reason_kind: no_longer_applicable
+      reason: 'OMN-19998 carries only AC1 to AC3 on the live ticket (read 2026-11-05), so this label was never deleted from it: it is a criterion this repository''s contract declared on its own for another change. Its statement stays in this file''s history and its tests keep running under the carrier item.'
+      retired_by: public-off-lab-2240
+      retired_at: '2026-11-06T00:55:00Z'
+    - item: dod-omn19998-guard-core-declared-venv
+      label: AC8
+      reason_kind: no_longer_applicable
+      reason: 'OMN-19998 carries only AC1 to AC3 on the live ticket (read 2026-11-05), so this label was never deleted from it: it is a criterion this repository''s contract declared on its own for another change. Its statement stays in this file''s history and its tests keep running under the carrier item.'
+      retired_by: public-off-lab-2240
+      retired_at: '2026-11-06T00:55:00Z'
+    - item: dod-omn19998-local-public-repo-hygiene
+      label: AC8
+      reason_kind: no_longer_applicable
+      reason: 'OMN-19998 carries only AC1 to AC3 on the live ticket (read 2026-11-05), so this label was never deleted from it: it is a criterion this repository''s contract declared on its own for another change. Its statement stays in this file''s history and its tests keep running under the carrier item.'
+      retired_by: public-off-lab-2240
+      retired_at: '2026-11-06T00:55:00Z'
+    - item: dod-omn19998-hostile-reviewer-lan-runners
+      label: AC9
+      reason_kind: no_longer_applicable
+      reason: 'OMN-19998 carries only AC1 to AC3 on the live ticket (read 2026-11-05), so this label was never deleted from it: it is a criterion this repository''s contract declared on its own for another change. Its statement stays in this file''s history and its tests keep running under the carrier item.'
+      retired_by: public-off-lab-2240
+      retired_at: '2026-11-06T00:55:00Z'
+    - item: dod-omn19998-test-job-timeout-headroom
+      label: AC10
+      reason_kind: no_longer_applicable
+      reason: 'OMN-19998 carries only AC1 to AC3 on the live ticket (read 2026-11-05), so this label was never deleted from it: it is a criterion this repository''s contract declared on its own for another change. Its statement stays in this file''s history and its tests keep running under the carrier item.'
+      retired_by: public-off-lab-2240
+      retired_at: '2026-11-06T00:55:00Z'
+    - item: dod-omn19998-cross-repo-ref-policy-dev-tag
+      label: AC11
+      reason_kind: no_longer_applicable
+      reason: 'OMN-19998 carries only AC1 to AC3 on the live ticket (read 2026-11-05), so this label was never deleted from it: it is a criterion this repository''s contract declared on its own for another change. Its statement stays in this file''s history and its tests keep running under the carrier item.'
+      retired_by: public-off-lab-2240
+      retired_at: '2026-11-06T00:55:00Z'
+    - item: dod-omn19998-pypi-release-behind-dev-tag
+      label: AC12
+      reason_kind: no_longer_applicable
+      reason: 'OMN-19998 carries only AC1 to AC3 on the live ticket (read 2026-11-05), so this label was never deleted from it: it is a criterion this repository''s contract declared on its own for another change. Its statement stays in this file''s history and its tests keep running under the carrier item.'
+      retired_by: public-off-lab-2240
+      retired_at: '2026-11-06T00:55:00Z'
+    - item: dod-omn19998-omnimarket-pin-newest-dev-tag
+      label: AC13
+      reason_kind: no_longer_applicable
+      reason: 'OMN-19998 carries only AC1 to AC3 on the live ticket (read 2026-11-05), so this label was never deleted from it: it is a criterion this repository''s contract declared on its own for another change. Its statement stays in this file''s history and its tests keep running under the carrier item.'
+      retired_by: public-off-lab-2240
+      retired_at: '2026-11-06T00:55:00Z'
+    - item: dod-omn19998-recorded-sibling-permission
+      label: AC14
+      reason_kind: no_longer_applicable
+      reason: 'OMN-19998 carries only AC1 to AC3 on the live ticket (read 2026-11-05), so this label was never deleted from it: it is a criterion this repository''s contract declared on its own for another change. Its statement stays in this file''s history and its tests keep running under the carrier item.'
+      retired_by: public-off-lab-2240
+      retired_at: '2026-11-06T00:55:00Z'
+    - item: dod-omn19998-sibling-pins-precommit-hook
+      label: AC20
+      reason_kind: no_longer_applicable
+      reason: 'OMN-19998 carries only AC1 to AC3 on the live ticket (read 2026-11-05), so this label was never deleted from it: it is a criterion this repository''s contract declared on its own for another change. Its statement stays in this file''s history and its tests keep running under the carrier item.'
+      retired_by: public-off-lab-2240
+      retired_at: '2026-11-06T00:55:00Z'
+  - id: dod-omn19998-retired-labels-stay-retired
+    description: The contract still declares AC1 to AC3, which the live ticket carries, and declares none of the retired labels as a criterion. The merge base has no such test.
+    source: manual
+    checks:
+    - check_type: test_passes
+      check_value: env -u PYTHONPATH uv run --frozen pytest tests/ci/test_contract_retired_labels_omn19998.py -q
+      cwd: ${OMNI_HOME}/omniclaude
+    binds_ac:
+    - AC1
+    - AC2
+    - AC3

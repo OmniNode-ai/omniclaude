@@ -1608,7 +1608,7 @@ def run_sync(
 ) -> list[CloneResult]:
     """Sync every canonical clone of ``repos`` (all clones when None)."""
     started = time.monotonic()
-    clones = discover_clones(registry_roots(env))
+    clones = all_clones(env)
     wanted = {r.casefold() for r in repos} if repos else None
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
         if wanted is not None:
@@ -1892,17 +1892,20 @@ def sibling_clones(env: Mapping[str, str]) -> list[Path]:
     return found + [c for c in homes if c.is_absolute() and _is_dir(c / ".git", c)]
 
 
+def all_clones(env: Mapping[str, str]) -> list[Path]:
+    # Registry clones plus sibling clones, each once by resolved path.
+    both = (*discover_clones(registry_roots(env)), *sibling_clones(env))
+    return list({c.resolve(): c for c in both}.values())
+
+
 def _clones_for(env: Mapping[str, str], repo: str) -> list[Path]:
     """Canonical clones whose slug is ``repo``, or whose name is (``omniclaude``)."""
     wanted = repo.casefold().removesuffix(".git")
-    by_path: dict[Path, Path] = {}
-    for clone in (*discover_clones(registry_roots(env)), *sibling_clones(env)):
-        by_path.setdefault(clone.resolve(), clone)
-    clones = list(by_path.values())
+    clones = all_clones(env)
     # OMN-17427: lanes on h201 and h101 got NO_CLONE for omnibase_internal on
     # 2026-10-07 because the sibling is no registry root's child; OMN-22102: the
     # same for the knowledge base clone on three lab hosts. Only the refresh
-    # looks there; the sync's clone set is unchanged.
+    # looks there; run_sync visits the same set (OMN-17427).
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
         slugs = list(pool.map(clone_slug, clones))
     out: list[Path] = []
