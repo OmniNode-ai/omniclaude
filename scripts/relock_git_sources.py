@@ -369,7 +369,7 @@ def node_planner(
     apply: bool,
 ) -> dict[str, Any]:
     """The plan of omnimarket's sibling-pin hook revs node; with ``apply`` it moves the hook blocks."""
-    node = "omnimarket.nodes.node_sibling_pin_hook_revs_compute"
+    node = "omnimarket.nodes.node_sibling_pin_hook_revs_compute.runtime_sibling_pin_hook_revs"
     argv = [sys.executable, "-m", node, "--pyproject", str(pyproject)]
     argv += ["--distribution", pin.distribution, "--candidates", json.dumps(read)]
     result = subprocess.run(

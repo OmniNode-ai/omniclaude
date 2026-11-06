@@ -367,7 +367,9 @@ def test_dependency_home_is_untouched_when_the_consumer_has_none(
 # what the train hands the node and what it does with the plan it gets back.
 # ---------------------------------------------------------------------------
 
-_NODE = "omnimarket.nodes.node_sibling_pin_hook_revs_compute"
+_NODE = (
+    "omnimarket.nodes.node_sibling_pin_hook_revs_compute.runtime_sibling_pin_hook_revs"
+)
 
 
 def _train_tree(tmp_path: Path):
