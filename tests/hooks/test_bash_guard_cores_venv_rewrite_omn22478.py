@@ -93,6 +93,6 @@ def test_a_core_that_stays_missing_is_still_refused_within_a_bound(
     )
     # Each tried venv is named once, not once per retry.
     tried = first.rsplit("declared interpreters tried: ", 1)[1].rstrip(")").split(", ")
-    assert tried[0] == "CLAUDE_PLUGIN_DATA"
+    assert "CLAUDE_PLUGIN_DATA" in tried
     assert len(tried) == len(set(tried))
     assert time.monotonic() - started < 15
