@@ -49,6 +49,14 @@ SEAM_JOB = (
 )
 
 
+@pytest.fixture(autouse=True)
+def _not_a_lane(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These cases model the live-read-first host; a lane is covered in
+    test_private_repo_runner_placement_lane_omn20141.py (OMN-19998)."""
+    for name in _module().LANE_ENV_MARKERS:
+        monkeypatch.delenv(name, raising=False)
+
+
 def _module():
     if "placement_gate" in sys.modules:
         return sys.modules["placement_gate"]
