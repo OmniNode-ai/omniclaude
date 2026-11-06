@@ -1,0 +1,73 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+"""OMN-22477: a downloaded onboarding script fetches the handler that takes
+omniclaude off the proven set.
+
+A downloaded copy of lab-onboarding.sh sources the setup handler from the dev
+commit its raw URL names, checked against download_digest. Until that commit
+carries the omniclaude exclusion, a downloaded copy (the VM walk and every
+participant run) still checks omniclaude out at its CI pin from 2026-10-06,
+which predates the model-config handler phase 3 imports, so Ollama and the
+local model server cannot be set up on any machine.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import os
+import re
+import subprocess
+from pathlib import Path
+
+import pytest
+from omnibase_core.validators.no_unguarded_git_subprocess import scrub_git_location_env
+
+pytestmark = pytest.mark.unit
+
+REPO = Path(__file__).resolve().parents[2]
+SCRIPT = REPO / "plugins/onex/skills/_bin/lab-onboarding.sh"
+HANDLER_REL = (
+    "src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/"
+    "handler_onboarding_preflight.sh"
+)
+
+
+def _git(*args: str) -> subprocess.CompletedProcess[bytes]:
+    return subprocess.run(
+        ["git", "-C", str(REPO), *args],
+        capture_output=True,
+        check=False,
+        env=scrub_git_location_env(os.environ),
+    )
+
+
+def test_downloaded_handler_takes_omniclaude_off_the_proven_set() -> None:
+    text = SCRIPT.read_text()
+    commit = re.search(
+        r"https://raw\.githubusercontent\.com/OmniNode-ai/omniclaude/([0-9a-f]{40})/\$rel",
+        text,
+    )
+    pinned = re.search(r'download_digest="([0-9a-f:]{79})"', text)
+    assert commit and pinned
+    if _git("cat-file", "-e", f"{commit.group(1)}^{{commit}}").returncode != 0:
+        _git("fetch", "--no-tags", "--depth=1", "origin", commit.group(1))
+    served = _git("show", f"{commit.group(1)}:{HANDLER_REL}")
+    assert served.returncode == 0, served.stderr.decode(errors="replace")
+    assert hashlib.sha256(served.stdout).hexdigest() == pinned.group(1).replace(":", "")
+    assert b'if [ "$1" != omniclaude ]; then' in served.stdout
+
+
+def test_the_two_digests_agree_once_the_handler_is_on_dev() -> None:
+    """The divergence is allowed for exactly one pull request.
+
+    `digest` is the handler beside the entrypoint; `download_digest` is the
+    handler at the commit the raw URL names. A pull request that changes the
+    handler cannot name a dev commit holding its new bytes, so the two differ
+    for that one change. This pull request names the merge commit, so they
+    agree again, and a downloaded run gets the same handler as a checkout.
+    """
+    text = SCRIPT.read_text()
+    local = re.search(r'\bdigest="([0-9a-f:]{79})"', text)
+    download = re.search(r'download_digest="([0-9a-f:]{79})"', text)
+    assert local and download
+    assert local.group(1) == download.group(1)
