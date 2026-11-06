@@ -54,14 +54,17 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from omniclaude.nodes.node_git_effect.enums.enum_quote_kind import EnumQuoteKind
-from omniclaude.nodes.node_git_effect.handlers.handler_shell_scope import Scope
-
-_HOOKS_LIB = Path(__file__).parent
-if str(_HOOKS_LIB) not in sys.path:
-    sys.path.insert(0, str(_HOOKS_LIB))
+# The hook may run on a bare interpreter with no omniclaude install (the
+# decision core then exited 1 on ModuleNotFoundError and every sanctioned
+# `git worktree add` was refused as unjudged). Its shared tokenizer is
+# stdlib-only: use this checkout's source, or the registry clone for an
+# installed plugin -- the same resolution as pr_body_stamp_guard.py (OMN-20266).
+_HOOKS_LIB = Path(__file__).resolve().parent
+_ROOTS = (_HOOKS_LIB.parents[3], Path(os.environ.get("OMNI_HOME", "/")) / "omniclaude")
+sys.path += [str(r / "src") for r in _ROOTS if (r / "src/omniclaude").is_dir()][:1]
 
 from omniclaude.nodes.node_git_effect.handlers.handler_shell_words import (  # noqa: E402
+    EnumQuoteKind,
     HereDoc,
     ShellSyntaxError,
     UnresolvableWord,
@@ -76,7 +79,9 @@ from omniclaude.nodes.node_git_effect.handlers.handler_shell_words import (  # n
     tokenize,
 )
 
-_Scope = Scope
+_Scope = __import__(
+    "omniclaude.nodes.node_git_effect.handlers.handler_shell_scope", fromlist=["Scope"]
+).Scope
 
 DISABLE_HINT = "To disable this guard: onex hooks disable WORKTREE_GUARD"
 
@@ -967,8 +972,7 @@ def main(argv: list[str] | None = None) -> int:
     command = tool_input.get("command") if isinstance(tool_input, dict) else None
     if not isinstance(command, str) or not command:
         return 0
-    cwd_raw = payload.get("cwd") or args.cwd
-    cwd = Path(cwd_raw) if cwd_raw else None
+    cwd = Path(raw) if (raw := payload.get("cwd") or args.cwd) else None
 
     try:
         root = Path(args.root) if args.root else None
