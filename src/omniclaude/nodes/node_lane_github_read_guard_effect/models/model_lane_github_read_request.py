@@ -25,6 +25,18 @@ class ModelLaneGithubReadRequest(BaseModel):
     command: str = Field(default="", description="tool_input.command of a Bash call.")
     cwd: str = Field(default="", description="The caller's working directory.")
     home: str = Field(default="", description="HOME, for expanding a ~ or $HOME path.")
+    gh_on_path: str = Field(
+        default="",
+        description="The first gh on the caller's PATH, empty when there is none.",
+    )
+    gh_routes: tuple[tuple[str, str], ...] = Field(
+        default=(),
+        description="bare_gh_routes.yaml gh: (gh group and verb, onex scm verb).",
+    )
+    api_routes: tuple[tuple[str, str], ...] = Field(
+        default=(),
+        description="bare_gh_routes.yaml api: (GET endpoint pattern, onex scm verb).",
+    )
     agent_id: str = Field(
         default="",
         description="The payload's agent_id: set only when a subagent made the call.",

@@ -19,3 +19,6 @@ class EnumLaneGithubReadShape(StrEnum):
 
     REAL_GH = "REAL_GH"
     """The real gh binary run by its path instead of the shim on PATH (AC3)."""
+
+    BARE_GH = "BARE_GH"
+    """A bare gh whose first PATH entry is the real binary, with an onex scm route (OMN-22539)."""

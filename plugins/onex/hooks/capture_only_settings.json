@@ -1,0 +1,299 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[ -n \"$0\" ] && [ -f \"$0\" ] && OMNICLAUDE_MODE=full exec bash \"$0\" || { cat >/dev/null; exit 0; }' \"${OMNI_HOME:-/nonexistent}/omniclaude/plugins/onex/hooks/scripts/claude_hook_capture.sh\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[ -n \"$0\" ] && [ -f \"$0\" ] && OMNICLAUDE_MODE=full exec bash \"$0\" || { cat >/dev/null; exit 0; }' \"${OMNI_HOME:-/nonexistent}/omniclaude/plugins/onex/hooks/scripts/claude_hook_capture.sh\""
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[ -n \"$0\" ] && [ -f \"$0\" ] && OMNICLAUDE_MODE=full exec bash \"$0\" || { cat >/dev/null; exit 0; }' \"${OMNI_HOME:-/nonexistent}/omniclaude/plugins/onex/hooks/scripts/claude_hook_capture.sh\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[ -n \"$0\" ] && [ -f \"$0\" ] && OMNICLAUDE_MODE=full exec bash \"$0\" || { cat >/dev/null; exit 0; }' \"${OMNI_HOME:-/nonexistent}/omniclaude/plugins/onex/hooks/scripts/claude_hook_capture.sh\""
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[ -n \"$0\" ] && [ -f \"$0\" ] && OMNICLAUDE_MODE=full exec bash \"$0\" || { cat >/dev/null; exit 0; }' \"${OMNI_HOME:-/nonexistent}/omniclaude/plugins/onex/hooks/scripts/claude_hook_capture.sh\""
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[ -n \"$0\" ] && [ -f \"$0\" ] && OMNICLAUDE_MODE=full exec bash \"$0\" || { cat >/dev/null; exit 0; }' \"${OMNI_HOME:-/nonexistent}/omniclaude/plugins/onex/hooks/scripts/claude_hook_capture.sh\""
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[ -n \"$0\" ] && [ -f \"$0\" ] && OMNICLAUDE_MODE=full exec bash \"$0\" || { cat >/dev/null; exit 0; }' \"${OMNI_HOME:-/nonexistent}/omniclaude/plugins/onex/hooks/scripts/claude_hook_capture.sh\""
+          }
+        ]
+      }
+    ],
+    "PostToolBatch": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[ -n \"$0\" ] && [ -f \"$0\" ] && OMNICLAUDE_MODE=full exec bash \"$0\" || { cat >/dev/null; exit 0; }' \"${OMNI_HOME:-/nonexistent}/omniclaude/plugins/onex/hooks/scripts/claude_hook_capture.sh\""
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[ -n \"$0\" ] && [ -f \"$0\" ] && OMNICLAUDE_MODE=full exec bash \"$0\" || { cat >/dev/null; exit 0; }' \"${OMNI_HOME:-/nonexistent}/omniclaude/plugins/onex/hooks/scripts/claude_hook_capture.sh\""
+          }
+        ]
+      }
+    ],
+    "UserPromptExpansion": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[ -n \"$0\" ] && [ -f \"$0\" ] && OMNICLAUDE_MODE=full exec bash \"$0\" || { cat >/dev/null; exit 0; }' \"${OMNI_HOME:-/nonexistent}/omniclaude/plugins/onex/hooks/scripts/claude_hook_capture.sh\""
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[ -n \"$0\" ] && [ -f \"$0\" ] && OMNICLAUDE_MODE=full exec bash \"$0\" || { cat >/dev/null; exit 0; }' \"${OMNI_HOME:-/nonexistent}/omniclaude/plugins/onex/hooks/scripts/claude_hook_capture.sh\""
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[ -n \"$0\" ] && [ -f \"$0\" ] && OMNICLAUDE_MODE=full exec bash \"$0\" || { cat >/dev/null; exit 0; }' \"${OMNI_HOME:-/nonexistent}/omniclaude/plugins/onex/hooks/scripts/claude_hook_capture.sh\""
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[ -n \"$0\" ] && [ -f \"$0\" ] && OMNICLAUDE_MODE=full exec bash \"$0\" || { cat >/dev/null; exit 0; }' \"${OMNI_HOME:-/nonexistent}/omniclaude/plugins/onex/hooks/scripts/claude_hook_capture.sh\""
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[ -n \"$0\" ] && [ -f \"$0\" ] && OMNICLAUDE_MODE=full exec bash \"$0\" || { cat >/dev/null; exit 0; }' \"${OMNI_HOME:-/nonexistent}/omniclaude/plugins/onex/hooks/scripts/claude_hook_capture.sh\""
+          }
+        ]
+      }
+    ],
+    "PreModelSwitch": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[ -n \"$0\" ] && [ -f \"$0\" ] && OMNICLAUDE_MODE=full exec bash \"$0\" || { cat >/dev/null; exit 0; }' \"${OMNI_HOME:-/nonexistent}/omniclaude/plugins/onex/hooks/scripts/claude_hook_capture.sh\""
+          }
+        ]
+      }
+    ],
+    "PostModelSwitch": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[ -n \"$0\" ] && [ -f \"$0\" ] && OMNICLAUDE_MODE=full exec bash \"$0\" || { cat >/dev/null; exit 0; }' \"${OMNI_HOME:-/nonexistent}/omniclaude/plugins/onex/hooks/scripts/claude_hook_capture.sh\""
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[ -n \"$0\" ] && [ -f \"$0\" ] && OMNICLAUDE_MODE=full exec bash \"$0\" || { cat >/dev/null; exit 0; }' \"${OMNI_HOME:-/nonexistent}/omniclaude/plugins/onex/hooks/scripts/claude_hook_capture.sh\""
+          }
+        ]
+      }
+    ],
+    "PermissionDenied": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[ -n \"$0\" ] && [ -f \"$0\" ] && OMNICLAUDE_MODE=full exec bash \"$0\" || { cat >/dev/null; exit 0; }' \"${OMNI_HOME:-/nonexistent}/omniclaude/plugins/onex/hooks/scripts/claude_hook_capture.sh\""
+          }
+        ]
+      }
+    ],
+    "Setup": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[ -n \"$0\" ] && [ -f \"$0\" ] && OMNICLAUDE_MODE=full exec bash \"$0\" || { cat >/dev/null; exit 0; }' \"${OMNI_HOME:-/nonexistent}/omniclaude/plugins/onex/hooks/scripts/claude_hook_capture.sh\""
+          }
+        ]
+      }
+    ],
+    "TeammateIdle": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[ -n \"$0\" ] && [ -f \"$0\" ] && OMNICLAUDE_MODE=full exec bash \"$0\" || { cat >/dev/null; exit 0; }' \"${OMNI_HOME:-/nonexistent}/omniclaude/plugins/onex/hooks/scripts/claude_hook_capture.sh\""
+          }
+        ]
+      }
+    ],
+    "TaskCreated": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[ -n \"$0\" ] && [ -f \"$0\" ] && OMNICLAUDE_MODE=full exec bash \"$0\" || { cat >/dev/null; exit 0; }' \"${OMNI_HOME:-/nonexistent}/omniclaude/plugins/onex/hooks/scripts/claude_hook_capture.sh\""
+          }
+        ]
+      }
+    ],
+    "TaskCompleted": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[ -n \"$0\" ] && [ -f \"$0\" ] && OMNICLAUDE_MODE=full exec bash \"$0\" || { cat >/dev/null; exit 0; }' \"${OMNI_HOME:-/nonexistent}/omniclaude/plugins/onex/hooks/scripts/claude_hook_capture.sh\""
+          }
+        ]
+      }
+    ],
+    "Elicitation": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[ -n \"$0\" ] && [ -f \"$0\" ] && OMNICLAUDE_MODE=full exec bash \"$0\" || { cat >/dev/null; exit 0; }' \"${OMNI_HOME:-/nonexistent}/omniclaude/plugins/onex/hooks/scripts/claude_hook_capture.sh\""
+          }
+        ]
+      }
+    ],
+    "ElicitationResult": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[ -n \"$0\" ] && [ -f \"$0\" ] && OMNICLAUDE_MODE=full exec bash \"$0\" || { cat >/dev/null; exit 0; }' \"${OMNI_HOME:-/nonexistent}/omniclaude/plugins/onex/hooks/scripts/claude_hook_capture.sh\""
+          }
+        ]
+      }
+    ],
+    "ConfigChange": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[ -n \"$0\" ] && [ -f \"$0\" ] && OMNICLAUDE_MODE=full exec bash \"$0\" || { cat >/dev/null; exit 0; }' \"${OMNI_HOME:-/nonexistent}/omniclaude/plugins/onex/hooks/scripts/claude_hook_capture.sh\""
+          }
+        ]
+      }
+    ],
+    "InstructionsLoaded": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[ -n \"$0\" ] && [ -f \"$0\" ] && OMNICLAUDE_MODE=full exec bash \"$0\" || { cat >/dev/null; exit 0; }' \"${OMNI_HOME:-/nonexistent}/omniclaude/plugins/onex/hooks/scripts/claude_hook_capture.sh\""
+          }
+        ]
+      }
+    ],
+    "CwdChanged": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[ -n \"$0\" ] && [ -f \"$0\" ] && OMNICLAUDE_MODE=full exec bash \"$0\" || { cat >/dev/null; exit 0; }' \"${OMNI_HOME:-/nonexistent}/omniclaude/plugins/onex/hooks/scripts/claude_hook_capture.sh\""
+          }
+        ]
+      }
+    ],
+    "FileChanged": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[ -n \"$0\" ] && [ -f \"$0\" ] && OMNICLAUDE_MODE=full exec bash \"$0\" || { cat >/dev/null; exit 0; }' \"${OMNI_HOME:-/nonexistent}/omniclaude/plugins/onex/hooks/scripts/claude_hook_capture.sh\""
+          }
+        ]
+      }
+    ],
+    "DirectoryAdded": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[ -n \"$0\" ] && [ -f \"$0\" ] && OMNICLAUDE_MODE=full exec bash \"$0\" || { cat >/dev/null; exit 0; }' \"${OMNI_HOME:-/nonexistent}/omniclaude/plugins/onex/hooks/scripts/claude_hook_capture.sh\""
+          }
+        ]
+      }
+    ]
+  }
+}

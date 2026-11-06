@@ -701,12 +701,18 @@ def test_a_degraded_quorum_fails_the_gate_closed(tmp_path: Path) -> None:
     This payload -- a single succeeded model carrying one error finding --
     produced ``verdict=blocked`` before OMN-18479, which is how one model's
     rotating finding blocked 24 of 40 runs on this repository. It must now
-    resolve to ``degraded_quorum`` and fail the step closed under that name,
-    without inventing a blocking count from the one opinion it has.
+    resolve to ``degraded_quorum`` under that name, without inventing a
+    blocking count from the one opinion it has. The review step hands the
+    verdict on (OMN-19998) and the enforcement step at the end of the job fails
+    the job on it unless the accept step took a verified agent review receipt;
+    that composition is held by
+    ``test_a_degraded_quorum_is_failed_by_the_enforcement_step_unless_accepted``.
     """
     result, artifact, outputs = _run_review_script(tmp_path, stub=DEGRADED_QUORUM_STUB)
 
-    assert result.returncode == 1, "no verdict is not a passing verdict"
+    assert result.returncode == 0, (
+        "the review step hands a degraded quorum on (OMN-19998)"
+    )
     assert outputs["verdict"] == "degraded_quorum"
     assert outputs["blocking_count"] == "0"
 

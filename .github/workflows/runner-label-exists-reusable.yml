@@ -63,12 +63,11 @@ permissions:
 jobs:
   runner-label-exists:
     name: runner-label-exists
-    # On the fleet, like its sibling gate: this job reads the fleet's own
-    # registration state, and a gate that cannot run when the fleet is degraded
-    # is exactly the gate you need when the fleet is degraded. It is pinned to a
-    # literal rather than routed through a seam so it does not share fate with
-    # the variable it would otherwise read.
-    runs-on: [self-hosted, omnibase-ci]
+    # GitHub-hosted (OMN-19998). The gate reads the fleet's registration through
+    # the organisation API with the token above and touches nothing on the lab
+    # network, so it runs where a degraded fleet cannot stop it and where a public
+    # repository's job never reaches a lab runner.
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout the caller repository

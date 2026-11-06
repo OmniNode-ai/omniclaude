@@ -313,6 +313,8 @@ jobs:
           persist-credentials: false
           sparse-checkout: |
             config/onex/overlays/node_review_voters_overlay_compute
+            config/onex/overlays/agent_review_gate_accept
+            config/onex/overlays/review_agent_receipt_verify
           sparse-checkout-cone-mode: false
 
       - name: Place the CI overlay outside the workspace
@@ -417,6 +419,39 @@ jobs:
             sleep $((attempt * 10))
           done
           exit 1
+
+      # OMN-19998: the gate-accept node lives in omnimarket. It is read at
+      # omnimarket's newest dev-<UTC>-<sha12> tag, resolved at run time and
+      # logged, the way omniintelligence is above, and never from the pull
+      # request's checkout. This step NEVER fails the job: a review that passed
+      # must not turn red because a clone did not resolve, so an unresolved tag
+      # or clone leaves no directory behind, and the accept step below then
+      # leaves the voters' verdict standing. (The same step as omnibase_infra's
+      # hostile-reviewer.yml, OMN-22275.)
+      - name: Clone omnimarket (gate-accept node)
+        working-directory: ${{ github.workspace }}
+        env:
+          OMNIMARKET_URL: ${{ github.server_url }}/${{ github.repository_owner }}/omnimarket.git
+        run: |
+          for attempt in {1..4}; do
+            rm -rf ../omnimarket
+            TAG="$(git ls-remote --tags --refs \
+              "$OMNIMARKET_URL" 'refs/tags/dev-*' \
+              | sed -n 's#^.*refs/tags/##p' \
+              | grep -E '^dev-[0-9]{14}-[0-9a-f]{12}$' | sort | tail -n 1 || true)"
+            if [ -n "$TAG" ] \
+              && git clone --filter=blob:none --no-checkout --branch "$TAG" \
+                "$OMNIMARKET_URL" ../omnimarket \
+              && git -C ../omnimarket checkout --quiet "refs/tags/${TAG}"; then
+              echo "omnimarket newest dev tag: ${TAG} -> $(git -C ../omnimarket rev-parse HEAD)"
+              exit 0
+            fi
+            echo "::warning::omnimarket newest dev tag unresolved or clone failed (attempt ${attempt}/4)"
+            sleep $((attempt * 10))
+          done
+          rm -rf ../omnimarket
+          echo "::warning::could not resolve and clone omnimarket's newest refs/tags/dev-* tag; the gate-accept step will leave the voters' verdict standing"
+          exit 0
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -722,7 +757,13 @@ jobs:
               echo "named_cause=${NAMED_CAUSE}"
             } >> "$GITHUB_OUTPUT"
             echo "::error title=Hostile Reviewer degraded quorum::fewer models succeeded than agreement requires; no verdict was established"
-            exit 1
+            # OMN-19998: the step ends here with the verdict written, and the
+            # enforcement step at the end of the job fails the job on anything
+            # but `passed` unless the accept step below took a verified agent
+            # review receipt in place of the lost voter. Only a lost-voter
+            # degraded quorum reaches the accept step this way; blocked and
+            # infra_error still end the step with exit 1.
+            exit 0
           fi
 
           if [ "$REVIEW_EXIT" -ne 0 ]; then
@@ -931,12 +972,66 @@ jobs:
           PY
           echo "::endgroup::"
 
-          # Set exit code: blocked → 1, degraded_quorum → 1 (no verdict was
-          # established, and the absence of a verdict is not a passing one),
-          # everything else → 0 (pilot: degraded is informational).
+          # Set exit code: blocked → 1; everything else → 0 here. A
+          # degraded_quorum (no verdict was established, and the absence of a
+          # verdict is not a passing one) is failed closed by the enforcement
+          # step at the end of the job, after the accept step has had its one
+          # chance to stand a verified agent review receipt in place of the
+          # lost voter (OMN-19998).
           VERDICT=$(echo "$VERDICT_DATA" | grep '^verdict=' | cut -d= -f2)
-          if [ "$VERDICT" = "blocked" ] || [ "$VERDICT" = "degraded_quorum" ]; then
+          if [ "$VERDICT" = "blocked" ]; then
             exit 1
+          fi
+
+      # OMN-19998: one node call and nothing else, as in omnibase_infra's
+      # hostile-reviewer.yml (OMN-22275) and omnimarket's (OMN-22176). The
+      # gate-accept node reads this attempt's reviewer result and the pull
+      # request's reviews, asks the verifier about each agent review receipt,
+      # and writes `decision` (unchanged, pass_agent or refuse), `reason` and
+      # `receipt_id` to this step's outputs and its summary line to the step
+      # summary. Only `pass_agent` skips the enforcement step at the end of the
+      # job; on any other decision that step runs exactly as before.
+      # `if: always()` so a failed review step cannot hide the decision, and
+      # `RUNNER_IS_TRUSTED` so a fork-origin run never holds the receipt key.
+      #
+      # The node runs from the omnimarket clone above (a dev tag, never the
+      # checkout under review) inside the omniintelligence environment the job
+      # already built, which carries the node's dependencies; a pull request
+      # cannot supply the code that accepts itself. A clone that does not carry
+      # the node yet, an overlay that does not carry `agent_review_gate_accept`
+      # at the pinned OMNI_CI_OVERLAY_REF, or a node that does not run, leaves
+      # the voters' verdict as it stands: nothing here can turn a red green
+      # without a receipt the verifier signs for exactly this head.
+      - name: Accept an agent review receipt in place of lost voters (OMN-19998)
+        id: accept
+        if: always() && env.RUNNER_IS_TRUSTED == 'true'
+        working-directory: ../omniintelligence
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACCEPT_SRC: ${{ github.workspace }}/../omnimarket/src
+          ONEX_SKILL_OVERLAY_ROOTS: ${{ github.workspace }}/../ci-overlay/config/onex/overlays
+          # The receipt key the review step already carries, for the
+          # omniintelligence verifier node the accept node runs in a subprocess
+          # of ../omniintelligence when the agent_review_gate_accept overlay
+          # names verifier_endpoint subprocess:<path>.
+          LOCAL_LLM_SHARED_SECRET: ${{ secrets.LOCAL_LLM_SHARED_SECRET }}
+        run: |
+          if [ ! -d "$ACCEPT_SRC/omnimarket/nodes/node_agent_review_gate_accept_effect" ]; then
+            echo "::notice::the omnimarket clone carries no node_agent_review_gate_accept_effect (or was not cloned); the voters' verdict stands"
+            echo "decision=unchanged" >> "$GITHUB_OUTPUT"
+          else
+            ACCEPT_EXIT=0
+            PYTHONPATH="$ACCEPT_SRC" uv run --no-sync python -m omnimarket.nodes.node_agent_review_gate_accept_effect.runtime_gate_accept \
+              --repository "${{ github.repository }}" \
+              --pull-request "${{ github.event.pull_request.number }}" \
+              --head-sha "${{ github.event.pull_request.head.sha }}" \
+              --voter-result-path "${{ runner.temp }}/hostile-review-result.json" \
+              --step-output-path "$GITHUB_OUTPUT" \
+              --step-summary-path "$GITHUB_STEP_SUMMARY" || ACCEPT_EXIT=$?
+            if [ "$ACCEPT_EXIT" -ne 0 ]; then
+              echo "::warning::gate accept did not run (exit $ACCEPT_EXIT); the voters' verdict stands"
+              echo "decision=unchanged" >> "$GITHUB_OUTPUT"
+            fi
           fi
 
       # OMN-18415 AC3. `if: always()` because the run that most needs its stderr
@@ -1121,6 +1216,26 @@ jobs:
                 body,
               });
             }
+
+      # OMN-19998: the review step no longer ends on a degraded quorum (see
+      # above), so this is the point that fails the job on one, which the
+      # Hostile Review Gate below then reports. A run that established no
+      # verdict is a NAMED failure here, never a green check, unless the accept
+      # step took a verified agent review receipt for this head. Every other
+      # verdict keeps the exit code the review step gave it: `blocked` and
+      # `infra_error` still end that step with exit 1, so this step reads only
+      # the one verdict the review step now hands on.
+      - name: Enforce hostile-review verdict (no verdict is not a pass)
+        if: always() && steps.accept.outputs.decision != 'pass_agent'
+        env:
+          REVIEW_VERDICT: ${{ steps.review.outputs.verdict }}
+          REVIEW_ERROR: ${{ steps.review.outputs.error }}
+        run: |
+          echo "Resolved verdict: ${REVIEW_VERDICT:-unknown}"
+          if [ "${REVIEW_VERDICT:-}" = "degraded_quorum" ]; then
+            echo "::error::Hostile Reviewer established no review verdict (verdict 'degraded_quorum'; reason: ${REVIEW_ERROR:-none reported}). Fewer than two reviewer models succeeded, so no finding could reach quorum. This is an infrastructure failure, not a pass: re-run once the review endpoints are reachable, or post an agent review receipt for this head."
+            exit 1
+          fi
 
   hostile-review-gate:
     name: Hostile Review Gate
