@@ -506,3 +506,16 @@ def test_node_planner_names_a_refusal_of_the_node(
             [],
             False,
         )
+
+
+def test_script_holds_its_code_line_count_and_carries_the_node_call_site(mod) -> None:
+    """The canonical-file-shape ratchet counts non-blank, non-comment lines of a baselined file."""
+    code = [
+        line
+        for line in _SCRIPT.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    assert len(code) <= 502, (
+        f"scripts/relock_git_sources.py grew to {len(code)} code lines"
+    )
+    assert callable(mod.node_planner)
