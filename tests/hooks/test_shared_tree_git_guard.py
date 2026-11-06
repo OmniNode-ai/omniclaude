@@ -65,6 +65,7 @@ from omniclaude.nodes.node_git_effect.handlers.handler_git_admission import (  #
     TICKET,
     Policy,
     PolicyError,
+    _joined_segments,
     _parse_git,
     _peel_grouping,
     _segments,
@@ -2059,3 +2060,98 @@ def test_heredoc_body_naming_a_refused_verb_is_data_not_a_command(
         with_real_command, policy, cwd=registry, registry_root=registry
     )
     assert both.blocked, both.reason
+
+
+# ---------------------------------------------------------------------------
+# A worktree made by the same command (OMN-22478)
+# ---------------------------------------------------------------------------
+# Lanes make a worktree and work in it in ONE Bash call:
+#     git worktree add -b x $WT origin/dev; cd $WT && git merge origin/dev
+# The worktree is not on disk when the hook runs, so the walk up from its path
+# ended at the registry clone above `omni_worktrees` and the merge was refused
+# as a mutation of the shared tree. Measured: 16 of the refusals counted under
+# "unauthorised shared tree git mutation" in one day.
+
+
+def test_joined_segments_report_how_each_command_follows_the_last() -> None:
+    joined = _joined_segments("a && b; c && d\ne || f | g && h")
+    assert [(words[0], joiner) for words, joiner in joined] == [
+        ("a", ""),
+        ("b", "&&"),
+        ("c", ""),
+        ("d", "&&"),
+        ("e", ""),
+        ("f", ""),
+        ("g", ""),
+        ("h", "&&"),
+    ]
+    assert _segments("a && b; c") == [["a"], ["b"], ["c"]]
+
+
+@pytest.fixture
+def new_worktree(registry: Path) -> Path:
+    """Where a lane is about to make a worktree: under the registry, absent."""
+    return registry / "omni_worktrees" / "OMN-22478-new" / "omniclaude"
+
+
+NEW_WORKTREE_ALLOWED = [
+    "git worktree add -q -b lane/x {wt} origin/dev && cd {wt} && git merge origin/dev",
+    "git worktree add -q -B lane/x {wt} origin/dev; cd {wt} && git rebase origin/dev",
+    "git worktree add -q --detach {wt} origin/dev; git -C {wt} merge --no-edit origin/dev",
+    "git -C {code_clone} worktree add -q -b lane/x {wt} origin/dev && git -C {wt} rebase origin/dev",
+    "WT={wt}; git worktree add -q -b lane/x $WT origin/dev; cd $WT && git merge origin/dev",
+    "git worktree add -q -b lane/x {wt} origin/dev; cd {wt}/plugins && git merge origin/dev",
+    "git worktree add -q -b lane/x {wt} origin/dev; cd {wt} && git status -s && git merge origin/dev",
+]
+
+
+@pytest.mark.parametrize("command", NEW_WORKTREE_ALLOWED)
+def test_a_worktree_made_by_the_same_command_is_not_the_registry(
+    command: str, registry: Path, code_clone: Path, new_worktree: Path, policy: Policy
+) -> None:
+    decision = evaluate_bash_command(
+        command.format(wt=new_worktree, code_clone=code_clone),
+        policy,
+        cwd=registry,
+        registry_root=registry,
+    )
+    assert not decision.blocked, (command, decision.reason)
+
+
+NEW_WORKTREE_STILL_REFUSED = [
+    # No `worktree add` makes the path: it is just a missing directory, and the
+    # walk up from it still ends at the registry clone.
+    "cd {wt} && git merge origin/dev",
+    "git -C {registry} merge origin/dev",
+    # The add names another path.
+    "git worktree add -q -b lane/x {other} origin/dev && cd {wt} && git merge origin/dev",
+    # `;` after the `cd`: had the add failed, the merge would run where the
+    # shell started, which is the registry.
+    "git worktree add -q -b lane/x {wt} origin/dev; cd {wt}; git merge origin/dev",
+    "git worktree add -q -b lane/x {wt} origin/dev; cd {wt} && echo hi; git merge origin/dev",
+    "git worktree add -q -b lane/x {wt} origin/dev; cd {wt} || git merge origin/dev",
+    # The chain leaves the new worktree for the registry.
+    "git worktree add -q -b lane/x {wt} origin/dev && cd {wt} && cd {registry} && git rebase origin/dev",
+    "git worktree add -q -b lane/x {wt} origin/dev; cd {registry} && git rebase origin/dev",
+    "git worktree add -q -b lane/x {wt} origin/dev; git -C {registry} reset --hard origin/main",
+    # A worktree made in another call is the only thing that made the path
+    # trustworthy; an unexpanded variable proves nothing.
+    "git worktree add -q -b lane/x $UNSET_WT origin/dev; cd $UNSET_WT && git merge origin/dev",
+]
+
+
+@pytest.mark.parametrize("command", NEW_WORKTREE_STILL_REFUSED)
+def test_the_new_worktree_exemption_does_not_open_the_registry(
+    command: str, registry: Path, new_worktree: Path, policy: Policy
+) -> None:
+    decision = evaluate_bash_command(
+        command.format(
+            wt=new_worktree,
+            registry=registry,
+            other=registry / "omni_worktrees" / "other",
+        ),
+        policy,
+        cwd=registry,
+        registry_root=registry,
+    )
+    assert decision.blocked, command
