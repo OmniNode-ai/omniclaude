@@ -1,0 +1,26 @@
+schema_version: "1.0.0"
+ticket_id: OMN-22478
+title: "Automated code review holds no merge in omniclaude"
+summary: >-
+  Operator RULING 2026-11-05T20:27:56Z takes the automated code review out of what holds a merge. The manifest stops
+  calling Hostile Review Gate required, the queue stops mirroring it, and the reviewer starts no run on a pull request. The workflow, its scripts and their tests stay.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: CI Summary's external layers pass with no reviewer row, and the reviewer starts no run.
+    command: uv run --frozen pytest tests/ci/test_review_gate_removed_omn22478.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn22478-claude-review-holds-no-merge
+    description: A head with no reviewer row passes CI Summary's external layers, and no pull request starts the reviewer.
+    source: manual
+    binds_ac: [AC4]
+    checks:
+      - check_type: test_passes
+        check_value: uv run --frozen pytest tests/ci/test_review_gate_removed_omn22478.py -q --no-cov
+        cwd: ${OMNI_HOME}/omniclaude
