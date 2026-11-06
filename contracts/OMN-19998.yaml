@@ -22,12 +22,6 @@ requirements:
       - id: "AC2"
         statement: |-
           AC2: The per-attempt budget is the job ceiling less setup and the pause, split across the review step's attempts, and the ceiling the step reads equals timeout-minutes -- falsifier: uv run pytest tests/hooks/test_hostile_reviewer_retry_budget_omn19998.py -k "job_ceiling or share_of_the_ceiling" with HOSTILE_REVIEW_JOB_TIMEOUT_SECONDS changed alone
-  - id: req-omn19998-hostile-reviewer-accept-agent-receipt
-    statement: "The Hostile Reviewer job takes a verified agent review receipt in place of a lost voter, through the gate-accept node, and fails a degraded quorum with no such receipt."
-    acceptance:
-      - id: "AC21"
-        statement: |-
-          AC21: the hostile-review job reads the agent_review_gate_accept and review_agent_receipt_verify overlays beside the voters, clones omnimarket, runs the gate-accept node after the review step only on a trusted run, and ends with an enforcement step that fails a degraded_quorum verdict unless the accept decision is pass_agent -- falsifier: uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q --no-cov -k "enforcement_step or accept_and_verifier" fails when the enforcement step is dropped or the accept step is reachable from a fork run
   - id: req-omn19998-hosted-eligible-jobs
     statement: "A private repository's job runs on GitHub-hosted runners only when a checked-in declaration lists it under a ruling the placement gate names for that repository."
     acceptance:
@@ -154,8 +148,6 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/hooks/test_hostile_reviewer_workflow.py -q --no-cov -k \"enforcement_step or accept_and_verifier or degraded_quorum\""
-    binds_ac:
-      - AC21
   - id: dod-omn19998-hosted-eligible-listed
     description: "A listed hosted job passes the placement gate and its unlisted twin fails."
     source: manual
