@@ -103,24 +103,28 @@ def _declared_core(
 ) -> CompletedProcess[str] | None:
     # Probe only declared venvs, without inheriting a source-tree PYTHONPATH. Compare
     # literal paths: a venv's python resolves to the base binary it was built on.
+    # OMN-22478: the first pass skips the interpreter that failed. The passes after
+    # it wait inside the probe and skip nothing: a sync of the hook venv rewrites
+    # its editable install, an interpreter started inside that rewrite never sees
+    # the package, and a NEW interpreter of the same venv does.
     env = {k: v for k, v in request.env.items() if k != "PYTHONPATH"}
     run = partial(subprocess.run, env=env, cwd=request.cwd, capture_output=True)
-    seen = {os.path.abspath(sys.executable)}
-    for label, base, suffix in (
-        ("CLAUDE_PLUGIN_DATA", env.get("CLAUDE_PLUGIN_DATA"), ".venv/bin/python3"),
-        ("repo", _LIB_DIR.parents[3], ".venv/bin/python3"),
-        ("OMNI_HOME", env.get("OMNI_HOME"), "omniclaude/.venv/bin/python3"),
-    ):
-        candidate = str(Path(base) / suffix) if base else ""
-        if not Path(candidate).is_file() or not os.access(candidate, os.X_OK):
-            continue
-        if os.path.abspath(candidate) in seen:
-            continue
-        seen.add(os.path.abspath(candidate))
-        tried.append(label)
-        if run([candidate, "-c", f"import {script}"]).returncode == 0:
-            argv = [candidate, "-m", script, *request.argv[3:]]
-            return run(argv, input=request.stdin or "", text=True)
+    for delay in (0.0, 0.5, 1.0, 1.5):
+        skip = None if delay else os.path.abspath(sys.executable)
+        for label, base, suffix in (
+            ("CLAUDE_PLUGIN_DATA", env.get("CLAUDE_PLUGIN_DATA"), ".venv/bin/python3"),
+            ("repo", _LIB_DIR.parents[3], ".venv/bin/python3"),
+            ("OMNI_HOME", env.get("OMNI_HOME"), "omniclaude/.venv/bin/python3"),
+        ):
+            candidate = str(Path(base) / suffix) if base else ""
+            usable = Path(candidate).is_file() and os.access(candidate, os.X_OK)
+            if not usable or os.path.abspath(candidate) == skip:
+                continue
+            tried.append(label)
+            probe = f"import time; time.sleep({delay}); import {script}"
+            if run([candidate, "-c", probe]).returncode == 0:
+                argv = [candidate, "-m", script, *request.argv[3:]]
+                return run(argv, input=request.stdin or "", text=True)
     return None
 
 
@@ -167,7 +171,7 @@ def run_core(request: Request) -> tuple[int, str]:
                         f"guard core cannot be imported: {detail} "
                         f"(interpreter {sys.executable}; "
                         "PLUGIN_PYTHON_BIN,CLAUDE_PLUGIN_DATA/.venv,OMNI_HOME venv "
-                        f"must import it; declared interpreters tried: {', '.join(tried) or 'none'})"
+                        f"must import it; declared interpreters tried: {', '.join(dict.fromkeys(tried)) or 'none'})"
                         if missing
                         else f"guard core crashed: {detail} (core {script})",
                         file=err,

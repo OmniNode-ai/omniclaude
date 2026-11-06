@@ -7,6 +7,7 @@
   "tests/hooks/test_all_class_capture_registration.py": 0.45,
   "tests/hooks/test_attribution_binder.py": 0.21,
   "tests/hooks/test_bash_guard.py": 1.07,
+  "tests/hooks/test_bash_guard_cores_venv_rewrite_omn22478.py": 1.0,
   "tests/hooks/test_bash_guard_worktree.py": 0.09,
   "tests/hooks/test_blocked_notifier.py": 0.12,
   "tests/hooks/test_branch_protection_verifier.py": 0.12,
