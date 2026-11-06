@@ -142,7 +142,7 @@ def test_the_deploy_readback_reads_dirty_count_without_the_index_lock(
 
     state = readback.read_git_state(repo, fetch=False)
 
-    assert state.dirty == 1
+    assert state.dirty_files == 1
     recorder.assert_status_reads_take_no_lock()
 
 
@@ -154,6 +154,7 @@ def test_the_statusline_reads_dirty_without_the_index_lock(
     payload = f'{{"workspace": {{"project_dir": "{repo}"}}}}'
     env = scrub_git_location_env(os.environ)
     env["HOME"] = str(tmp_path)
+    env["OMNICLAUDE_MODE"] = "full"  # lite mode exits before any git call
 
     proc = subprocess.run(
         ["bash", str(_STATUSLINE)],
