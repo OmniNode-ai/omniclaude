@@ -394,12 +394,11 @@ gates:
     rationale: "Live required status check on omniclaude dev branch protection. result_triage ENFORCED (OMN-15314, waiver lifted): the aggregator triages every upstream with an explicit four-way `case` plus a default-deny `*` branch, and the legitimately-conditional upstreams are covered by a per-upstream skip policy that re-evaluates each one's declared precondition (zone-filter docs_only / fork-PR) instead of a blanket `!= skipped` escape."
 
   - name: "Hostile Review Gate"
-    mode: REQUIRED
+    mode: RETIRED
     producer_kind: local
     workflow: hostile-reviewer.yml
     job_path: ["hostile-review-gate"]
-    skip_semantics: never
-    rationale: "Live required status check on omniclaude dev branch protection."
+    rationale: "OMN-22478, operator RULING 2026-11-05T20:27:56Z: the automated review holds no merge. The workflow stays and starts no run on a pull request; to restore, set mode back to REQUIRED and put the context back in branch protection."
 
   - name: "Canonical Inference Gate"
     mode: REQUIRED
