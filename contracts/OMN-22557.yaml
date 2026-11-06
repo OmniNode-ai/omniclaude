@@ -42,3 +42,9 @@ dod_evidence:
       - check_type: test_passes
         check_value: "uv run pytest tests/hooks/test_shared_tree_git_guard.py -k new_worktree_exemption_does_not_open_the_registry -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn22557-deploy-probe
+    description: "the guard source at the content commit of this change, read from GitHub (a surface this change does not author), carries the segment joiner the fix introduces"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "gh api repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_git_effect/handlers/handler_git_admission.py?ref=96d2780a6e331c1974a185b4d9bdb68c1b3e8435 --jq .content | base64 -d | grep -c _joined_segments"
