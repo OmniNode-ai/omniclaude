@@ -958,8 +958,7 @@ class TestExternalContextCompleteness:
     required_status_checks --jq '.contexts[]'`) and ci.yml's own job names
     at the same commit. Every required context that does NOT correspond to a
     ci.yml job name must be classified into EXPECTED_EXTERNAL_CONTEXTS,
-    ALL_MUST_SUCCEED_EXTERNAL_NAMES, or the documented single exemption
-    (Hostile Review Gate, fixed at the source instead of duplicated here).
+    ALL_MUST_SUCCEED_EXTERNAL_NAMES.
     This is a SNAPSHOT pin, not a live check -- it goes red when the snapshot
     and the classification tuples drift apart, not when branch protection
     changes without a snapshot refresh; re-capture the fixture file (and
@@ -971,8 +970,8 @@ class TestExternalContextCompleteness:
     privileged manifest reconcile detects live protection drift."""
 
     # OMN-19055: the three previously exempt contexts are classified by L4.
-    # Hostile Review Gate keeps its existing source-level rationale.
-    _EXEMPT_EXTERNAL_CONTEXTS = frozenset({"Hostile Review Gate"})
+    # OMN-22478: Hostile Review Gate is no longer required, so no context is exempt.
+    _EXEMPT_EXTERNAL_CONTEXTS: frozenset[str] = frozenset()
 
     # OMN-19055: these names must assert presence as well as success.
     _REQUIRED_LAYER_FOUR = (
