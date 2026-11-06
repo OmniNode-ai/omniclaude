@@ -247,11 +247,13 @@ dod_evidence:
     binds_ac:
       - "AC20"
   - id: dod-omn19998-public-reusables-leave-lab
-    description: "A public caller of a fleet-naming reusable workflow takes the hosted fallback whatever the seam variables hold. Binds no criterion: the live ticket carries AC1 to AC3 only."
+    description: "A public caller of a fleet-naming reusable workflow takes the hosted fallback whatever the seam variables hold. Binds AC3, the placement criterion, the one of the live ticket's AC1 to AC3 that this runner-placement change belongs to."
     source: manual
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/ci/test_public_runner_placement_omn19998.py -q --no-cov -k reusable_lab_route"
+    binds_ac:
+      - AC3
   - id: dod-omn19998-contract-only-retirement
     description: Retires the claims of the contract-only criteria OMN-19998 never carried on the live ticket (15 labels). Each retired item's checks run here as a regression guard, and this item binds no criterion.
     source: manual
