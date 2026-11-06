@@ -1,0 +1,44 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-22558
+title: "The refresh command the lane git-fetch refusal names finds no clone when the clone's onex.repo spells the name with underscores"
+summary: >
+  The refusal tells a lane to run the clone sync's refresh with the repository spelled as its remote names it. For one clone onex.repo uses underscores and the remote uses hyphens, so the engine answered NO_CLONE. Names now compare with hyphen and underscore read as one character, against both onex.repo and the origin URL, in the refresh and in the merge-triggered sync.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn22558-fix
+    statement: The refresh command the lane git-fetch refusal names finds no clone when the clone's onex.repo spells the name with underscores.
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: refresh and the merge-triggered sync find a clone whether the repo is named with a hyphen or an underscore, by onex.repo or by the origin URL -- falsifier: uv run pytest tests/hooks/test_canonical_clone_sync_repo_names_omn22478.py -q --no-cov"
+      - id: "AC2"
+        statement: "AC2: the merge-triggered sync reaches a clone named with a hyphen when onex.repo spells it with underscores -- falsifier: uv run pytest tests/hooks/test_canonical_clone_sync_repo_names_omn22478.py -k merge_triggered -q --no-cov"
+evidence_requirements:
+  - kind: tests
+    description: "The focused tests pass on the lab from the branch"
+    command: "uv run pytest tests/hooks/test_canonical_clone_sync_repo_names_omn22478.py tests/hooks/test_canonical_clone_sync.py tests/hooks/test_canonical_clone_sync_refresh.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn22558-ac1
+    description: "refresh and the merge-triggered sync find a clone whether the repo is named with a hyphen or an underscore, by onex.repo or by the origin URL"
+    source: manual
+    binds_ac:
+      - "AC1"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_canonical_clone_sync_repo_names_omn22478.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn22558-ac2
+    description: "the merge-triggered sync reaches a clone named with a hyphen when onex.repo spells it with underscores"
+    source: manual
+    binds_ac:
+      - "AC2"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_canonical_clone_sync_repo_names_omn22478.py -k merge_triggered -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"

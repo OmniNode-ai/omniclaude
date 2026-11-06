@@ -13,6 +13,7 @@
   "tests/hooks/test_branch_protection_verifier.py": 0.12,
   "tests/hooks/test_canonical_clone_sync.py": 13.72,
   "tests/hooks/test_canonical_clone_sync_refresh.py": 8.04,
+  "tests/hooks/test_canonical_clone_sync_repo_names_omn22478.py": 1.0,
   "tests/hooks/test_capture_redaction_omn17959.py": 0.57,
   "tests/hooks/test_capture_redaction_sync_omn18357.py": 3.93,
   "tests/hooks/test_check_defect_anchor.py": 0.1,
