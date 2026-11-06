@@ -33,3 +33,12 @@ dod_evidence:
       - check_type: test_passes
         check_value: "uv run pytest tests/hooks/test_status_no_optional_locks.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn22779-ac2
+    description: "the failing control branch carries the same test file as this change and none of the three fixes, and its run on the lab failed on each call site (receipt in the PR body)"
+    source: manual
+    binds_ac:
+      - "AC2"
+    checks:
+      - check_type: command
+        check_value: "git show origin/OMN-22779-status-no-optional-locks-control:tests/hooks/test_status_no_optional_locks.py | cmp - tests/hooks/test_status_no_optional_locks.py && ! git show origin/OMN-22779-status-no-optional-locks-control:plugins/onex/hooks/scripts/statusline.sh | grep -q -e --no-optional-locks"
+        cwd: "${OMNI_HOME}/omniclaude"
