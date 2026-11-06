@@ -40,8 +40,6 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/hooks/test_worktree_add_guard_bare_interpreter.py -q --no-cov"
-    binds_ac:
-      - "AC2"
   - id: dod-omn19998-worktree-guard-source-readback
     description: "Hosted source publication readback at the checked-out commit: the worktree guard must publish both source-root candidates before its shared tokenizer import. Missing or pre-fix source fails; this does not claim a running hook installation."
     source: manual
@@ -51,5 +49,11 @@ dod_evidence:
           curl --fail --silent --show-error --location
           "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/$(git rev-parse HEAD)/plugins/onex/hooks/lib/worktree_add_guard.py"
           | python3 -c 'import sys; source = sys.stdin.read(); assert "_ROOTS = (_HOOKS_LIB.parents[3]" in source; assert "Path(os.environ.get(" in source; assert "OMNI_HOME" in source; assert source.index("sys.path += [str(r /") < source.index("from omniclaude.nodes.node_git_effect")'
+  - id: dod-omn22615-moved-items-live-in-own-contract
+    description: "The two worktree-guard items live in this contract and no longer in contracts/OMN-19998.yaml; a merge base that still holds them in the shared contract fails."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_contract_omn19998_claims_omn22615.py -q --no-cov -k moved_worktree_guard_items"
     binds_ac:
       - "AC2"

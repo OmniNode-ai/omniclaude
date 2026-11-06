@@ -58,3 +58,20 @@ def test_a_contract_with_an_ac16_claim_is_read_as_holding_one() -> None:
         ]
     }
     assert unretired_foreign_claims(contract) == [("item-b", "AC16")]
+
+
+OWN_CONTRACT = Path(__file__).resolve().parents[2] / "contracts" / "OMN-22615.yaml"
+MOVED_IDS = {
+    "dod-omn19998-worktree-guard-bare-interpreter",
+    "dod-omn19998-worktree-guard-source-readback",
+}
+
+
+def _ids(path: Path) -> set[str]:
+    contract = yaml.safe_load(path.read_text(encoding="utf-8"))
+    return {str(item["id"]) for item in contract.get("dod_evidence") or []}
+
+
+def test_the_moved_worktree_guard_items_live_only_in_the_own_contract() -> None:
+    assert _ids(OWN_CONTRACT) >= MOVED_IDS
+    assert not MOVED_IDS & _ids(CONTRACT)
