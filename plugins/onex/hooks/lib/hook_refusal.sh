@@ -69,25 +69,35 @@ _ONEX_HOOK_REFUSAL_LIB="${BASH_SOURCE[0]%/*}"
 
 # The handler module of node_hook_refusal_record_effect, the one entry the guards call.
 _ONEX_HOOK_REFUSAL_MODULE="omniclaude.nodes.node_hook_refusal_record_effect.handlers.handler_hook_refusal_record"
+# The standard-library file that writes the row when no interpreter imports it
+# (OMN-23017), run by path from the source tree beside the plugin.
+_ONEX_HOOK_REFUSAL_FALLBACK="../../../../src/omniclaude/nodes/node_hook_refusal_record_effect/runtime_hook_refusal_fallback.py"
 
-# The interpreter that runs the recorder: the plugin's own, never a bare system
-# python3 that lacks omniclaude when a venv that has it exists (OMN-20883).
-# Same order as common.sh's find_python(), minus the lite-mode system python.
-_hook_refusal_python() {
-    local candidate root
+# The interpreters the recorder may run under, in preference order, one per
+# line, each once: the plugin's own, then the registry's, then a bare system
+# python3 (OMN-20883). Same order as common.sh's find_python(), plus the
+# OMNI_HOME clone's venv, because a lab host sets OMNI_HOME and not
+# ONEX_REGISTRY_ROOT. More than one, because the first is not always the one
+# that can import the recorder (OMN-23017): the plugin data venv PYTHON_CMD
+# names is built once and survives plugin updates, so on a lab host it held an
+# omnimarket older than the row module, and every refusal of a landing worker
+# was written by the fallback while the registry clone's venv, further down,
+# imports it. The recorder runs under each in turn until one imports it.
+_hook_refusal_pythons() {
+    local candidate root seen=$'\n'
     root="${_ONEX_HOOK_REFUSAL_LIB}/../../../.."
     for candidate in \
         "${PYTHON_CMD:-}" \
         "${PLUGIN_PYTHON_BIN:-}" \
         "${CLAUDE_PLUGIN_DATA:+${CLAUDE_PLUGIN_DATA}/.venv/bin/python3}" \
         "${root}/.venv/bin/python3" \
-        "${ONEX_REGISTRY_ROOT:+${ONEX_REGISTRY_ROOT}/omniclaude/.venv/bin/python3}"; do
-        if [[ -n "$candidate" && -x "$candidate" ]]; then
-            printf '%s\n' "$candidate"
-            return 0
-        fi
+        "${ONEX_REGISTRY_ROOT:+${ONEX_REGISTRY_ROOT}/omniclaude/.venv/bin/python3}" \
+        "${OMNI_HOME:+${OMNI_HOME}/omniclaude/.venv/bin/python3}" \
+        "$(command -v python3 2>/dev/null || true)"; do
+        [[ -n "$candidate" && -x "$candidate" && "$seen" != *$'\n'"$candidate"$'\n'* ]] || continue
+        seen+="${candidate}"$'\n'
+        printf '%s\n' "$candidate"
     done
-    command -v python3 2>/dev/null
 }
 
 # True when the recorder's stderr says its interpreter could not import it.
@@ -95,38 +105,6 @@ _hook_refusal_is_import_failure() {
     [[ "$1" == *"No module named"* \
         || "$1" == *"Error while finding module specification"* \
         || "$1" == *"is not importable by this interpreter"* ]]
-}
-
-# A FRICTION row written with the shell alone, for the one case the recorder
-# cannot run (OMN-20883). No redactor is available here, so the refusal's own
-# text is withheld; the guard, the lane variable and the cause are enough to
-# find the refusal in hooks.log. The recorder's hourly rate limit is not
-# available here, so this path writes one row per refusal: a broken recorder is
-# the loud case, and a loud row is the point.
-_hook_refusal_fallback_row() {
-    local guard="$1" lane="" lane_source="unresolved" root project ledger row ts
-    root="${OMNI_HOME:-${ONEX_REGISTRY_ROOT:-}}"
-    [[ "$root" == /* ]] || return 0
-    # The writer is deployment configuration, not a repository-name default.
-    project="${OMNIBASE_INTERNAL_HOME:-}"
-    if [[ "$project" != /* ]]; then
-        printf '%s\n' 'hook refusal fallback: set OMNIBASE_INTERNAL_HOME to the absolute ledger writer project' >&2
-        return 0
-    fi
-    ledger="${ONEX_LEDGER_PATH:-${root}/docs/tracking/ROLLING_WORK_LEDGER.md}"
-    [[ -f "$project/pyproject.toml" && -f "$ledger" ]] || return 0
-    lane="${ONEX_LANE:-${ONEX_LANE_ID:-${ONEX_AGENT_NAME:-${CLAUDE_AGENT_NAME:-}}}}"
-    lane="$(printf '%s\n' "$lane" | sed -e 's/ROUTE:.*//' | sed -n '/[^[:space:]]/{p;q;}' \
-        | tr -c 'A-Za-z0-9._:@/\n-' '-' | cut -c1-120)"
-    if [[ -n "$lane" ]]; then lane_source="fallback-env"; else lane="unresolved"; fi
-    guard="$(printf '%s' "$guard" | tr -c 'A-Za-z0-9._:@/-' '-' | cut -c1-120)"
-    ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    row="${ts} | FRICTION | lane=${lane} | actor=hook | model=none | class=refusal | guard=${guard}"
-    row+=" | reason=recorder-import-failure | lane_source=${lane_source} | dedupe=fallback-${guard}"
-    row+=" | refusal_count=1 | suppressed_since_last_row=0"
-    row+=' | detail="recorder interpreter cannot import its row module; refusal text withheld, see hooks.log"'
-    row+=" | existing=OMN-20883 | cost=~1 lane-minute | This row exists because the hook refusal recorder could not run (OMN-20883)"
-    uv run --quiet --project "$project" onex-ledger "$ledger" --append "$row" --timeout 120s || true
 }
 
 hook_record_refusal() {
@@ -137,34 +115,50 @@ hook_record_refusal() {
 
     local lib_dir="${HOOKS_LIB:-$_ONEX_HOOK_REFUSAL_LIB}"
 
-    local py
-    py="$(_hook_refusal_python)" || return 0
+    local -a pys=()
+    local line
+    while IFS= read -r line; do pys+=("$line"); done < <(_hook_refusal_pythons)
+    [[ ${#pys[@]} -gt 0 ]] || return 0
 
     # The fallback cwd when the payload carries none: the directory the HOOK
     # fired in, not this backgrounded process's -- the OMN-18609 correction.
     local cwd="${CLAUDE_PROJECT_DIR:-$PWD}"
 
     (
-        local err rc=0
-        err="$(
-            "$py" -P -m "$_ONEX_HOOK_REFUSAL_MODULE" \
-                --hooks-lib "$lib_dir" \
-                --guard "$guard" \
-                --reason "$reason" \
-                --detail "$detail" \
-                --cwd "$cwd" \
-                --transcript-path "${TRANSCRIPT_PATH:-}" \
-                --session-id "${SESSION_ID:-}" \
-                --agent-id "${AGENT_ID:-}" \
-                --payload-stdin \
-                < <(printf '%s\n' "$payload") 2>&1
-        )" || rc=$?
-        [[ -z "$err" ]] || printf '%s\n' "$err"
-        # An interpreter that cannot import the row module records nothing
-        # itself (OMN-20883): leave the refusal a row of its own.
-        if [[ $rc -ne 0 ]] && _hook_refusal_is_import_failure "$err"; then
-            _hook_refusal_fallback_row "$guard"
-        fi
+        local err rc py failed=() last=""
+        for py in "${pys[@]}"; do
+            rc=0
+            err="$(
+                "$py" -P -m "$_ONEX_HOOK_REFUSAL_MODULE" \
+                    --hooks-lib "$lib_dir" \
+                    --guard "$guard" \
+                    --reason "$reason" \
+                    --detail "$detail" \
+                    --cwd "$cwd" \
+                    --transcript-path "${TRANSCRIPT_PATH:-}" \
+                    --session-id "${SESSION_ID:-}" \
+                    --agent-id "${AGENT_ID:-}" \
+                    --payload-stdin \
+                    < <(printf '%s\n' "$payload") 2>&1
+            )" || rc=$?
+            [[ -z "$err" ]] || printf '%s\n' "$err"
+            # An interpreter that cannot import the row module records nothing
+            # itself: try the next one (OMN-23017).
+            if [[ $rc -ne 0 ]] && _hook_refusal_is_import_failure "$err"; then
+                failed+=("$py")
+                last="$(printf '%s\n' "$err" | sed -n '/[^[:space:]]/{p;q;}')"
+                continue
+            fi
+            exit 0
+        done
+        # No interpreter could import it (OMN-20883): the refusal still gets a
+        # row, written by a standard-library file any interpreter can run.
+        for py in "${pys[@]}"; do
+            "$py" -P "${_ONEX_HOOK_REFUSAL_LIB}/${_ONEX_HOOK_REFUSAL_FALLBACK}" \
+                --hooks-lib "$lib_dir" --guard "$guard" --reason "$reason" \
+                --detail "$detail" --import-error "$last" \
+                --interpreters "${failed[@]}" && exit 0
+        done
     ) >>"${LOG_FILE:-/dev/null}" 2>&1 </dev/null &
     disown 2>/dev/null || true
     return 0
