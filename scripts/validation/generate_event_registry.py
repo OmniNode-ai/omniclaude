@@ -74,9 +74,7 @@ DAEMON_INTERNAL_EVENT_TYPES: frozenset[str] = frozenset(
 # TopicBase without failing the topic-naming lint, so these are dropped from
 # the generated projection rather than silently ignored.
 NON_CANONICAL_DAEMON_TOPICS: frozenset[str] = frozenset(
-    {
-        "onex.evt.diagnostic.daemon-health.v1",
-    }
+    {"onex.evt.diagnostic.daemon-health.v1"}
 )
 
 # Daemon YAML transform names -> the Python callable name used by
@@ -184,6 +182,7 @@ def load_committed_registry_as_data() -> dict[str, dict[str, Any]]:
     """Import the committed EVENT_REGISTRY and reduce it to the same plain-data
     shape ``build_projected_registry`` produces, for structural comparison."""
     sys.path.insert(0, str(REPO_ROOT / "src"))
+    import omniclaude.nodes.node_contract_event_registration_effect.handlers.handler_contract_event_registrations as declared
     from omniclaude.hooks.capture_redaction import redact_capture  # noqa: PLC0415
     from omniclaude.hooks.event_registry import (  # noqa: PLC0415
         EVENT_REGISTRY,
@@ -203,7 +202,9 @@ def load_committed_registry_as_data() -> dict[str, dict[str, Any]]:
         return f"UNKNOWN:{transform!r}"
 
     data: dict[str, dict[str, Any]] = {}
-    for event_type, reg in EVENT_REGISTRY.items():
+    # Hook-emitted entries plus the wire contracts' declared ones (OMN-21416).
+    registrations = {**EVENT_REGISTRY, **declared.contract_event_registrations()}
+    for event_type, reg in registrations.items():
         fan_out = [
             {
                 "topic": str(rule.topic_base.value),

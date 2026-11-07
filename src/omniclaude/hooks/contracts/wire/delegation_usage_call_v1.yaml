@@ -1,0 +1,70 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+# Ticket: OMN-21416
+#
+# Wire schema contract for one usage call of an in-process delegation.
+# Published by omnimarket, never by a Claude Code hook, so it is declared here
+# rather than in the hook-emitted EVENT_REGISTRY literal; the hook registry
+# lookup reads the event_registration block below (ruling 2026-10-28 on
+# OMN-21416), and omnibase_core's event-registry drift gate compares it with
+# omnimarket's emit registry.
+topic: "onex.evt.omnimarket.delegation-usage-call.v1"  # onex-topic-sot
+schema_version: "1.0.0"
+ticket: "OMN-21416"
+description: >
+  One usage call of an in-process delegation, on the model that served it, for
+  the usage-by-model-day projection of a bus-fed lane. Carries model, tenant,
+  tier, tokens and cost, never prompt text.
+
+producer:
+  repo: omnimarket
+  file: src/omnimarket/nodes/node_delegate_skill_orchestrator/ports/port_local_delegation_dispatch.py
+  event_type: delegation.usage_call
+consumers:
+- repo: omnimarket
+  contract: src/omnimarket/nodes/node_projection_usage_by_model_day/contract.yaml
+  file: src/omnimarket/nodes/node_projection_usage_by_model_day/handlers/handler_projection_usage_by_model_day.py
+  class: HandlerProjectionUsageByModelDay
+  model: ModelUsageCallEvent
+  model_file: src/omnimarket/models/model_usage_call_event.py
+
+required_fields:
+  - name: "call_id"
+    type: "string"
+    description: "Identifier of the usage call."
+  - name: "model_name"
+    type: "string"
+    description: "Model that served the call."
+  - name: "tenant_id"
+    type: "string"
+    description: "Tenant of the run (partition key)."
+  - name: "timestamp"
+    type: "datetime"
+    description: "When the call was recorded (UTC)."
+
+optional_fields:
+  - name: "prompt_tokens"
+    type: "integer"
+    description: "Prompt tokens, nonzero only on the deciding attempt."
+  - name: "completion_tokens"
+    type: "integer"
+    description: "Completion tokens, nonzero only on the deciding attempt."
+  - name: "estimated_cost_usd"
+    type: "number"
+    description: "Estimated cost of the call in USD."
+  - name: "usage_source"
+    type: "string"
+    description: "Where the token counts came from."
+  - name: "cost_tier_name"
+    type: "string"
+    description: "The run's cost tier."
+  - name: "session_id"
+    type: "string"
+    nullable: true
+    description: "Session of the run, when known."
+
+event_registration:
+  partition_key_field: tenant_id
+  fan_out:
+    - topic: "onex.evt.omnimarket.delegation-usage-call.v1"  # onex-topic-sot
+  required_fields: [call_id, model_name, tenant_id, timestamp]

@@ -70,7 +70,7 @@ Single-owner registry (OMN-15967 / OMN-13146):
     1. ``daemon.health.probe``, ``delegation.request``, ``pr.state.observed``,
        the ``work.ledger.*`` row events (OMN-19513), and the OMN-20154
        ``provider.quota.observed`` / ``delegate_skill.*`` terminals, and
-       ``delegation.disposition_recorded`` and ``delegation.run_step``, are
+       ``delegation.disposition_recorded``, are
        daemon-internal event types — the daemon handles/emits them entirely internally, no
        hook client ever constructs them, so there is no client-side
        registration to project. See
@@ -99,10 +99,7 @@ from dataclasses import dataclass, field
 from typing import Protocol, cast
 
 from omniclaude.hooks.capture_redaction import redact_capture
-from omniclaude.hooks.schemas import (
-    PROMPT_PREVIEW_MAX_LENGTH,
-    _sanitize_prompt_preview,
-)
+from omniclaude.hooks.schemas import PROMPT_PREVIEW_MAX_LENGTH, _sanitize_prompt_preview
 from omniclaude.hooks.topics import TopicBase
 
 # Type alias for payload transform functions
@@ -1709,7 +1706,11 @@ def get_registration(event_type: str) -> EventRegistration | None:
         >>> len(reg.fan_out)
         2
     """
-    return EVENT_REGISTRY.get(event_type)
+    if event_type in EVENT_REGISTRY:
+        return EVENT_REGISTRY[event_type]
+    import omniclaude.nodes.node_contract_event_registration_effect.handlers.handler_contract_event_registrations as declared
+
+    return declared.contract_event_registration(event_type)
 
 
 def list_event_types() -> list[str]:
@@ -1749,7 +1750,7 @@ def validate_payload(event_type: str, payload: dict[str, object]) -> list[str]:
         >>> len(missing)
         0
     """
-    registration = EVENT_REGISTRY.get(event_type)
+    registration = get_registration(event_type)
     if registration is None:
         raise KeyError(f"Unknown event type: {event_type}")
 
@@ -1775,7 +1776,7 @@ def get_partition_key(event_type: str, payload: dict[str, object]) -> str | None
         >>> key
         'abc123'
     """
-    registration = EVENT_REGISTRY.get(event_type)
+    registration = get_registration(event_type)
     if registration is None:
         raise KeyError(f"Unknown event type: {event_type}")
 

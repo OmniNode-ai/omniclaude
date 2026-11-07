@@ -9,14 +9,12 @@
 # omnimarket-owned work-ledger and PR-watcher events are written by lanes and
 # watchers through the daemon, never by a Claude Code hook client. The
 # delegate-skill terminals and the provider-quota observation (OMN-20154) are
-# emitted by the daemon, and delegation.run_step is published by the
-# delegate-skill run-step recorder; no hook client emits any of them.
+# emitted by the daemon; no hook client emits any of them.
 - daemon.health.probe
 - delegate_skill.completed
 - delegate_skill.failed
 - delegation.disposition_recorded
 - delegation.request
-- delegation.run_step
 - pr.state.observed
 - provider.quota.observed
 - work.ledger.ack

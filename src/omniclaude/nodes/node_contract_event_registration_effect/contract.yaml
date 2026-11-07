@@ -1,0 +1,45 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# ONEX Node Contract
+# Node: node_contract_event_registration_effect (OMN-21416)
+#
+# Reads the wire contracts under hooks/contracts/wire/ that declare an
+# event_registration block, for events another repository publishes through
+# the emit daemon rather than a Claude Code hook. The hook registry lookup
+# (hooks/event_registry.py get_registration) and the event-registry generator
+# check (scripts/validation/generate_event_registry.py) read them here. Every
+# contract is parsed by omnibase_core's event-registry drift parser under the
+# core validator's own parameters, so this node and the core drift gate cannot
+# disagree on what a contract declares.
+
+name: node_contract_event_registration_effect
+version: "1.0.0"
+contract_name: node_contract_event_registration_effect
+node_name: node_contract_event_registration_effect
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_type: EFFECT_GENERIC
+tags: [validator_support_node]
+runtime_profiles: [main]
+
+description: >
+  Reads the packaged wire contracts that declare an event_registration block,
+  parses each with omnibase_core's event-registry drift parser under the core
+  validator's own parameters, and returns them as hook EventRegistration values
+  for the hook registry lookup and the event-registry generator check. Fails
+  closed: a missing directory, an unreadable, oversized or malformed contract,
+  or two contracts declaring one event type raise, never a partial result.
+
+handler:
+  module: omniclaude.nodes.node_contract_event_registration_effect.handlers.handler_contract_event_registrations
+  class: HandlerContractEventRegistrations

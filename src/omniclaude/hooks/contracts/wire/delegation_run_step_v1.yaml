@@ -1,0 +1,77 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+# Ticket: OMN-21416
+#
+# Wire schema contract for one step of an in-process delegation run.
+# Published by omnimarket, never by a Claude Code hook, so it is declared here
+# rather than in the hook-emitted EVENT_REGISTRY literal; the hook registry
+# lookup reads the event_registration block below (ruling 2026-10-28 on
+# OMN-21416), and omnibase_core's event-registry drift gate compares it with
+# omnimarket's emit registry.
+topic: "onex.evt.omnimarket.delegation-run-step.v1"  # onex-topic-sot
+schema_version: "1.0.0"
+ticket: "OMN-21416"
+description: >
+  One numbered step of an in-process delegation run (request, routing decision,
+  provider call, quality gate, terminal), for the run-trace projection. No
+  prompt text.
+
+producer:
+  repo: omnimarket
+  file: src/omnimarket/nodes/node_delegate_skill_orchestrator/run_step_recorder.py
+  event_type: delegation.run_step
+consumers:
+- repo: omnimarket
+  contract: src/omnimarket/nodes/node_projection_run_trace/contract.yaml
+  file: src/omnimarket/nodes/node_projection_run_trace/handlers/handler_projection_run_trace.py
+  class: HandlerProjectionRunTrace
+  model: ModelDelegationRunStep
+  model_file: src/omnimarket/models/model_delegation_run_step.py
+
+required_fields:
+  - name: "tenant_id"
+    type: "string"
+    description: "Tenant of the run."
+  - name: "correlation_id"
+    type: "uuid"
+    description: "Correlation id of the run (partition key)."
+  - name: "step_sequence"
+    type: "integer"
+    description: "Step number within the run, from 1."
+  - name: "step_kind"
+    type: "string"
+    description: "Kind of step."
+  - name: "started_at"
+    type: "datetime"
+    description: "When the step started (UTC)."
+  - name: "outcome"
+    type: "string"
+    description: "Outcome of the step."
+
+optional_fields:
+  - name: "duration_ms"
+    type: "integer"
+    nullable: true
+    description: "Duration of the step."
+  - name: "failure_cause"
+    type: "string"
+    nullable: true
+    description: "Typed cause of a failed step."
+  - name: "backend_id"
+    type: "string"
+    nullable: true
+    description: "Backend that served a provider call."
+  - name: "model_id"
+    type: "string"
+    nullable: true
+    description: "Model that served a provider call."
+  - name: "attempt_number"
+    type: "integer"
+    nullable: true
+    description: "Attempt number of a provider call."
+
+event_registration:
+  partition_key_field: correlation_id
+  fan_out:
+    - topic: "onex.evt.omnimarket.delegation-run-step.v1"  # onex-topic-sot
+  required_fields: [tenant_id, correlation_id, step_sequence, step_kind, started_at, outcome]
