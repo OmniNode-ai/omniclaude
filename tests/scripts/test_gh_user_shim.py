@@ -832,6 +832,31 @@ def test_installer_refuses_to_overwrite_a_foreign_gh(
 # --- AC4: one status-line refresh per stale cache, however many sessions -----
 
 
+def _refresh_diagnosis(rows: list[tuple[str, str, str]]) -> str:
+    """One short line per caller pid, so a failure names its own mechanism.
+
+    pytest truncates both the middle and the tail of a long list repr, so the
+    raw argv list cannot show the ORDER of the calls -- which is the only thing
+    that separates a failed lock from a failed freshness recheck. This prints
+    one group per pid with its call count and time span instead: two pids with
+    overlapping spans mean both refreshers ran at once, two with disjoint spans
+    mean they ran in sequence, and one pid with 20 calls means a single
+    refresher swept twice.
+    """
+    groups: dict[str, list[tuple[str, str]]] = {}
+    for pid, stamp, argv in rows:
+        repo = argv.split("--repo ", 1)[-1].split()[0] if "--repo " in argv else argv
+        groups.setdefault(pid, []).append((stamp, repo))
+    parts = []
+    for pid, calls in groups.items():
+        span = f"{calls[0][0]}..{calls[-1][0]}"
+        parts.append(
+            f"pid={pid} n={len(calls)} span={span}"
+            f" first={calls[0][1]} last={calls[-1][1]}"
+        )
+    return f"{len(rows)} pr-list calls in {len(groups)} group(s): " + " || ".join(parts)
+
+
 def _render(env: dict[str, str], cache: Path, bin_dir: Path) -> subprocess.Popen[str]:
     e = dict(env)
     e.update(
@@ -876,9 +901,22 @@ def test_lock_two_stale_renders_refresh_once(
     bin_dir = tmp_path / "slbin"
     bin_dir.mkdir()
     refresh_log = tmp_path / "refresh.log"
+    # Record the CALLER pid and a wall-clock stamp beside each call, not just the
+    # argv. The bare count cannot tell two refreshers running concurrently (the
+    # mkdir lock failed) from one refresher sweeping twice or two sweeping in
+    # sequence (the lock held and the post-acquire freshness recheck misread the
+    # cache): both land on exactly 20. The pid groups and their time spans do.
     _write_exec(
         bin_dir / "gh",
-        f'#!/bin/bash\necho "$*" >> "{refresh_log}"\nsleep 0.2\necho \'["dev","main"]\'\n',
+        "#!/bin/bash\n"
+        # $PPID is the command-substitution subshell, fresh for every call. One
+        # level up is the backgrounded refresher itself, which is stable per
+        # render -- that is the identity worth grouping by.
+        'r=$(ps -o ppid= -p "$PPID" 2>/dev/null | tr -d " ")\n'
+        'printf \'%s\\t%s\\t%s\\n\' "${r:-$PPID}" "$(date +%s.%N)" "$*"'
+        f' >> "{refresh_log}"\n'
+        "sleep 0.2\n"
+        'echo \'["dev","main"]\'\n',
     )
     cache = tmp_path / "pr-counts.json"
     cache.write_text(
@@ -898,9 +936,13 @@ def test_lock_two_stale_renders_refresh_once(
         time.sleep(0.25)
     time.sleep(0.5)
 
-    calls = refresh_log.read_text().splitlines() if refresh_log.exists() else []
-    list_calls = [c for c in calls if c.startswith("pr list")]
-    assert len(list_calls) == 10, calls
+    rows = []
+    for line in refresh_log.read_text().splitlines() if refresh_log.exists() else []:
+        pid, _, rest = line.partition("\t")
+        stamp, _, argv = rest.partition("\t")
+        rows.append((pid, stamp, argv))
+    list_calls = [r for r in rows if r[2].startswith("pr list")]
+    assert len(list_calls) == 10, _refresh_diagnosis(list_calls)
     assert json.loads(cache.read_text())["status"] == "ok"
     assert not lock.exists()
 
