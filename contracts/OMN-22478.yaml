@@ -24,3 +24,14 @@ dod_evidence:
       - check_type: test_passes
         check_value: uv run --frozen pytest tests/ci/test_review_gate_removed_omn22478.py -q --no-cov
         cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn22478-tessl-reviewer-sweep-exclusion
+    description: The CI Summary default-deny sweep excludes the Tessl Reviewer row and still fails every other neutral or red row.
+    source: manual
+    binds_ac: [AC4]
+    checks:
+      - check_type: test_passes
+        check_value: uv run --frozen pytest tests/ci/test_ci_summary_gate.py -q -p no:randomly --no-cov -k "reviewer or tessl or exclusion"
+        cwd: ${OMNI_HOME}/omniclaude
+      - check_type: command
+        check_value: grep -n "Tessl Reviewer" scripts/ci/ci_summary_sweep_exclusions.json
+        cwd: ${OMNI_HOME}/omniclaude
