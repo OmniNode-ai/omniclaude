@@ -161,6 +161,7 @@
   "tests/hooks/test_queue_stall_classifier.py": 0.12,
   "tests/hooks/test_refusal_details_omn20343.py": 5.51,
   "tests/hooks/test_refusal_recorder_delivery_omn20883.py": 0.35,
+  "tests/hooks/test_refusal_recorder_interpreter_omn23017.py": 8.5,
   "tests/hooks/test_refusal_recorder_state_omn20265.py": 0.62,
   "tests/hooks/test_refusal_row_lane_github_read_omn21020.py": 4.32,
   "tests/hooks/test_refusal_row_lane_omn19381.py": 6.94,

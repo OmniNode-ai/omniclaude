@@ -27,7 +27,7 @@ dod_evidence:
     checks:
       - check_type: command
         check_value: "uv run pytest tests -q -k hook_refusal_recorder_imports_row_module"
-  - id: dod-ac2-fallback-row-carries-reason-and-interpreter
+  - id: dod-ac2-fallback-row-reason-and-interpreter
     description: "AC2: when the import cannot succeed the fallback row carries the refusal text and the interpreter path that failed"
     source: manual
     checks:
