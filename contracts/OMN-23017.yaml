@@ -9,13 +9,13 @@ interfaces_touched: []
 evidence_requirements:
   - kind: tests
     description: "The recorder passes over an interpreter that cannot import the row module and writes a row naming the real guard reason"
-    command: "uv run pytest tests -q -k hook_refusal_recorder_imports_row_module"
+    command: "uv run --frozen pytest tests/hooks/test_refusal_recorder_interpreter_omn23017.py -q --no-cov -k hook_refusal_recorder_imports_row_module"
   - kind: tests
     description: "The fallback row carries the redacted refusal text and the interpreter paths that failed"
-    command: "uv run pytest tests -q -k hook_refusal_fallback_row_carries_reason_and_interpreter"
+    command: "uv run --frozen pytest tests/hooks/test_refusal_recorder_interpreter_omn23017.py -q --no-cov -k hook_refusal_fallback_row_carries_reason_and_interpreter"
   - kind: tests
     description: "Replaying the recorded fallback rows of 2026-11-07 writes the real reason, and fails on the code before the fix"
-    command: "uv run pytest tests -q -k hook_refusal_recorder_import_failure_fixture"
+    command: "uv run --frozen pytest tests/hooks/test_refusal_recorder_interpreter_omn23017.py -q --no-cov -k hook_refusal_recorder_import_failure_fixture"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -26,16 +26,16 @@ dod_evidence:
     source: manual
     checks:
       - check_type: command
-        check_value: "uv run pytest tests -q -k hook_refusal_recorder_imports_row_module"
+        check_value: "uv run --frozen pytest tests/hooks/test_refusal_recorder_interpreter_omn23017.py -q --no-cov -k hook_refusal_recorder_imports_row_module"
   - id: dod-ac2-fallback-row-reason-and-interpreter
     description: "AC2: when the import cannot succeed the fallback row carries the refusal text and the interpreter path that failed"
     source: manual
     checks:
       - check_type: command
-        check_value: "uv run pytest tests -q -k hook_refusal_fallback_row_carries_reason_and_interpreter"
+        check_value: "uv run --frozen pytest tests/hooks/test_refusal_recorder_interpreter_omn23017.py -q --no-cov -k hook_refusal_fallback_row_carries_reason_and_interpreter"
   - id: dod-ac3-recorded-rows-fixture
     description: "AC3: the regression test built from the recorded fallback rows passes on the fix"
     source: manual
     checks:
       - check_type: command
-        check_value: "uv run pytest tests -q -k hook_refusal_recorder_import_failure_fixture"
+        check_value: "uv run --frozen pytest tests/hooks/test_refusal_recorder_interpreter_omn23017.py -q --no-cov -k hook_refusal_recorder_import_failure_fixture"
