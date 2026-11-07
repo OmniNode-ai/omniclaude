@@ -1,16 +1,18 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""OMN-21627: lean_contract_seams ships as a bootstrap skill.
+"""OMN-21627: lean_contract_seams is the dispatch shim of node_contract_seams_orchestrator.
 
 The operator ruled (about 2026-10-31T02:25Z) that a design starts with its
 contracts and seams, and that everything connects before any handler logic.
-This skill is the hand-run form of that practice. These tests hold its shape:
-it says it is a bootstrap and names the node that replaces it, it carries the
-six steps in the ruled order, it names the existing command for each proof in
-step 5, and it stays prose (no script beside it, no remote shell lines).
+The bootstrap prose form of this skill is replaced by the node: these tests hold
+the shim's shape. It names the backing node and its reducer, starts the node
+through `onex run-node` only, names the request fields and the three end states,
+holds no orchestration of its own (no script beside it, no remote shell line, no
+direct import or `python -m` of an omnimarket node), and is assigned as a
+dispatch skill backed by the node in the distribution manifest.
 
-The planted example below is a skill text with step 5 removed; the same checks
-must refuse it, so the shape test is not vacuous.
+The planted example below is the skill text with the run-node line removed; the
+same checks must refuse it, so the shape test is not vacuous.
 """
 
 from __future__ import annotations
@@ -23,34 +25,28 @@ import yaml
 
 SKILL_DIR = Path("plugins/onex/skills/lean_contract_seams")
 SKILL_MD = SKILL_DIR / "SKILL.md"
+NODE = "node_contract_seams_orchestrator"
+RUN_NODE = f"onex run-node {NODE}"
 
-STEP_TITLES: tuple[str, ...] = (
-    "1. **List the graph from the design.**",
-    "2. **Write every model and every contract before any logic.**",
-    "3. **Scaffold every node from its contract.**",
-    "4. **Wire the chain and boot it on both overlays.**",
-    "5. **Prove that it connects.**",
-    "6. **Only then fill the handlers.**",
+REQUIRED_NAMES: tuple[str, ...] = (
+    f"`{NODE}`",
+    "`node_contract_seams_reducer`",
+    '"correlation_id"',
+    '"output_root"',
+    '"design"',
+    "`connected`",
+    "`refused`",
+    "`failed`",
+    "`refused_by`",
+    "mismatching_field_path",
 )
 
-# Each proof in step 5 names an existing command or skill.
-PROOF_COMMANDS: tuple[str, ...] = (
-    "omnibase_core.validation.validator_event_chain_walker:ValidatorEventChainWalker",
-    "omnibase_core.nodes.node_contract_walker_check_compute.runtime_contract_walker_check",
-    "onex:golden_chain_sweep",
-    "onex:lean_seam_read",
+# A shim dispatches and nothing else: no remote shell, no raw HTTP, no direct
+# import or module run of an omnimarket node, no bootstrap marker left behind.
+FORBIDDEN_LINE = re.compile(
+    r"(^|\s)ssh [^#]|(^|[^a-zA-Z])(curl |wget )|python(3)? -m omnimarket\.nodes\."
+    r"|from omnimarket\.nodes"
 )
-
-REQUIRED_SECTIONS: tuple[str, ...] = (
-    "## The practice",
-    "## When to use",
-    "## Steps by hand today",
-    "## Factory task per step",
-)
-
-# The two shapes omniclaude's hooks refuse in a skill: a remote shell line and
-# a raw HTTP call. Prose skills call existing commands only.
-FORBIDDEN_LINE = re.compile(r"(^|\s)ssh [^#]|(^|[^a-zA-Z])(curl |wget )")
 
 
 def _split(text: str) -> tuple[dict[str, object], str]:
@@ -64,40 +60,17 @@ def _split(text: str) -> tuple[dict[str, object], str]:
 def _problems(text: str) -> list[str]:
     front, body = _split(text)
     problems: list[str] = []
-    if front.get("bootstrap") is not True:
-        problems.append("frontmatter must declare bootstrap: true")
-    if not str(front.get("description", "")).startswith("Bootstrap skill"):
-        problems.append("description must start with 'Bootstrap skill'")
-    if "This skill is a bootstrap skill." not in body:
-        problems.append("body must say it is a bootstrap skill")
-    if (
-        "**Replaced by**" not in body
-        or "`node_contract_seams_orchestrator`" not in body
-    ):
-        problems.append(
-            "body must name node_contract_seams_orchestrator as its replacement"
-        )
+    if "bootstrap" in front:
+        problems.append("a dispatch shim declares no bootstrap key")
+    if not str(front.get("description", "")).startswith("Thin dispatch shim"):
+        problems.append("description must start with 'Thin dispatch shim'")
+    if RUN_NODE not in body:
+        problems.append(f"body must start the node with {RUN_NODE!r}")
     problems.extend(
-        f"section {section!r} is missing"
-        for section in REQUIRED_SECTIONS
-        if section not in body
-    )
-    positions = [body.find(title) for title in STEP_TITLES]
-    problems.extend(
-        f"step {title!r} is missing"
-        for title, at in zip(STEP_TITLES, positions, strict=True)
-        if at < 0
-    )
-    found = [at for at in positions if at >= 0]
-    if found != sorted(found):
-        problems.append("the six steps are out of order")
-    problems.extend(
-        f"step 5 does not name {command!r}"
-        for command in PROOF_COMMANDS
-        if command not in body
+        f"body does not name {name}" for name in REQUIRED_NAMES if name not in body
     )
     problems.extend(
-        f"imperative line: {line.strip()!r}"
+        f"forbidden line: {line.strip()!r}"
         for line in body.splitlines()
         if FORBIDDEN_LINE.search(line)
     )
@@ -105,32 +78,35 @@ def _problems(text: str) -> list[str]:
 
 
 @pytest.mark.unit
-def test_the_skill_has_the_six_steps_in_order_and_names_every_proof() -> None:
+def test_the_shim_starts_the_node_and_names_its_request_and_end_states() -> None:
     problems = _problems(SKILL_MD.read_text(encoding="utf-8"))
     assert not problems, "\n".join(problems)
 
 
 @pytest.mark.unit
-def test_a_planted_skill_without_the_proof_step_is_refused() -> None:
+def test_a_planted_shim_without_the_run_node_line_is_refused() -> None:
     text = SKILL_MD.read_text(encoding="utf-8")
-    start = text.index(STEP_TITLES[4])
-    end = text.index(STEP_TITLES[5])
-    planted = text[:start] + text[end:]
-    problems = _problems(planted)
-    assert "step '5. **Prove that it connects.**' is missing" in problems
-    assert any("ValidatorEventChainWalker" in p for p in problems)
+    planted = text.replace(RUN_NODE, "onex run-node node_something_else")
+    assert f"body must start the node with {RUN_NODE!r}" in _problems(planted)
 
 
 @pytest.mark.unit
-def test_the_skill_is_prose_only() -> None:
+def test_a_planted_shim_that_runs_the_node_module_directly_is_refused() -> None:
+    text = SKILL_MD.read_text(encoding="utf-8")
+    planted = text + f"\npython -m omnimarket.nodes.{NODE} --design d.yaml\n"
+    assert any(p.startswith("forbidden line:") for p in _problems(planted))
+
+
+@pytest.mark.unit
+def test_the_shim_is_one_file() -> None:
     assert sorted(p.name for p in SKILL_DIR.iterdir()) == ["SKILL.md"]
 
 
 @pytest.mark.unit
-def test_the_skill_is_assigned_in_the_distribution_manifest() -> None:
+def test_the_shim_is_a_dispatch_skill_backed_by_the_node() -> None:
     manifest = yaml.safe_load(Path("plugins/distribution_manifest.yaml").read_text())
     entry = {c["id"]: c for c in manifest["components"]}.get("lean_contract_seams")
     assert entry is not None
-    assert entry["surface_class"] == "pure_skill"
-    assert entry["backing_nodes"] == []
+    assert entry["surface_class"] == "dispatch"
+    assert entry["backing_nodes"] == [NODE]
     assert "OMN-21627" in entry["rationale"]
