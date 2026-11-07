@@ -191,6 +191,7 @@
   "tests/hooks/test_skip_token_surface_guard.py": 0.48,
   "tests/hooks/test_spool_drain.py": 0.29,
   "tests/hooks/test_static_context_snapshot.py": 0.42,
+  "tests/hooks/test_status_no_optional_locks.py": 1.5,
   "tests/hooks/test_statusline_pr_extension.py": 4.5,
   "tests/hooks/test_statusline_pr_segment.py": 4.45,
   "tests/hooks/test_statusline_shim_resolves.py": 0.02,
