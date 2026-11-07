@@ -48,3 +48,11 @@ dod_evidence:
         check_value: "uv run pytest tests/hooks/test_statusline_pr_segment.py -q"
     binds_ac:
       - AC3
+  - id: dod-omn19479-lock-test-names-its-mechanism
+    description: "A failing single-refresh assertion reports one line per caller refresher pid with its call count and time span, so a double sweep is read as concurrent (overlapping spans, the mkdir lock failed) or sequential (disjoint spans, the freshness recheck misread the cache) instead of as a bare count"
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_gh_user_shim.py -q -k 'lock_two_stale or lock_default'"
+    binds_ac:
+      - AC3
