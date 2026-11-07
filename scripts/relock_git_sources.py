@@ -238,7 +238,6 @@ _OMNINODE_GIT = re.compile(
 # sibling with this many consecutive red or unread tags stays where it is and
 # the plan says why.
 _MAX_CANDIDATES = 15
-_GREEN_CONCLUSIONS = frozenset({"success", "skipped", "neutral"})
 MOVER_MODULE = "omnimarket.nodes.node_dev_tag_pin_mover_compute"
 _MOVER_EXIT_CANDIDATE_WRITTEN = 3
 
@@ -333,47 +332,23 @@ def dev_tags_newest_first(clone: Path) -> list[tuple[str, str]]:
     )
 
 
-def check_runs_verdict(runs: list[tuple[str, str]]) -> bool | None:
-    """Green, red, or None (unread) from (status, conclusion) pairs of one commit."""
-    if not runs:
-        return None
-    if any(
-        conclusion and conclusion not in _GREEN_CONCLUSIONS for _, conclusion in runs
-    ):
-        return False
-    if any(status != "completed" for status, _ in runs):
-        return None
-    return True
+def github_check_runs_green(
+    repo: str,
+    sha: str,
+    run: Callable[..., subprocess.CompletedProcess[str]] | None = None,
+) -> bool | None:
+    """The train's oracle is omnimarket's: dev's required checks only (OMN-22497).
 
-
-def github_check_runs_green(repo: str, sha: str) -> bool | None:
-    """Read dev-commit check runs with gh under the train workflow's App token."""
-    result = subprocess.run(
-        [
-            "gh",
-            "api",
-            "--paginate",
-            f"repos/OmniNode-ai/{repo}/commits/{sha}/check-runs?per_page=100",
-            "--jq",
-            r'.check_runs[] | "\(.status) \(.conclusion // "")"',
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=60,
+    Imported here, not at module top, so the workflow's bare ``python3`` import
+    of this script, which has no omnimarket on its path, still works.
+    """
+    from omnimarket.nodes.node_dev_tag_pin_mover_compute.train_sources import (
+        github_check_runs_green as market_oracle,
     )
-    if result.returncode != 0:
-        print(
-            f"[train] {repo}@{sha[:12]}: check runs unreadable "
-            f"({result.stderr.strip()[:200]})",
-            file=sys.stderr,
-        )
-        return None
-    runs = []
-    for line in result.stdout.splitlines():
-        status, _, conclusion = line.partition(" ")
-        runs.append((status, conclusion.strip()))
-    return check_runs_verdict(runs)
+
+    if run is None:
+        return market_oracle(repo, sha)
+    return market_oracle(repo, sha, run=run)
 
 
 def pick_train_tag(
