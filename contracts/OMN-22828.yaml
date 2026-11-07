@@ -1,0 +1,35 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-22828
+title: "omniclaude's test jobs run on the Ubuntu 24.04 hosted image, so the shadow tests stop failing on 26.04"
+summary: >
+  The tests+coverage (shadow) job ran on ubuntu-latest, which became Ubuntu 26.04
+  on 2026-11-06; test_gh_user_shim failed intermittently on it. The job names
+  ubuntu-24.04, and a test refuses a floating image on it.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn22828-tests-shadow-pinned-image
+    statement: The tests-shadow job in product-readiness-shadow.yml runs on ubuntu-24.04, and a test refuses any other runs-on value there.
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: omniclaude's test jobs name ubuntu-24.04 and a check refuses a floating image in them, with a failing control on origin's workflow -- falsifier: uv run pytest of the workflow image pin test"
+evidence_requirements:
+  - kind: tests
+    description: "The workflow image pin test passes on the branch"
+    command: "uv run pytest tests/ci/test_tests_shadow_hosted_image_pin.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn22828-image-pinned
+    description: "The tests-shadow job names ubuntu-24.04. Fails with origin/dev's workflow file in place, where the job names ubuntu-latest."
+    source: manual
+    binds_ac:
+      - "AC1"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_tests_shadow_hosted_image_pin.py -q --no-cov"
+        cwd: "."
