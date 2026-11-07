@@ -1,53 +1,52 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Advance this repo's immutable git-rev sibling pins to the clone head (OMN-18752).
-
-## The gap this closes
-
-``.github/workflows/sibling-lock-refresh.yml`` (OMN-13902) is the surface that
-already owns "make the lock follow its upstream". Its own header records why it
-could not do so for one class of pin:
-
-    Repos whose siblings are pinned to an immutable git rev/tag in
-    ``[tool.uv.sources]`` ... are left untouched — ``uv lock
-    --upgrade-package`` cannot move a pinned rev
-
-``pyproject.toml`` repeats the same sentence. That is mechanically true and it
-is why advancing ``omnimarket`` has been a hand-filed ticket every time
-(OMN-18622, OMN-18639, and a third the same week). omnimarket publishes
-release-on-merge, so the pin goes stale on essentially every omnimarket PR, and
-each staleness window is one in which the plugin CLI venv and the lock disagree
-about which commit is correct.
-
-``uv lock --upgrade-package`` cannot move the rev because the rev is **input**,
-not output. So this module moves the input first: it rewrites the rev in
-``pyproject.toml``, and ``uv lock`` then re-resolves against it. That is the
-whole trick, and it is why this lives beside the workflow rather than inside
-uv.
-
-## Forward only, and refused rather than clamped
-
-The canonical clone is the authority (see ``git_source_pins``), but "follow the
-clone" must never mean "follow the clone backwards". A candidate that is not a
-**strict descendant** of the current rev raises ``ErrorNotADescendant`` and
-nothing is written — the file is byte-identical afterwards. A clamp would be
-worse than a refusal here: it would silently keep a stale pin while reporting
-success, which is the failure shape OMN-18663 already had to close once.
-
-Ancestry is resolved against a real clone, never against version strings. The
-clone is a parameter so the workflow can point at its own checkout and the
-tests can point at a fixture, with no network in either case.
-
-## Why both occurrences move together
-
-In ``omniclaude/pyproject.toml`` the sha appears twice — once in the
-``dependencies`` entry (``omnimarket @ git+...@<sha>``) and once in
-``[tool.uv.sources]`` (``rev = "<sha>"``). uv will not resolve a tree where
-those disagree, so a rewrite that moved one and not the other would produce a
-lock failure rather than a stale pin. ``rewrite_rev`` returns the occurrence
-count and the caller asserts it.
-"""
+# Advance this repo's immutable git-rev sibling pins to the clone head (OMN-18752).
+#
+# ## The gap this closes
+#
+# ``.github/workflows/sibling-lock-refresh.yml`` (OMN-13902) is the surface that
+# already owns "make the lock follow its upstream". Its own header records why it
+# could not do so for one class of pin:
+#
+#     Repos whose siblings are pinned to an immutable git rev/tag in
+#     ``[tool.uv.sources]`` ... are left untouched — ``uv lock
+#     --upgrade-package`` cannot move a pinned rev
+#
+# ``pyproject.toml`` repeats the same sentence. That is mechanically true and it
+# is why advancing ``omnimarket`` has been a hand-filed ticket every time
+# (OMN-18622, OMN-18639, and a third the same week). omnimarket publishes
+# release-on-merge, so the pin goes stale on essentially every omnimarket PR, and
+# each staleness window is one in which the plugin CLI venv and the lock disagree
+# about which commit is correct.
+#
+# ``uv lock --upgrade-package`` cannot move the rev because the rev is **input**,
+# not output. So this module moves the input first: it rewrites the rev in
+# ``pyproject.toml``, and ``uv lock`` then re-resolves against it. That is the
+# whole trick, and it is why this lives beside the workflow rather than inside
+# uv.
+#
+# ## Forward only, and refused rather than clamped
+#
+# The canonical clone is the authority (see ``git_source_pins``), but "follow the
+# clone" must never mean "follow the clone backwards". A candidate that is not a
+# **strict descendant** of the current rev raises ``ErrorNotADescendant`` and
+# nothing is written — the file is byte-identical afterwards. A clamp would be
+# worse than a refusal here: it would silently keep a stale pin while reporting
+# success, which is the failure shape OMN-18663 already had to close once.
+#
+# Ancestry is resolved against a real clone, never against version strings. The
+# clone is a parameter so the workflow can point at its own checkout and the
+# tests can point at a fixture, with no network in either case.
+#
+# ## Why both occurrences move together
+#
+# In ``omniclaude/pyproject.toml`` the sha appears twice — once in the
+# ``dependencies`` entry (``omnimarket @ git+...@<sha>``) and once in
+# ``[tool.uv.sources]`` (``rev = "<sha>"``). uv will not resolve a tree where
+# those disagree, so a rewrite that moved one and not the other would produce a
+# lock failure rather than a stale pin. ``rewrite_rev`` returns the occurrence
+# count and the caller asserts it.
 
 from __future__ import annotations
 
@@ -229,6 +228,15 @@ def advance_all(
 # The rewrite itself is omnimarket's node_dev_tag_pin_mover_compute (#4129),
 # called with --tests not_run: it writes the candidate pin in place, and the
 # bump PR's own CI is the consumer test run that decides whether it lands.
+#
+# OMN-22636: a sibling's pre-commit hook blocks are a second home of its tags.
+# Two tests hold every hook block of a pinned repository to a dev merge tag not
+# older than the pin, and first-party-ref allows one home per tag literal, so a
+# hook must sit strictly NEWER than the pin it follows. omnimarket's
+# node_sibling_pin_hook_revs_compute plans that: the newest green tag for the
+# floor-bound hook blocks of `.pre-commit-config.yaml`, the newest green tag
+# strictly under them for the source pin. This script reads the tags, their CI
+# and the hook blocks, and writes both files.
 # ---------------------------------------------------------------------------
 
 _OMNINODE_GIT = re.compile(
@@ -241,6 +249,8 @@ _MAX_CANDIDATES = 15
 _GREEN_CONCLUSIONS = frozenset({"success", "skipped", "neutral"})
 MOVER_MODULE = "omnimarket.nodes.node_dev_tag_pin_mover_compute"
 _MOVER_EXIT_CANDIDATE_WRITTEN = 3
+_HOOK_REPO = re.compile(r"\s*-\s*repo:\s*(?P<url>\S+)")
+_HOOK_REV = re.compile(r"^(?P<head>\s*rev:\s*)(?P<rev>\S+?)(?P<tail>\s*(?:#.*)?)$")
 
 
 @dataclass(frozen=True)
@@ -252,13 +262,6 @@ class ModelDevTagPin:
 
 
 @dataclass(frozen=True)
-class ModelTagChoice:
-    new_tag: str | None
-    examined: list[str] = field(default_factory=list)
-    skipped: dict[str, str] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
 class ModelTrainMove:
     distribution: str
     repo: str
@@ -267,6 +270,9 @@ class ModelTrainMove:
     # OMN-21282: every dev tag newer than old_tag up to new_tag, newest first --
     # the tags this one bump rolls in.
     rolled: list[str] = field(default_factory=list)
+    # OMN-22636: the tag the sibling's pre-commit hook blocks move to, and how many move.
+    hook_tag: str | None = None
+    hook_blocks: int = 0
 
 
 @dataclass(frozen=True)
@@ -376,29 +382,16 @@ def github_check_runs_green(repo: str, sha: str) -> bool | None:
     return check_runs_verdict(runs)
 
 
-def pick_train_tag(
-    *,
-    pin: ModelDevTagPin,
-    clone: Path,
-    is_green: GreenOracle,
-    max_candidates: int = _MAX_CANDIDATES,
-) -> ModelTagChoice:
-    """The newest dev tag newer than the pin whose dev CI is green, or None."""
-    current = dev_merge_tag_stamp(pin.tag) or ""
-    examined: list[str] = []
-    skipped: dict[str, str] = {}
-    for tag, sha in dev_tags_newest_first(clone):
-        if (dev_merge_tag_stamp(tag) or "") <= current:
-            break
-        if len(examined) >= max_candidates:
-            skipped[tag] = "beyond-candidate-cap"
-            break
-        examined.append(tag)
-        verdict = is_green(pin.repo, sha)
-        if verdict is True:
-            return ModelTagChoice(new_tag=tag, examined=examined, skipped=skipped)
-        skipped[tag] = "red" if verdict is False else "unread"
-    return ModelTagChoice(new_tag=None, examined=examined, skipped=skipped)
+def hook_blocks(config_text: str, url: str) -> list[tuple[int, str]]:
+    """(line index, rev) of every pre-commit block of the repository at ``url``, in file order."""
+    blocks, in_block = [], False
+    for at, line in enumerate(config_text.splitlines()):
+        if repo := _HOOK_REPO.match(line):
+            in_block = repo["url"].removesuffix(".git") == url.removesuffix(".git")
+        elif in_block and (rev := _HOOK_REV.match(line)):
+            blocks.append((at, rev["rev"]))
+            in_block = False
+    return blocks
 
 
 def mover_argv(pyproject: Path, pin: ModelDevTagPin, new_tag: str) -> list[str]:
@@ -462,10 +455,21 @@ def run_dev_tag_train(
     mover: Mover = node_mover,
     apply: bool,
 ) -> ModelTrainPlan:
-    """One plan moving every dev-tag pin of ``pyproject`` to its newest green tag."""
+    """One plan moving every dev-tag pin of ``pyproject``, and the hook blocks that follow it."""
+    # The planning node is imported here, not at module level: the workflow's earlier steps
+    # import this script under a bare python3 with PYTHONPATH=src, where omnimarket is absent.
+    from omnimarket.nodes.node_sibling_pin_hook_revs_compute.handlers.handler_sibling_pin_hook_revs import (
+        HandlerSiblingPinHookRevs,
+    )
+    from omnimarket.nodes.node_sibling_pin_hook_revs_compute.models import (
+        ModelHookRevsCandidate,
+        ModelSiblingPinHookRevsRequest,
+    )
+
     moves: list[ModelTrainMove] = []
     unchanged: list[str] = []
     skipped: dict[str, dict[str, str]] = {}
+    config = pyproject.parent / ".pre-commit-config.yaml"
     for pin in parse_dev_tag_pins(pyproject.read_text(encoding="utf-8")):
         clone = gsp.canonical_clone(pin.repo, registry_root)
         if clone is None:
@@ -475,29 +479,57 @@ def run_dev_tag_train(
                 f"{pin.distribution}: no canonical clone for {pin.repo!r} under "
                 f"{registry_root or '$OMNI_HOME'}"
             )
-        choice = pick_train_tag(pin=pin, clone=clone, is_green=is_green)
-        if choice.skipped:
-            skipped[pin.distribution] = choice.skipped
-        if choice.new_tag is None:
+        stamp = dev_merge_tag_stamp(pin.tag) or ""
+        tags = dev_tags_newest_first(clone)
+        newer = [t for t in tags if (dev_merge_tag_stamp(t[0]) or "") > stamp]
+        text = config.read_text(encoding="utf-8") if config.is_file() else ""
+        blocks = hook_blocks(text, pin.url)
+        verdicts = [
+            (tag, is_green(pin.repo, sha)) for tag, sha in newer[:_MAX_CANDIDATES]
+        ]
+        plan = HandlerSiblingPinHookRevs().handle(
+            ModelSiblingPinHookRevsRequest(
+                pin_tag=pin.tag,
+                hook_revs=tuple(rev for _, rev in blocks),
+                candidates=tuple(
+                    ModelHookRevsCandidate(tag=t, green=g) for t, g in verdicts
+                ),
+            )
+        )
+        written = dev_merge_tag_stamp(plan.pin_tag or "") or ""
+        passed = {
+            t: "red" if g is False else "unread"
+            for t, g in verdicts
+            if g is not True and (dev_merge_tag_stamp(t) or "") > written
+        } | {t: "beyond-candidate-cap" for t, _ in newer[_MAX_CANDIDATES:][:1]}
+        if passed:
+            skipped[pin.distribution] = passed
+        # The hook blocks follow the pin: with the pin left where it was, they stay too.
+        if plan.pin_tag is None:
             unchanged.append(pin.distribution)
             continue
         if apply:
-            mover(pyproject, pin, choice.new_tag)
-        old, new = (
-            dev_merge_tag_stamp(pin.tag) or "",
-            dev_merge_tag_stamp(choice.new_tag) or "",
-        )
+            mover(pyproject, pin, plan.pin_tag)
+            lines = text.splitlines(keepends=True)
+            for index in plan.hook_indexes:
+                lines[blocks[index][0]] = _HOOK_REV.sub(
+                    rf"\g<head>{plan.hook_tag}\g<tail>", lines[blocks[index][0]]
+                )
+            if plan.hook_indexes:
+                config.write_text("".join(lines), encoding="utf-8")
         moves.append(
             ModelTrainMove(
                 distribution=pin.distribution,
                 repo=pin.repo,
                 old_tag=pin.tag,
-                new_tag=choice.new_tag,
+                new_tag=plan.pin_tag,
                 rolled=[
-                    tag
-                    for tag, _ in dev_tags_newest_first(clone)
-                    if old < (dev_merge_tag_stamp(tag) or "") <= new
+                    t
+                    for t, _ in tags
+                    if stamp < (dev_merge_tag_stamp(t) or "") <= written
                 ],
+                hook_tag=plan.hook_tag,
+                hook_blocks=len(plan.hook_indexes),
             )
         )
     return ModelTrainPlan(moves=moves, unchanged=unchanged, skipped=skipped)
@@ -513,6 +545,11 @@ def render_pr_body(plan: ModelTrainPlan) -> str:
             f"- `{move.distribution}` ({move.repo}): `{move.old_tag}` -> "
             f"`{move.new_tag}`, rolling {len(move.rolled)} dev tag(s): "
             + ", ".join(f"`{tag}`" for tag in move.rolled)
+            + (
+                f"; {move.hook_blocks} hook block(s) to `{move.hook_tag}`"
+                if move.hook_tag
+                else ""
+            )
         )
     if plan.unchanged or plan.skipped:
         lines += ["", "### Left where they were", ""]
@@ -558,7 +595,9 @@ def main_train(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description="Advance this repo's git-rev sibling pins and run the dev-tag train (OMN-18752, OMN-19998)."
+    )
     parser.add_argument(
         "--repo-root",
         type=Path,

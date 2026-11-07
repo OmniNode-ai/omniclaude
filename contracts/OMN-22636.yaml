@@ -1,0 +1,66 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-22636
+title: "The sibling-pin train moves the omnibase_core pin without the core hook revs, so its pull request fails the pin-floor tests and Tests Gate"
+summary: >
+  The train moved the omnibase-core source tag and left the omnibase_core hook blocks of `.pre-commit-config.yaml` behind. A hook older than the pin fails the pin-floor tests, and a hook at the pin's tag is refused by first-party-ref (one home per tag literal), so only a hook strictly newer than the pin passes both. `scripts/relock_git_sources.py` now plans the hook blocks and the source pin through omnimarket's node_sibling_pin_hook_revs_compute and writes both, and `sibling-lock-refresh.yml` stages and counts `.pre-commit-config.yaml` with the refresh.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn22636-hook-revs
+    statement: The train writes core hook revs strictly newer than the core source pin, and the refresh carries the file they live in.
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: given a core pin at stamp P, core hook blocks at stamps at or above P, and newer green core dev tags, the train plans the newest green tag for those hook blocks and the newest green tag strictly older than it for the source pin, so the hook stamp is strictly greater than the pin stamp -- falsifier: uv run pytest tests/scripts/test_dev_tag_train_hook_revs.py -q"
+      - id: "AC2"
+        statement: "AC2: a failing control: the same test file fails against origin/dev scripts/relock_git_sources.py before the change -- falsifier: uv run pytest tests/scripts/test_dev_tag_train_hook_revs.py -q on the lab at origin/dev scripts"
+      - id: "AC3"
+        statement: "AC3: sibling-lock-refresh.yml stages .pre-commit-config.yaml with the refresh and counts it in the refresh delta -- falsifier: uv run pytest tests/workflows/test_sibling_pin_train_omn19998.py -q"
+      - id: "AC4"
+        statement: "AC4: the tree the train writes passes first-party-ref and the two pin-floor tests on the lab -- falsifier: uv run pytest tests/ci/test_core_dev_tag_pin_omn18595.py tests/scripts/validator_parity_omn20566/test_node_parity.py -q"
+evidence_requirements:
+  - kind: tests
+    description: "The focused train and workflow tests pass on the lab from the branch"
+    command: "uv run pytest tests/scripts/test_dev_tag_train_hook_revs.py tests/workflows/test_sibling_pin_train_omn19998.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn22636-ac1
+    description: "the train writes the newest green tag to the floor-bound core hook blocks and the newest green tag strictly older to the source pin"
+    source: manual
+    binds_ac:
+      - "AC1"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_dev_tag_train_hook_revs.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn22636-ac2
+    description: "the script reads the hook blocks and plans them through the hook revs node; at origin/dev it names neither, so this check fails there"
+    source: manual
+    binds_ac:
+      - "AC2"
+    checks:
+      - check_type: command
+        check_value: "grep -q -e 'node_sibling_pin_hook_revs_compute' scripts/relock_git_sources.py && grep -q -e 'def hook_blocks' scripts/relock_git_sources.py"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn22636-ac3
+    description: "the refresh workflow stages .pre-commit-config.yaml and counts it in the refresh delta"
+    source: manual
+    binds_ac:
+      - "AC3"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/workflows/test_sibling_pin_train_omn19998.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn22636-ac4
+    description: "the two pin-floor tests pass on the tree the train writes"
+    source: manual
+    binds_ac:
+      - "AC4"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_core_dev_tag_pin_omn18595.py tests/scripts/validator_parity_omn20566/test_node_parity.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
