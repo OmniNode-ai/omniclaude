@@ -15,8 +15,8 @@ from pathlib import Path
 import pytest
 
 GUIDE = Path(__file__).resolve().parents[2] / "plugins" / "onex" / "ONBOARDING.md"
-SCRIPT_COMMIT = "ad5d6ef877b3b792f5facccf807d466986eba9b5"
-SCRIPT_SHA256 = "947ddfc430da2eead1184c255c10dec95aa642eb7bf40e83e66df36f3dd401df"
+SCRIPT_COMMIT = "edc3286935f5500187c1957efcbf7d46fad55843"
+SCRIPT_SHA256 = "40c83f09d8dd4d007feb786d9b0ec41e0b2c80d818fcb27a4eac0d2f0710a1d1"
 
 pytestmark = pytest.mark.unit
 
