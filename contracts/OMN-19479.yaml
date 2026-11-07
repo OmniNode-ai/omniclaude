@@ -55,4 +55,4 @@ dod_evidence:
       - check_type: test_passes
         check_value: "uv run pytest tests/scripts/test_gh_user_shim.py -q -k 'lock_two_stale or lock_default'"
     binds_ac:
-      - AC3
+      - AC4
