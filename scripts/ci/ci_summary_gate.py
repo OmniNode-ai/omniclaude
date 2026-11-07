@@ -53,6 +53,7 @@ import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
+from pathlib import Path
 
 # The poller's own job — excluded to avoid self-deadlock.
 SELF_JOB_NAME = "CI Summary"
@@ -879,23 +880,24 @@ _MARKER_AUDIT_CONTEXT: str = "TO" + "DO Audit"
 # would otherwise fail the gate, which is the point: every one is now a named,
 # dated, owned decision instead of a silent tolerance buried in a conclusion
 # set. They all expire on 2026-12-20, ninety days out.
-EXTERNAL_SWEEP_EXCLUSIONS: dict[str, SweepExclusion] = {
-    # The one that was a real red at merge time, on #2279.
-    _MARKER_AUDIT_CONTEXT: SweepExclusion(
-        reason=(
-            "This check-run concluded skipped on two heads and never reported "
-            "success in the window. The workflow triggers on a pull request "
-            "being closed and requires the pull request to have merged. It is "
-            "a post-merge job that a pre-merge poller either does not see or "
-            "sees as skipped from a non-merge close. Excluding this entry "
-            "prevents the gate from blocking merges due to a post-merge job "
-            "that is not relevant to the pre-merge state."
-        ),
-        ticket="OMN-18970",
-        added="2026-09-21",
-        expires="2026-12-20",
-    ),
-}
+# The registry is data, in ci_summary_sweep_exclusions.json beside this file
+# (stdlib json: the poller runs with no third-party packages). Each entry names
+# its reason, ticket, added date and expiry. The Tessl Reviewer entry is
+# RULING 2026-11-05T20:27:56Z (OMN-22478): the automated reviewer app posts a
+# neutral row on every pull request and holds no merge. Moved out of code
+# because the canonical-file-shape ratchet refuses growth of this file.
+SWEEP_EXCLUSIONS_FILE = Path(__file__).with_name("ci_summary_sweep_exclusions.json")
+
+
+def load_sweep_exclusions(path: Path) -> dict[str, SweepExclusion]:
+    """Read the exclusion registry; a malformed file raises and fails the gate."""
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    return {name: SweepExclusion(**fields) for name, fields in raw.items()}
+
+
+EXTERNAL_SWEEP_EXCLUSIONS: dict[str, SweepExclusion] = load_sweep_exclusions(
+    SWEEP_EXCLUSIONS_FILE
+)
 
 _SWEEP_TICKET_RE = re.compile(r"^OMN-\d+$")
 _SWEEP_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")

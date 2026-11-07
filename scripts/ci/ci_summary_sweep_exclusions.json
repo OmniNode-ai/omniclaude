@@ -1,0 +1,14 @@
+{
+  "TODO Audit": {
+    "reason": "This check-run concluded skipped on two heads and never reported success in the window. The workflow triggers on a pull request being closed and requires the pull request to have merged. It is a post-merge job that a pre-merge poller either does not see or sees as skipped from a non-merge close. Excluding this entry prevents the gate from blocking merges due to a post-merge job that is not relevant to the pre-merge state.",
+    "ticket": "OMN-18970",
+    "added": "2026-09-21",
+    "expires": "2026-12-20"
+  },
+  "Tessl Reviewer": {
+    "reason": "Automated reviewer app posts a neutral row on every pull request; the operator ruling takes it out of what blocks a merge.",
+    "ticket": "OMN-22478",
+    "added": "2026-11-07",
+    "expires": "2026-12-20"
+  }
+}
