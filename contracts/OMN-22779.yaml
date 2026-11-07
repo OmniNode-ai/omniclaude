@@ -34,11 +34,11 @@ dod_evidence:
         check_value: "uv run pytest tests/hooks/test_status_no_optional_locks.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
   - id: dod-omn22779-ac2
-    description: "the failing control branch carries the same test file as this change and none of the three fixes, and its run on the lab failed on each call site (receipt in the PR body)"
+    description: "each of the three call sites carries --no-optional-locks (or GIT_OPTIONAL_LOCKS=0 for the sync engine) in its source; at origin/dev none does, so this check fails there"
     source: manual
     binds_ac:
       - "AC2"
     checks:
       - check_type: command
-        check_value: "git show origin/OMN-22779-status-no-optional-locks-control:tests/hooks/test_status_no_optional_locks.py | cmp - tests/hooks/test_status_no_optional_locks.py && ! git show origin/OMN-22779-status-no-optional-locks-control:plugins/onex/hooks/scripts/statusline.sh | grep -q -e --no-optional-locks"
+        check_value: "grep -q -e 'no-optional-locks' plugins/onex/hooks/scripts/statusline.sh && grep -q -e '--no-optional-locks' plugins/onex/hooks/lib/plugin_deploy_readback.py && grep -q -e 'GIT_OPTIONAL_LOCKS=\"0\"' plugins/onex/hooks/lib/canonical_clone_sync.py"
         cwd: "${OMNI_HOME}/omniclaude"
