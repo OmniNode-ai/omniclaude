@@ -85,3 +85,17 @@ def test_pr_step_reuses_one_branch_and_updates_in_place() -> None:
     assert "gh pr list" in run
     assert "--force-with-lease" in run or "--force" in run
     assert "dry_run" in str(pr["if"])
+
+
+def test_refresh_stages_and_counts_the_pre_commit_config() -> None:
+    """OMN-22636: the train's hook-block moves are part of the refresh, never left unstaged."""
+    steps = _steps()
+    delta = str(steps[_index(steps, "git diff --quiet")]["run"])
+    commit = str(steps[_index(steps, "gh pr create")]["run"])
+    assert (
+        ".pre-commit-config.yaml"
+        in delta.split("git --no-pager diff --stat", maxsplit=1)[0]
+    )
+    assert ".pre-commit-config.yaml" in delta.split("git --no-pager diff --stat")[1]
+    staged = next(line for line in commit.splitlines() if "git add" in line)
+    assert ".pre-commit-config.yaml" in staged

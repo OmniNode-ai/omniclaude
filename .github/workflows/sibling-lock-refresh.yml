@@ -48,6 +48,12 @@
 # is omnimarket's node_dev_tag_pin_mover_compute; the selection is
 # `scripts/relock_git_sources.py --dev-tag-train`.
 #
+# OMN-22636: the train also moves the sibling's hook blocks in
+# `.pre-commit-config.yaml` (omnimarket's node_sibling_pin_hook_revs_compute plans
+# them), so that file rides with the refresh: a hook must sit strictly newer than the
+# source pin it follows, and a pin moved alone failed the pin-floor tests
+# (omniclaude#3188).
+#
 # Canary rollout (OMN-13902): landed on omnimemory first per canary-before-
 # fan-out. Once proven green, the same workflow file is copied to the other
 # PyPI-range-pinned consumers (omniclaude, omniintelligence, omnibase_infra).
@@ -275,14 +281,15 @@ jobs:
           # one change and neither is committable alone — uv refuses to resolve
           # a tree where the dependency string and [tool.uv.sources] disagree.
           # The capture-contract mirror is derived from that rev and rides with
-          # it (OMN-17427).
-          if git diff --quiet -- uv.lock pyproject.toml src/omniclaude/hooks/contracts/capture_redaction.yaml; then
+          # it (OMN-17427). The train's hook-block moves (OMN-22636) land in
+          # .pre-commit-config.yaml and ride with the pin they follow.
+          if git diff --quiet -- uv.lock pyproject.toml .pre-commit-config.yaml src/omniclaude/hooks/contracts/capture_redaction.yaml; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "uv.lock unchanged — all sibling pins already fresh."
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
             echo "Sibling lock delta:"
-            git --no-pager diff --stat -- uv.lock pyproject.toml src/omniclaude/hooks/contracts/capture_redaction.yaml
+            git --no-pager diff --stat -- uv.lock pyproject.toml .pre-commit-config.yaml src/omniclaude/hooks/contracts/capture_redaction.yaml
           fi
 
       - name: Open or update the refresh PR
@@ -306,7 +313,7 @@ jobs:
           git config user.name "onexbot-occ-writer[bot]"
           git config user.email "307849072+onexbot-occ-writer[bot]@users.noreply.github.com"
           git checkout -B "$BRANCH"
-          git add uv.lock pyproject.toml src/omniclaude/hooks/contracts/capture_redaction.yaml
+          git add uv.lock pyproject.toml .pre-commit-config.yaml src/omniclaude/hooks/contracts/capture_redaction.yaml
           git commit -m "chore(deps, OMN-13902): refresh omninode sibling locks [bot]" \
             --trailer "Onex-Workflow: ${GITHUB_WORKFLOW}" \
             --trailer "Onex-Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
