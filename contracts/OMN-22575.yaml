@@ -1,0 +1,36 @@
+schema_version: "1.0.0"
+ticket_id: OMN-22575
+title: "The hook-emit drainer asks the drain probe node which records prove the broker reachable, so two refused classes ahead of an authorized one no longer jam the head"
+summary: >-
+  The hook-emit drainer probed with one record of a different event class behind the head. When two classes were refused
+  (a broker login with no grant on both), the probe asked the second refused class, failed for its own reason, and read as
+  an unreachable broker, so the head stayed and the authorized records behind both stayed unpublished. The drainer now
+  hands its pending and refused event classes to omnimarket's drain probe node and publishes the records the node names,
+  in order; the first publish that goes out is the evidence the broker is reachable.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn22575-drainer-calls-probe-node
+    statement: "The hook-emit drainer takes its probe order from the drain probe node, so two refused classes ahead of an authorized one do not wedge the head."
+    acceptance:
+      - id: "AC1"
+        statement: |-
+          AC1: with two refused event classes ahead of an authorized class in the journal, the drainer dead-letters the refused records and publishes the authorized ones, and a same-class backlog on a dead broker still moves nothing -- falsifier: uv run pytest tests/unit/hooks/test_hook_emit_drainer.py -q --no-cov with plugins/onex/hooks/lib/hook_emit_drainer.py restored from origin/dev
+evidence_requirements:
+  - kind: tests
+    description: "The drainer tests pass on the branch; with the drainer file restored from origin/dev the two-refused-classes test fails."
+    command: uv run pytest tests/unit/hooks/test_hook_emit_drainer.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn22575-drainer-calls-probe-node
+    description: "The drainer tests, including the two-refused-classes test, pass."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/unit/hooks/test_hook_emit_drainer.py -q --no-cov
+        cwd: ${OMNI_HOME}/omniclaude
