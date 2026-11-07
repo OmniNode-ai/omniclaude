@@ -62,5 +62,5 @@ dod_evidence:
       - "AC4"
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/ci/test_core_dev_tag_pin_omn18595.py tests/scripts/validator_parity_omn20566/test_node_parity.py -q --no-cov"
+        check_value: "uv run pytest tests/ci/test_core_dev_tag_pin_omn18595.py tests/scripts/validator_parity_omn20566/test_node_parity.py::test_core_node_hooks_pin_the_locked_core_version -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
