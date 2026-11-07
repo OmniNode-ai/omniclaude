@@ -58,6 +58,8 @@ requirements:
     statement: "The gh shim repairs a lane read budget directory or hour file that the lane itself owns and that is read-only, keeps the hour's count, and still refuses with its cause when the file cannot be written."
   - id: req-omn19998-sibling-pins-precommit-hook
     statement: "The internal-sibling-pins handler runs as a local pre-commit hook on the lockfile as well as in the CI job, so a refused sibling pin stops at commit time."
+  - id: req-omn19998-statusline-lock-holder-liveness
+    statement: "The statusline PR-count refresh lock is broken when its recorded holder is gone and stands while the holder is alive, however old the lock directory's mtime reads, so two stale renders run one sweep."
   - id: req-omn19998-public-reusables-leave-lab
     statement: "A public repository's job never reaches a lab runner through a reusable workflow of omniclaude: the fleet route is taken only by a private caller, and the runner label gate runs GitHub-hosted."
 evidence_requirements:
@@ -99,6 +101,14 @@ dod_evidence:
         check_value: "uv run pytest tests/scripts/test_gh_lane_read_fallback.py -q --no-cov"
     binds_ac:
       - "AC18"
+  - id: dod-omn19998-statusline-lock-holder-liveness
+    description: "Two renders against a stale cache run one sweep when every lock directory is back-dated 300 s the instant it is made (the skew behind the 20 == 10 red on Tests (Split 3/5)), a lock whose recorded holder is gone is broken at once, and the original two-render lock test still passes. The live-holder test fails on the merge base with 20 pr-list calls."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_gh_user_shim.py -q --no-cov -k lock"
+    binds_ac:
+      - "AC3"
   - id: dod-omn19998-lane-commit-snapshot-only
     description: "The lane-commit regressions run the hook as pre-commit does, with a stub gh that records any call, a hosted value, a stale snapshot, a snapshot missing a scope and a lane with no snapshot as controls. A lane commit resolves repository visibility and both variable scopes from the snapshot with no gh call."
     source: manual

@@ -40,6 +40,13 @@ LINE3="(no tabs)${RESET}"
 
 NOW=$(date +%s)
 
+# Modification time of a path, in epoch seconds; 0 for a missing path or a non-integer reading.
+# GNU `stat -f` means "filesystem status", not "format", so on Linux the old BSD-first order
+# SUCCEEDED and returned a mount point, and `$((NOW - /))` is an arithmetic syntax error that
+# aborts the rest of a section. Try the GNU form first, then the BSD one, then refuse anything
+# that is not a plain integer.
+mtime_of() { local m; m=$(stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null); case "$m" in ""|*[!0-9]*) m=0 ;; esac; printf '%s' "$m"; }
+
 # Tool detection
 HAS_JQ=0; command -v jq >/dev/null 2>&1 && HAS_JQ=1
 HAS_CURL=0; command -v curl >/dev/null 2>&1 && HAS_CURL=1
@@ -469,9 +476,7 @@ if [ "$HAS_JQ" -eq 1 ]; then
     if [ -z "$EXT_RAW" ] && [ -f "$EXT_CACHE" ]; then
       # Last good output, honoured for an hour so a dead extension cannot
       # freeze a stale picture on screen indefinitely.
-      _em=$(stat -c %Y "$EXT_CACHE" 2>/dev/null || stat -f %m "$EXT_CACHE" 2>/dev/null || echo 0)
-      case "$_em" in ""|*[!0-9]*) _em=0 ;; esac
-      [ $(( NOW - _em )) -le 3600 ] && EXT_RAW=$(cat "$EXT_CACHE" 2>/dev/null)
+      [ $(( NOW - $(mtime_of "$EXT_CACHE") )) -le 3600 ] && EXT_RAW=$(cat "$EXT_CACHE" 2>/dev/null)
     fi
     if [ -n "$EXT_RAW" ]; then
       EXT_OK=1
@@ -503,19 +508,10 @@ if [ "$HAS_JQ" -eq 1 ]; then
   # refresh is about 22 gh calls on the operator's shared GitHub quota.
   PR_TTL="${ONEX_STATUSLINE_PR_TTL:-900}"
   PR_LOCK_STALE=120
+  PR_LOCK_MAX_HOLD=1800
   PR_FRESH=0
-  if [ -f "$PR_CACHE" ]; then
-    # GNU `stat -f` means "filesystem status", not "format", so on Linux the old
-    # BSD-first order SUCCEEDED and returned a mount point. `$((NOW - /))` is an
-    # arithmetic syntax error, which aborts the rest of this section and leaves
-    # line 3 empty — the same disappearance this ticket is about, by a second
-    # route. Try the GNU form first, then the BSD one, then refuse anything that
-    # is not a plain integer.
-    PR_MTIME=$(stat -c %Y "$PR_CACHE" 2>/dev/null || stat -f %m "$PR_CACHE" 2>/dev/null || echo 0)
-    case "$PR_MTIME" in ""|*[!0-9]*) PR_MTIME=0 ;; esac
-    PR_AGE=$((NOW - PR_MTIME))
-    [ "$PR_AGE" -le "$PR_TTL" ] && PR_FRESH=1
-  fi
+  # A missing cache reads as mtime 0, which is older than any TTL, so it is never fresh.
+  [ $(( NOW - $(mtime_of "$PR_CACHE") )) -le "$PR_TTL" ] && PR_FRESH=1
   # OMN-19479: the PR watcher already holds every open PR's base branch in its state file
   # (one reader for the whole host, RULING 2026-09-27T18:05:21Z), so where that file exists
   # the counts come from it with no GitHub call at all. Only a host with no watcher state
@@ -531,24 +527,33 @@ if [ "$HAS_JQ" -eq 1 ]; then
       # the cache is shared, so without a lock each session that saw it stale
       # ran its own 11-repo refresh (about 22 gh calls) at the same moment.
       # mkdir is atomic on every filesystem this runs on and needs no flock(1),
-      # which macOS lacks. A lock older than PR_LOCK_STALE seconds belongs to a
-      # refresher that died and is broken. After taking the lock, freshness is
-      # checked again, so a session that raced the previous refresher's release
-      # does not refresh a cache that was just written.
+      # which macOS lacks. The lock records its holder's pid. A lock older than
+      # PR_LOCK_STALE seconds belongs to a refresher that died and is broken --
+      # unless that holder is still alive, in which case it stands until
+      # PR_LOCK_MAX_HOLD, since a dead refresher's pid can be reused. Age alone
+      # cannot decide this: it compares the lock directory's mtime (the
+      # filesystem's clock) with `date` (the process clock), and on a runner whose
+      # file timestamps trail the process clock a lock taken a millisecond ago
+      # reads as older than PR_LOCK_STALE, the second refresher breaks it, and
+      # both sweep at once -- the `20 == 10` red of
+      # test_lock_two_stale_renders_refresh_once on omniclaude#3201 and #3209.
+      # After taking the lock, freshness is checked again, so a session that
+      # raced the previous refresher's release does not refresh a cache that was
+      # just written.
       pr_lock="${PR_CACHE}.lock"
       if ! mkdir "$pr_lock" 2>/dev/null; then
-        lock_mtime=$(stat -c %Y "$pr_lock" 2>/dev/null || stat -f %m "$pr_lock" 2>/dev/null || echo 0)
-        case "$lock_mtime" in ""|*[!0-9]*) lock_mtime=0 ;; esac
-        [ $(( $(date +%s) - lock_mtime )) -gt "$PR_LOCK_STALE" ] || exit 0
-        rmdir "$pr_lock" 2>/dev/null
+        # The taker may be between its mkdir and its pid write: read twice.
+        holder=$(cat "$pr_lock/pid" 2>/dev/null || { sleep 1; cat "$pr_lock/pid" 2>/dev/null; })
+        if kill -0 "${holder:-x}" 2>/dev/null; then stale="$PR_LOCK_MAX_HOLD"; else stale="$PR_LOCK_STALE"; fi
+        [ $(( $(date +%s) - $(mtime_of "$pr_lock") )) -gt "$stale" ] || exit 0
+        rm -f "$pr_lock/pid" 2>/dev/null; rmdir "$pr_lock" 2>/dev/null
         mkdir "$pr_lock" 2>/dev/null || exit 0
       fi
-      trap 'rmdir "$pr_lock" 2>/dev/null' EXIT
-      if [ -f "$PR_CACHE" ]; then
-        re_mtime=$(stat -c %Y "$PR_CACHE" 2>/dev/null || stat -f %m "$PR_CACHE" 2>/dev/null || echo 0)
-        case "$re_mtime" in ""|*[!0-9]*) re_mtime=0 ;; esac
-        [ $(( $(date +%s) - re_mtime )) -le "$PR_TTL" ] && exit 0
-      fi
+      # $BASHPID is this subshell; `$$` is the render that forked it, gone in milliseconds.
+      # A bash without BASHPID (3.2) records no holder, so the age rule alone decides.
+      [ -n "${BASHPID:-}" ] && printf '%s\n' "$BASHPID" > "$pr_lock/pid" 2>/dev/null
+      trap 'rm -f "$pr_lock/pid" 2>/dev/null; rmdir "$pr_lock" 2>/dev/null' EXIT
+      [ $(( $(date +%s) - $(mtime_of "$PR_CACHE") )) -le "$PR_TTL" ] && exit 0
       counts=""; failed=""
       pr_tmp="${PR_CACHE}.tmp.${BASHPID:-$$}"
       if [ -n "$PR_WATCHER_STATE" ]; then
