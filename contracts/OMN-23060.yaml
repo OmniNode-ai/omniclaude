@@ -1,0 +1,44 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-23060
+title: "The omniclaude Pre-commit Suite fails on pull requests 3211, 3212 and 3213 from one shared cause that a failing control reproduces"
+summary: >
+  The Pre-commit Suite runs the first-party-ref hooks (check-internal-sibling-pins and check-action-pins) over the whole tree. On dev the omnimarket pin trailed the newest omnimarket dev tag by 126 merges and 31.9 hours, past the validator's bound of 50 merges, so both hooks failed with stale_pin on every head cut from dev, including #3211, #3212 and #3213. This change moves the omnimarket pin, its lock and the core hook revs to the sibling lock refresh's tag, and raises the omnimarket pin floor test to that tag so a restored stale pin fails. No bound is changed.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn23060-fix
+    statement: The omnimarket pin on dev stays within the first-party-ref stale_pin bound, and a test fails when the pin is restored to the stale tag.
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: the failing hook on each of the three heads is named (check-internal-sibling-pins and check-action-pins, finding stale_pin on omnimarket) and one shared cause is fixed with a test that fails on the base and passes on the fix -- falsifier: uv run pytest tests/ci/test_omnimarket_pin_floor_omn19998.py -q --no-cov, red at origin/dev with only the test file changed"
+      - id: "AC2"
+        statement: "AC2: the check Pre-commit Suite reads success on the final head of #3211, #3212 and #3213 -- falsifier: the pr-watcher state of each pull request at its final head, read after the landing controller updates it onto the fix"
+evidence_requirements:
+  - kind: tests
+    description: "The floor test passes on the lab from the branch and fails on the lab at origin/dev with only the test file changed"
+    command: "uv run pytest tests/ci/test_omnimarket_pin_floor_omn19998.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn23060-ac1
+    description: "the omnimarket pin, its override and its lock entry carry the tag at or above the floor in the floor test"
+    source: manual
+    binds_ac:
+      - "AC1"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_omnimarket_pin_floor_omn19998.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn23060-ac2
+    description: "pyproject.toml names the omnimarket tag the floor test requires; at origin/dev it names the stale tag, so this check fails there"
+    source: manual
+    binds_ac:
+      - "AC2"
+    checks:
+      - check_type: command
+        check_value: "grep -q -e 'omnimarket.git@dev-20261108030126-b88810068556' pyproject.toml"
+        cwd: "${OMNI_HOME}/omniclaude"

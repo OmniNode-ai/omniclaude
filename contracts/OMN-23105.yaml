@@ -1,0 +1,30 @@
+schema_version: "1.0.0"
+ticket_id: OMN-23105
+title: "omniclaude's repo-evidence caller pins the receipt gate at a tag that holds the pin-train hook rev swap rule"
+summary: >-
+  The repo-evidence caller on dev called the omnibase_core receipt-gate at a tag from before omnibase_core#2284, which
+  counts a pin-train hook rev swap in .pre-commit-config.yaml as pin-only. The caller now pins the first dev-merge tag that
+  holds that rule, and a floor test fails on the previous pin.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: The caller pin sits at or after the first receipt-gate tag that holds the hook rev swap rule, and the floor test fails on the previous pin.
+    command: uv run --frozen pytest tests/ci/test_receipt_gate_caller_hook_rev_floor.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn23105-caller-pin-hook-rev-floor
+    description: The receipt-gate pin is at or after the hook rev swap tag, and the previous pin reads below the floor.
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: uv run --frozen pytest tests/ci/test_receipt_gate_caller_hook_rev_floor.py -q --no-cov
+        cwd: ${OMNI_HOME}/omniclaude
+      - check_type: command
+        check_value: grep -n "receipt-gate.yml@dev-20261108023315-fe0d8082717e" .github/workflows/call-repo-evidence-gate.yml
+        cwd: ${OMNI_HOME}/omniclaude
