@@ -45,5 +45,5 @@ dod_evidence:
       - "AC2"
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/ci/test_tests_shadow_hosted_image_pin.py::test_the_required_test_job_runs_on_the_pinned_image tests/ci/test_tests_shadow_hosted_image_pin.py::test_the_required_test_job_is_the_one_that_renders_the_split_name -q -p no:randomly --no-cov"
+        check_value: "uv run pytest tests/ci/test_tests_shadow_hosted_image_pin.py -k required_test_job -q -p no:randomly --no-cov"
         cwd: "."
