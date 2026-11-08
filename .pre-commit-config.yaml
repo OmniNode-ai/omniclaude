@@ -425,7 +425,7 @@ repos:
   # markers too, with the same spelling. CI runs these same hook ids with
   # `pre-commit run <id> --all-files` (ci.yml, the arch-* jobs).
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: dev-20261106041752-8377609527be
+    rev: dev-20261108033700-7bb5dfe03d7c
     hooks:
       - id: check-no-utcnow
         files: ^src/.*\.py$
