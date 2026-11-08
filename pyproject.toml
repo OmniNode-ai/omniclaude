@@ -301,7 +301,7 @@ omnibase-core = { git = "https://github.com/OmniNode-ai/omnibase_core.git", tag 
 # OMN-20910: pin the Claude API voter merge; it retains the lab roster reader,
 # the larger retry budget and the torch-free default install.
 # OMN-21900: a first-party source names a dev-merge tag, never a sha (first_party_ref validator).
-omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", tag = "dev-20261106064227-f4001283f3bc" }
+omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", tag = "dev-20261108020934-19c87d567a85" }
 # OMN-16979: pin an approved dispatch commit; never substitute a PyPI source,
 # because the dispatch-drift guard verifies direct VCS provenance.
 # OMN-18622 recorded that `sibling-lock-refresh.yml` could never move this
