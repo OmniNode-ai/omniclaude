@@ -2334,16 +2334,29 @@ jobs:
   test:
     name: Tests (Split ${{ matrix.split }}/${{ needs.detect-changes.outputs.split_count }})
     needs: [zone-filter, quality-gate, detect-changes]
-    # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to ubuntu-latest; public forks default to ubuntu-latest
-    runs-on: >-
-      ${{
-        (github.event_name == 'pull_request' &&
-         (github.event.pull_request.head.repo.full_name != github.repository ||
-          (github.event.pull_request.head.repo.full_name == github.repository &&
-           github.event.pull_request.base.ref == 'dev')))
-        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
-        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["ubuntu-latest"]')
-      }}
+    # OMN-22828: pinned off the runner selector, the same change #3199 made to
+    # tests-shadow. ubuntu-latest became Ubuntu 26.04 on 2026-11-06, and on it
+    # tests/scripts/test_gh_user_shim.py::test_lock_two_stale_renders_refresh_once
+    # fails ("20 pr-list calls in 2 group(s)": the mkdir lock stops excluding).
+    # That is the whole of this job's red on #3211 (job 128629007778, labels
+    # ["ubuntu-latest"]) and #3201 (job 128627344288).
+    # The selector cannot carry the pin: OMNI_PUBLIC_PR_RUNS_ON_JSON and
+    # OMNI_TRUSTED_CI_RUNS_ON_JSON are BOTH set to ["ubuntu-latest"] at the
+    # organization AND at this repository, so each `|| '[...]'` literal in the
+    # expression this replaces was dead code and editing it changed nothing.
+    # A stopgap for a floating image, not a statement about routing: when the
+    # lock no longer needs mkdir to be exclusive (OMN-19998, #3211) or the
+    # variables name a fixed image, restore the selector expression:
+    #   runs-on: >-
+    #     ${{
+    #       (github.event_name == 'pull_request' &&
+    #        (github.event.pull_request.head.repo.full_name != github.repository ||
+    #         (github.event.pull_request.head.repo.full_name == github.repository &&
+    #          github.event.pull_request.base.ref == 'dev')))
+    #       && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+    #       || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["ubuntu-latest"]')
+    #     }}
+    runs-on: ubuntu-24.04
     if:  always() && needs.zone-filter.outputs.docs_only != 'true' && needs.quality-gate.result == 'success'
     # OMN-19998: a 5-way shard ran 459 s to 819 s on green dev runs; Split 1/5 of
     # the push run on 9ee6e7f115a2 reached 903 s and the 15-minute ceiling
