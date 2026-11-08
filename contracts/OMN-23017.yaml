@@ -1,0 +1,57 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-23017
+title: "The hook refusal recorder tries each interpreter until one imports its row module, and its fallback row carries the refusal and the failed interpreters"
+summary: "A guard refusal on a lab host reached the ledger as reason=recorder-import-failure because the recorder ran under the first interpreter only, a plugin data venv whose omnimarket predates the row module. The recorder now runs under each candidate interpreter in turn, and the fallback row carries the redacted refusal text, the interpreters that failed and the first line each printed."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn23017-recorder-tries-each-interpreter
+    statement: "The hook refusal recorder tries each candidate interpreter until one imports the row module, and when none does its fallback row carries the refusal text and the interpreters that failed."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: the recorder interpreter chosen on a lab host imports the row module and the row names the real guard reason -- falsifier: uv run --frozen pytest tests/hooks/test_refusal_recorder_interpreter_omn23017.py -q --no-cov -k hook_refusal_recorder_imports_row_module"
+      - id: "AC2"
+        statement: "AC2: when the import cannot succeed the fallback row carries the refusal text and the interpreter path that failed -- falsifier: uv run --frozen pytest tests/hooks/test_refusal_recorder_interpreter_omn23017.py -q --no-cov -k hook_refusal_fallback_row_carries_reason_and_interpreter"
+      - id: "AC3"
+        statement: "AC3: the regression test built from the recorded fallback rows passes on the fix -- falsifier: uv run --frozen pytest tests/hooks/test_refusal_recorder_interpreter_omn23017.py -q --no-cov -k hook_refusal_recorder_import_failure_fixture"
+evidence_requirements:
+  - kind: tests
+    description: "The recorder passes over an interpreter that cannot import the row module and writes a row naming the real guard reason"
+    command: "uv run --frozen pytest tests/hooks/test_refusal_recorder_interpreter_omn23017.py -q --no-cov -k hook_refusal_recorder_imports_row_module"
+  - kind: tests
+    description: "The fallback row carries the redacted refusal text and the interpreter paths that failed"
+    command: "uv run --frozen pytest tests/hooks/test_refusal_recorder_interpreter_omn23017.py -q --no-cov -k hook_refusal_fallback_row_carries_reason_and_interpreter"
+  - kind: tests
+    description: "Replaying the recorded fallback rows of 2026-11-07 writes the real reason, and fails on the code before the fix"
+    command: "uv run --frozen pytest tests/hooks/test_refusal_recorder_interpreter_omn23017.py -q --no-cov -k hook_refusal_recorder_import_failure_fixture"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-ac1-recorder-imports-row-module
+    description: "AC1: the recorder interpreter chosen on a lab host imports the row module and the row names the real guard reason"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run --frozen pytest tests/hooks/test_refusal_recorder_interpreter_omn23017.py -q --no-cov -k hook_refusal_recorder_imports_row_module"
+    binds_ac:
+      - "AC1"
+  - id: dod-ac2-fallback-row-reason-and-interpreter
+    description: "AC2: when the import cannot succeed the fallback row carries the refusal text and the interpreter path that failed"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run --frozen pytest tests/hooks/test_refusal_recorder_interpreter_omn23017.py -q --no-cov -k hook_refusal_fallback_row_carries_reason_and_interpreter"
+    binds_ac:
+      - "AC2"
+  - id: dod-ac3-recorded-rows-fixture
+    description: "AC3: the regression test built from the recorded fallback rows passes on the fix"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run --frozen pytest tests/hooks/test_refusal_recorder_interpreter_omn23017.py -q --no-cov -k hook_refusal_recorder_import_failure_fixture"
+    binds_ac:
+      - "AC3"
