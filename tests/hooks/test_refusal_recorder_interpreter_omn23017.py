@@ -18,7 +18,10 @@ venv) with only the ledger writer and the failing interpreters replaced.
 from __future__ import annotations
 
 import json
+import shutil
 import sys
+import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -111,10 +114,26 @@ def test_hook_refusal_recorder_runs_the_first_working_interpreter_once(
     assert ran.read_text(encoding="utf-8").count("x") == 1
 
 
+@pytest.fixture
+def short_root() -> Iterator[Path]:
+    """A scratch root with a short path.
+
+    The fallback row's interpreter cell is cut at 400 characters. A lab host
+    that keeps pytest's temp root under a long run directory puts the three
+    interpreter paths past that cut, so the last one is cut off the row.
+    """
+    root = Path(tempfile.mkdtemp(prefix="hr", dir="/tmp"))
+    try:
+        yield root
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_hook_refusal_fallback_row_carries_reason_and_interpreter(
-    tmp_path: Path,
+    short_root: Path,
 ) -> None:
     """AC2: when no interpreter can import the row module the row names the refusal and the failures."""
+    tmp_path = short_root
     box = Box(tmp_path)
     first = _stale_python(tmp_path / "data-venv-python3")
     second = _stale_python(
