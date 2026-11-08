@@ -31,7 +31,7 @@ CORE_GIT = "https://github.com/OmniNode-ai/omnibase_core.git"
 # The release whose cascade PRs could not land; the pin must carry at least it.
 FLOOR = Version("0.47.61")
 # The core dev merge tag this bump moves the pin to; a later bump raises it.
-PIN_FLOOR_TAG = "dev-20261108014124-2fe30fd9dc47"
+PIN_FLOOR_TAG = "dev-20261108164157-61505c5cac1f"
 # A dev merge tag later than any release, as core's dev always has one.
 LATER_DEV_TAG = "dev-29991231235959-000000000000"
 
