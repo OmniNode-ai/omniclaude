@@ -1,0 +1,32 @@
+{
+  "sweep_non_pr_events": [
+    "create",
+    "delete",
+    "deployment",
+    "deployment_status",
+    "fork",
+    "merge_group",
+    "page_build",
+    "public",
+    "push",
+    "registry_package",
+    "release",
+    "repository_dispatch",
+    "schedule",
+    "watch",
+    "workflow_dispatch"
+  ],
+  "soft_allowlist": [
+    "AI-Slop Pattern Check (strict, PR diff)",
+    "Build Docker Image",
+    "Deploy to Production",
+    "Deploy to Staging",
+    "Markdown Link Check",
+    "Merge Test Coverage"
+  ],
+  "push_reporting": [
+    "Hook Edge Lane Gate",
+    "Hook Inventory Gate",
+    "Lane Identity Gate"
+  ]
+}
