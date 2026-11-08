@@ -1,11 +1,9 @@
----
 schema_version: "1.0.0"
 ticket_id: OMN-22828
 title: "omniclaude's test jobs run on the Ubuntu 24.04 hosted image, so the shadow tests stop failing on 26.04"
 summary: >
-  The tests+coverage (shadow) job ran on ubuntu-latest, which became Ubuntu 26.04
-  on 2026-11-06; test_gh_user_shim failed intermittently on it. The job names
-  ubuntu-24.04, and a test refuses a floating image on it.
+  The tests+coverage (shadow) job ran on ubuntu-latest, which became Ubuntu 26.04 on 2026-11-06; test_gh_user_shim failed intermittently on it. The job names ubuntu-24.04, and a test refuses a floating image on it.
+
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
@@ -15,6 +13,12 @@ requirements:
     acceptance:
       - id: "AC1"
         statement: "AC1: omniclaude's test jobs name ubuntu-24.04 and a check refuses a floating image in them, with a failing control on origin's workflow -- falsifier: uv run pytest of the workflow image pin test"
+  - id: req-omn22828-required-test-job-pinned
+    statement: >-
+      The REQUIRED Tests (Split N/5) job in ci.yml runs on ubuntu-24.04 too. #3199 pinned tests-shadow and left this job resolving ubuntu-latest through the runner selector, where it kept failing the same lock test on two open pull requests. The selector cannot carry the pin: OMNI_PUBLIC_PR_RUNS_ON_JSON and OMNI_TRUSTED_CI_RUNS_ON_JSON are both set to ["ubuntu-latest"] at the organization and at this repository, so the expression's own fallback literals are dead code.
+    acceptance:
+      - id: "AC2"
+        statement: "AC2: the ci.yml job whose name renders Tests (Split N/5) names ubuntu-24.04, and the check that asserts it is bound to that job rather than to a job name that would pass while fixing nothing -- falsifier: uv run pytest tests/ci/test_tests_shadow_hosted_image_pin.py -q -p no:randomly --no-cov"
 evidence_requirements:
   - kind: tests
     description: "The workflow image pin test passes on the branch"
@@ -32,4 +36,14 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/ci/test_tests_shadow_hosted_image_pin.py -q --no-cov"
+        cwd: "."
+  - id: dod-omn22828-required-test-job-pinned
+    description: >-
+      The required Tests (Split N/5) job names ubuntu-24.04, and the assertion is bound to the job that renders that name so pinning the wrong job cannot pass it. Negative control measured at this merge base: with origin/dev's ci.yml in place the suite is 1 failed, 5 passed, and the failure names the selector expression it read. At this head it is 6 passed.
+    source: manual
+    binds_ac:
+      - "AC2"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_tests_shadow_hosted_image_pin.py::test_the_required_test_job_runs_on_the_pinned_image tests/ci/test_tests_shadow_hosted_image_pin.py::test_the_required_test_job_is_the_one_that_renders_the_split_name -q -p no:randomly --no-cov"
         cwd: "."
