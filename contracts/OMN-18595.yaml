@@ -53,12 +53,9 @@ dod_evidence:
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC3"]
   - id: "dod-omn18595-core-dev-20261102043243-pin"
-    description: "AC1: this bump reads omnibase-core from dev merge tag dev-20261102043243-124b1e99af99 in pyproject.toml and uv.lock alike, and the pin tests pass"
+    description: "AC1: the omnibase-core pin is no older than the dev merge tag dev-20261102043243-124b1e99af99 (superseded by later bumps, so the floor test judges it, not an exact-tag grep)"
     source: "manual"
     checks:
-      - check_type: "command"
-        check_value: "grep -c 'dev-20261102043243-124b1e99af99' pyproject.toml uv.lock"
-        cwd: "${OMNI_HOME}/omniclaude"
       - check_type: "test_passes"
         check_value: "uv run pytest tests/ci/test_core_dev_tag_pin_omn18595.py -q --no-cov -k bumped_dev_merge_tag"
         cwd: "${OMNI_HOME}/omniclaude"
