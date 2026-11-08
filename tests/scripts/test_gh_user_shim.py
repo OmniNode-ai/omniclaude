@@ -857,6 +857,18 @@ def _refresh_diagnosis(rows: list[tuple[str, str, str]]) -> str:
     return f"{len(rows)} pr-list calls in {len(groups)} group(s): " + " || ".join(parts)
 
 
+def _fs_clock_skew(directory: Path) -> str:
+    """Seconds by which a file made now carries an mtime off the process clock.
+
+    The statusline lock reads a lock directory's mtime against ``date``, so a
+    filesystem whose timestamps trail the process clock makes a fresh lock read old.
+    A failure message that carries this number says whether that is the host's case.
+    """
+    probe = directory / "fs-clock-probe"
+    probe.mkdir()
+    return f"fs_clock_skew_s={time.time() - probe.stat().st_mtime:.3f}"
+
+
 def _render(env: dict[str, str], cache: Path, bin_dir: Path) -> subprocess.Popen[str]:
     e = dict(env)
     e.update(
@@ -942,7 +954,190 @@ def test_lock_two_stale_renders_refresh_once(
         stamp, _, argv = rest.partition("\t")
         rows.append((pid, stamp, argv))
     list_calls = [r for r in rows if r[2].startswith("pr list")]
-    assert len(list_calls) == 10, _refresh_diagnosis(list_calls)
+    assert len(list_calls) == 10, (
+        _refresh_diagnosis(list_calls) + f"; {_fs_clock_skew(tmp_path)}"
+    )
+    assert json.loads(cache.read_text())["status"] == "ok"
+    assert not lock.exists()
+
+
+@pytest.mark.unit
+def test_lock_held_by_a_live_refresher_is_not_broken_for_looking_old(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    """A lock whose mtime reads older than PR_LOCK_STALE still has a live holder.
+
+    The lock's age is the lock directory's mtime against ``date``. Those are two
+    clocks: on a runner whose file timestamps trail the process clock, a lock the
+    first refresher took a millisecond ago reads as older than PR_LOCK_STALE, the
+    second refresher breaks it, and both sweep at once -- the ``20 == 10`` red of
+    test_lock_two_stale_renders_refresh_once that failed omniclaude#3201 and
+    #3209 with two overlapping pid groups. This reproduces that skew on any host
+    by back-dating every ``*.lock`` directory the instant it is made, and demands
+    the single refresh anyway: the holder is alive, so the lock stands.
+    """
+    if shutil.which("jq") is None:
+        pytest.skip("statusline needs jq")
+    real_mkdir = shutil.which("mkdir")
+    assert real_mkdir is not None
+    bin_dir = tmp_path / "slbin"
+    bin_dir.mkdir()
+    refresh_log = tmp_path / "refresh.log"
+    _write_exec(
+        bin_dir / "gh",
+        "#!/bin/bash\n"
+        f'printf \'%s\\n\' "$*" >> "{refresh_log}"\n'
+        "sleep 0.2\n"
+        'echo \'["dev","main"]\'\n',
+    )
+    # mkdir that stamps a lock directory 300 s old (GNU date -d, then BSD date -r).
+    _write_exec(
+        bin_dir / "mkdir",
+        "#!/bin/bash\n"
+        f'{real_mkdir} "$@" || exit $?\n'
+        'for a in "$@"; do\n'
+        '  case "$a" in\n'
+        "    *.lock)\n"
+        "      t=$(( $(date +%s) - 300 ))\n"
+        '      s=$(date -d "@$t" +%Y%m%d%H%M.%S 2>/dev/null || date -r "$t" +%Y%m%d%H%M.%S)\n'
+        '      touch -t "$s" "$a" ;;\n'
+        "  esac\n"
+        "done\n",
+    )
+    cache = tmp_path / "pr-counts.json"
+    cache.write_text(
+        '{"schema":2,"refreshed_at":1,"status":"ok","failed":[],"repos":{}}'
+    )
+    old = time.time() - 3600
+    os.utime(cache, (old, old))
+
+    procs = [_render(env, cache, bin_dir) for _ in range(2)]
+    for p in procs:
+        p.wait(timeout=60)
+    lock = Path(f"{cache}.lock")
+    deadline = time.time() + 60
+    while time.time() < deadline and (
+        lock.exists() or time.time() - cache.stat().st_mtime > 600
+    ):
+        time.sleep(0.25)
+    time.sleep(0.5)
+
+    calls = refresh_log.read_text().splitlines() if refresh_log.exists() else []
+    list_calls = [c for c in calls if c.startswith("pr list")]
+    assert len(list_calls) == 10, f"{len(list_calls)} pr-list calls, wanted one sweep"
+    assert json.loads(cache.read_text())["status"] == "ok"
+    assert not lock.exists()
+
+
+@pytest.mark.unit
+def test_lock_is_decided_by_the_pid_claim_when_mkdir_is_not_atomic(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    """Two refreshers whose mkdir both succeed still sweep once.
+
+    Ubuntu 26.04 (the hosted runner image) ships Rust coreutils. Its mkdir, run by
+    two processes in the same microsecond, returned success to both (729 of 3000
+    paired runs on ubuntu:26.04), so the mkdir lock admitted two refreshers 250 ns
+    apart: the ``20 == 10`` red of test_lock_two_stale_renders_refresh_once on the
+    hosted Tests (Split 3/5) job, with ``fs_clock_skew_s=0.001``. This stands in for
+    that mkdir with one that reports success for a directory that already exists, on
+    any host, and demands the single sweep anyway: the holder's pid file is made with
+    a noclobber redirect, which only one process can win.
+    """
+    if shutil.which("jq") is None:
+        pytest.skip("statusline needs jq")
+    real_mkdir = shutil.which("mkdir")
+    assert real_mkdir is not None
+    bin_dir = tmp_path / "slbin"
+    bin_dir.mkdir()
+    refresh_log = tmp_path / "refresh.log"
+    _write_exec(
+        bin_dir / "gh",
+        "#!/bin/bash\n"
+        f'printf \'%s\\n\' "$*" >> "{refresh_log}"\n'
+        "sleep 0.2\n"
+        'echo \'["dev","main"]\'\n',
+    )
+    # A mkdir that succeeds for a directory that exists, as the Rust one did under the race.
+    _write_exec(
+        bin_dir / "mkdir",
+        "#!/bin/bash\n"
+        'for a in "$@"; do\n'
+        '  case "$a" in\n'
+        "    -*) ;;\n"
+        f'    *) {real_mkdir} -p "$a" || exit $? ;;\n'
+        "  esac\n"
+        "done\n",
+    )
+    cache = tmp_path / "pr-counts.json"
+    cache.write_text(
+        '{"schema":2,"refreshed_at":1,"status":"ok","failed":[],"repos":{}}'
+    )
+    old = time.time() - 3600
+    os.utime(cache, (old, old))
+
+    procs = [_render(env, cache, bin_dir) for _ in range(2)]
+    for p in procs:
+        p.wait(timeout=60)
+    lock = Path(f"{cache}.lock")
+    deadline = time.time() + 60
+    while time.time() < deadline and (
+        lock.exists() or time.time() - cache.stat().st_mtime > 600
+    ):
+        time.sleep(0.25)
+    time.sleep(0.5)
+
+    calls = refresh_log.read_text().splitlines() if refresh_log.exists() else []
+    list_calls = [c for c in calls if c.startswith("pr list")]
+    assert len(list_calls) == 10, f"{len(list_calls)} pr-list calls, wanted one sweep"
+    assert json.loads(cache.read_text())["status"] == "ok"
+    assert not lock.exists()
+
+
+@pytest.mark.unit
+def test_lock_of_a_dead_refresher_is_still_broken_once_stale(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    """The positive control: a stale lock whose holder is gone is taken over.
+
+    The lock is 300 s old and its recorded holder is a pid that no longer exists, so
+    the next refresher breaks it and sweeps once. Without this, a lock that outlived
+    a killed refresher would pass the live-holder test above by never breaking at all.
+    """
+    if shutil.which("jq") is None:
+        pytest.skip("statusline needs jq")
+    bin_dir = tmp_path / "slbin"
+    bin_dir.mkdir()
+    refresh_log = tmp_path / "refresh.log"
+    _write_exec(
+        bin_dir / "gh",
+        "#!/bin/bash\n"
+        f'printf \'%s\\n\' "$*" >> "{refresh_log}"\n'
+        'echo \'["dev","main"]\'\n',
+    )
+    cache = tmp_path / "pr-counts.json"
+    cache.write_text(
+        '{"schema":2,"refreshed_at":1,"status":"ok","failed":[],"repos":{}}'
+    )
+    old = time.time() - 3600
+    os.utime(cache, (old, old))
+    gone = subprocess.Popen(["true"])
+    gone.wait()
+    lock = Path(f"{cache}.lock")
+    lock.mkdir()
+    (lock / "pid").write_text(f"{gone.pid}\n")
+    os.utime(lock, (time.time() - 300, time.time() - 300))
+
+    _render(env, cache, bin_dir).wait(timeout=60)
+    deadline = time.time() + 60
+    while time.time() < deadline and (
+        lock.exists() or time.time() - cache.stat().st_mtime > 600
+    ):
+        time.sleep(0.25)
+    time.sleep(0.5)
+
+    calls = refresh_log.read_text().splitlines() if refresh_log.exists() else []
+    assert len([c for c in calls if c.startswith("pr list")]) == 10
     assert json.loads(cache.read_text())["status"] == "ok"
     assert not lock.exists()
 
