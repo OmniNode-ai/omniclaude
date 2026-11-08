@@ -10,7 +10,7 @@ resolution-markers = [
 
 [manifest]
 overrides = [
-    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=dev-20261108000826-262c18441b1f" },
+    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=dev-20261108014124-2fe30fd9dc47" },
     { name = "omnibase-infra", specifier = ">=0.38.29,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
     { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?tag=dev-20261108030126-b88810068556" },
@@ -1683,7 +1683,7 @@ wheels = [
 [[package]]
 name = "omnibase-core"
 version = "0.47.69"
-source = { git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=dev-20261108000826-262c18441b1f#262c18441b1fd52f86fee9a6b3e5dee89aa2631f" }
+source = { git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=dev-20261108014124-2fe30fd9dc47#2fe30fd9dc47fcf0e25bead887ea7505b39612b9" }
 dependencies = [
     { name = "blake3" },
     { name = "click" },
@@ -1907,7 +1907,7 @@ requires-dist = [
     { name = "discord-py", marker = "extra == 'discord'", specifier = ">=2.3.0,<3.0.0" },
     { name = "discord-py", marker = "extra == 'full'", specifier = ">=2.3.0,<3.0.0" },
     { name = "httpx", specifier = ">=0.27.0" },
-    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=dev-20261108000826-262c18441b1f" },
+    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=dev-20261108014124-2fe30fd9dc47" },
     { name = "omnibase-infra", specifier = ">=0.38.29,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
     { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?tag=dev-20261108030126-b88810068556" },
