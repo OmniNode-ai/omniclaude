@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -39,7 +40,7 @@ from omniclaude.nodes.node_hook_refusal_record_effect.handlers import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-ERROR_GUARD = REPO_ROOT / "plugins" / "onex" / "hooks" / "scripts" / "error-guard.sh"
+HOOKS_SRC = REPO_ROOT / "plugins" / "onex" / "hooks"
 
 ROUTE_LINE = (
     "ROUTE: band=B2 score=9 dims=S1A1R1V2N2C1J1 dest=lab model=sonnet effort=high"
@@ -57,21 +58,27 @@ _FAKE_UV = (
 )
 
 #: An interpreter that cannot import the recorder's modules, as the guard
-#: runner's did: the message is the one CPython and the recorder itself print.
+#: runner's did: the message is the one CPython prints for ``-m``. It starts
+#: for anything else, as every real interpreter does, so the standard-library
+#: file that writes the fallback row can run under it (OMN-23017).
 _BROKEN_PYTHON = (
     "#!/bin/sh\n"
-    'echo "python3: Error while finding module specification for '
+    'case " $* " in\n'
+    '  *" -m "*)\n'
+    '    echo "python3: Error while finding module specification for '
     "'omniclaude.nodes.node_hook_refusal_record_effect.handlers."
     "handler_hook_refusal_record' (ModuleNotFoundError: No module named "
     "'omniclaude')\" >&2\n"
-    "exit 1\n"
+    "    exit 1;;\n"
+    "esac\n"
+    f'exec "{sys.executable}" "$@"\n'
 )
 
 _GUARD_SHAPE = """
 _OMNICLAUDE_HOOK_NAME="${TEST_HOOK_NAME}"
 source "${TEST_ERROR_GUARD}"
 TOOL_INFO=$(cat)
-hook_record_refusal "worktree path outside canonical root: /x/y" "BLOCKED: test refusal"
+hook_record_refusal "worktree path outside canonical root: /x/y" "${TEST_DETAIL:-BLOCKED: test refusal}"
 trap - EXIT
 exit 0
 """
@@ -88,6 +95,20 @@ class Box:
 
     def __init__(self, tmp_path: Path) -> None:
         self.tmp = tmp_path
+        # A copy of the hooks tree whose repository root holds no .venv: the
+        # seam tries the root's venv among its interpreters (OMN-23017), and
+        # the checkout under test has one that imports the recorder.
+        self.hooks = tmp_path / "plugin_root" / "plugins" / "onex" / "hooks"
+        shutil.copytree(
+            HOOKS_SRC, self.hooks, ignore=shutil.ignore_patterns("__pycache__")
+        )
+        # The fallback row's writer is found by path in the source tree beside
+        # the plugin (OMN-23017).
+        (tmp_path / "plugin_root" / "src").symlink_to(REPO_ROOT / "src")
+        # Nothing on PATH imports the recorder unless a test says so.
+        bare = tmp_path / "python3"
+        bare.write_text(_BROKEN_PYTHON, encoding="utf-8")
+        bare.chmod(0o755)
         self.home = tmp_path / "registry_root"
         self.ledger = self.home / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md"
         self.ledger.parent.mkdir(parents=True)
@@ -111,14 +132,16 @@ class Box:
             "ONEX_HOOK_REFUSAL_STATE_DIR": str(self.tmp / "refusal_state"),
             "ONEX_STATE_DIR": str(self.home / ".onex_state"),
             "TMPDIR": str(self.tmp),
-            "TEST_ERROR_GUARD": str(ERROR_GUARD),
+            "TEST_ERROR_GUARD": str(self.hooks / "scripts" / "error-guard.sh"),
             "TEST_HOOK_NAME": "pre_tool_use_worktree_guard.sh",
         }
         env.update(extra)
         return env
 
-    def refuse(self, extra_env: dict[str, str]) -> list[str]:
+    def refuse(self, extra_env: dict[str, str], detail: str | None = None) -> list[str]:
         """Fire one refusal through the shell seam; return the FRICTION rows."""
+        if detail is not None:
+            extra_env = {**extra_env, "TEST_DETAIL": detail}
         result = subprocess.run(
             ["bash", "-c", _GUARD_SHAPE],
             input=json.dumps({"tool_name": "Bash", "tool_input": {"command": "ls"}}),
@@ -166,7 +189,9 @@ def test_hook_refusal_recorder_import_failure_recorded(tmp_path: Path) -> None:
     assert _cell(row, "class") == "refusal"
     assert _cell(row, "lane") == "omn20883-tix"
     assert _cell(row, "lane_source") == "fallback-env"
-    assert "BLOCKED: test refusal" not in row  # no redactor here: detail withheld
+    # OMN-23017: the row carries the refusal text and the interpreter that failed.
+    assert "BLOCKED: test refusal" in _cell(row, "detail")
+    assert str(broken) in _cell(row, "interpreter")
 
 
 def test_hook_refusal_recorder_prefers_plugin_python(tmp_path: Path) -> None:
