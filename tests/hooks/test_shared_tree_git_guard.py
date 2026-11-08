@@ -40,6 +40,8 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -99,10 +101,82 @@ def _init(repo: Path) -> None:
     _git("-C", str(repo), "commit", "-q", "--allow-empty", "-m", "init")
 
 
+#: Lane identity the surrounding process may carry. Every test below asserts on
+#: the guard's decision outside a lane unless it sets a lane itself, so none of
+#: these may leak in from the lane that runs the suite (OMN-23127: a lane
+#: committing to this repository ran hook-preflight, which runs this file, and
+#: the lane's own fetch and ONEX_LANE guards refused the commands under test).
+_AMBIENT_LANE_ENV: tuple[str, ...] = (
+    "ONEX_LANE",
+    "ONEX_LANE_ID",
+    "ONEX_LANE_GUARD",
+    "ONEX_LANE_GUARD_DEADLINE",
+    "ONEX_LANE_HOST",
+    "ONEX_REMOTE_LANE",
+    "ONEX_REMOTE_LANE_HOST",
+    "ONEX_PARENT_LANE",
+    "ONEX_WORKTREES_ROOT",
+)
+
+
 @pytest.fixture(autouse=True)
 def _isolate_ambient_lane(monkeypatch: pytest.MonkeyPatch) -> None:
-    for name in load_policy(POLICY_PATH).fetch_lane_envs:
+    for name in (*load_policy(POLICY_PATH).fetch_lane_envs, *_AMBIENT_LANE_ENV):
         monkeypatch.delenv(name, raising=False)
+
+
+def _is_lane_path(path: Path) -> bool:
+    """Whether the guard's lane-path arm would read `path` as a lane workdir."""
+    markers = load_policy(POLICY_PATH).fetch_lane_path_markers
+    return any(
+        marker in str(candidate).rstrip("/") + "/"
+        for candidate in (path, path.resolve())
+        for marker in markers
+    )
+
+
+@pytest.fixture
+def tmp_path() -> Iterator[Path]:
+    """A scratch directory that is never under a lane workdir.
+
+    pytest's own `tmp_path` follows the temp root of the process, and a lane
+    runs with that root under its `lab-run/runs` workdir. The guard reads such
+    a cwd as a lane (OMN-20495 fetch arm, OMN-18645 publishing arm) whatever
+    the environment says, so every sanctioned-command test refused. The
+    directory comes from the first system temp root that is not a lane path;
+    when none is, the test fails: it never runs against a lane path.
+    """
+    for root in dict.fromkeys((tempfile.gettempdir(), "/tmp", "/var/tmp")):
+        if Path(root).is_dir() and not _is_lane_path(Path(root)):
+            break
+    else:
+        pytest.fail("no system temp root outside a lane workdir")
+    path = Path(tempfile.mkdtemp(prefix="shared-tree-git-guard-", dir=root)).resolve()
+    assert not _is_lane_path(path), path
+    try:
+        yield path
+    finally:
+        shutil.rmtree(path, ignore_errors=True)
+
+
+def test_scratch_is_hermetic_whatever_lane_runs_the_suite(
+    tmp_path: Path, registry: Path, policy: Policy, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The fixtures above hold when the surrounding process is a lane."""
+    assert not _is_lane_path(tmp_path)
+    for name in _AMBIENT_LANE_ENV:
+        assert name not in os.environ, name
+    allowed = evaluate_bash_command(
+        "git fetch origin", policy, cwd=registry, registry_root=registry
+    )
+    assert not allowed.blocked, allowed.reason
+    # Positive control: the isolation removes ambient state, not the guard. A
+    # lane set inside the test refuses the same command.
+    monkeypatch.setenv("ONEX_LANE", "some-lane")
+    refused = evaluate_bash_command(
+        "git fetch origin", policy, cwd=registry, registry_root=registry
+    )
+    assert refused.blocked
 
 
 @pytest.fixture
