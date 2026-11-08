@@ -800,43 +800,32 @@ def quarantine_record(
 
 
 def _broker_answers_behind_the_head(
-    pending: list[journal.JournalEntry], emitter: _Emitter
+    pending: list[journal.JournalEntry],
+    emitter: _Emitter,
+    refused_event_types: tuple[str, ...] = (),
 ) -> journal.JournalEntry | None:
-    """Publish the record BEHIND the head. Returns it on success, else None.
+    """Publish the records the probe node names, in order; return the first that goes out.
 
-    THE WHOLE GUARD IS HERE, and it is why this is not "skip anything that
-    fails". A failure count alone cannot tell a poison record from an
-    unreachable broker: both produce an unbounded run of failures at the head.
-    Under a count-only rule a long outage would dead-letter the entire backlog
-    one record at a time, which is the opposite of what this exists to do.
-
-    So unpublishability is MEASURED rather than inferred. If the next record
-    goes out, the broker is reachable and the head is genuinely refused. If it
-    fails too, the fault is not specific to the head and nothing is moved.
-
-    Deliberately NOT keyed on the exception type. The transport masked a
-    permanent ACL refusal as a TimeoutError for three days (OMN-19073), so a
-    guard that trusted an error type would have been the one thing that could
-    not see the outage it exists to end. A publish that succeeds is evidence no
-    classifier can fake.
+    Which records prove the broker reachable is the node's choice, with the reasons (OMN-19998).
+    A publish that succeeds is the only evidence; an exception type is never trusted (OMN-19073).
     """
-    if len(pending) < 2:
-        return None
-    # The probe asks about a DIFFERENT event class when the batch holds one
-    # (OMN-17427). A record of the head's own class fails for the head's own
-    # reason, so publishing it measures the class, not the broker: a burst of
-    # one refused class read as "broker unreachable" for six and a half hours
-    # on 2026-10-06/07 and held 24,530 authorized records behind it. When the
-    # whole batch is the head's class, the record directly behind is still the
-    # probe, which keeps a dead broker a stall rather than a dead-letter run.
-    head_type = pending[0].record.event_type
-    candidate = next(
-        (entry for entry in pending[1:] if entry.record.event_type != head_type),
-        pending[1],
+    from omnimarket.nodes.node_hook_drain_probe_compute.handlers.handler_hook_drain_probe import (
+        HandlerHookDrainProbe,
     )
-    if emitter.publish(candidate.record):
-        return candidate
-    return None
+    from omnimarket.nodes.node_hook_drain_probe_compute.models import (
+        ModelHookDrainProbeRequest,
+    )
+
+    chosen = HandlerHookDrainProbe().handle(
+        ModelHookDrainProbeRequest(
+            pending_event_types=tuple(e.record.event_type for e in pending),
+            refused_event_types=refused_event_types,
+        )
+    )
+    return next(
+        (pending[i] for i in chosen.probe_order if emitter.publish(pending[i].record)),
+        None,
+    )
 
 
 def drain_once(
@@ -951,7 +940,7 @@ def drain_once(
         if index > 0 and proven_by is not None:
             continue
         if index == 0 and (proven_by is not None or failures >= quarantine_after):
-            probe = _broker_answers_behind_the_head(pending, emitter)
+            probe = _broker_answers_behind_the_head(pending, emitter, tuple(refused))
             if probe is not None:
                 journal.ack(probe)
                 counts.pop(probe.path.name, None)

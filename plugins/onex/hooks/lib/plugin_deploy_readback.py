@@ -816,7 +816,7 @@ def read_git_state(root: pathlib.Path, fetch: bool = True) -> ModelGitState:
             if len(parts) == 2 and all(p.isdigit() for p in parts):
                 ahead, behind = int(parts[0]), int(parts[1])
 
-    rc_status, status = _git(root, "status", "--porcelain", "--", ".")
+    rc_status, status = _git(root, "--no-optional-locks", "status", "--porcelain", ".")
     dirty = (
         len([ln for ln in status.splitlines() if ln.strip()])
         if rc_status == 0

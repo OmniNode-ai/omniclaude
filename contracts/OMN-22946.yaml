@@ -1,0 +1,42 @@
+schema_version: 1.0.0
+ticket_id: OMN-22946
+title: A fresh pull request event starts no reviewer job on a lab runner, and a planted reviewer trigger fails the check
+summary: The reviewer triggers were removed in this repository, so no reviewer job reaches a lab runner when a head updates. tests/unit/test_reviewer_trigger_absent.py keeps it so. For each event a pull request raises, against each landing branch, it reads the workflow files and names every reviewer job that would start and does not run on a provably GitHub-hosted runner. It is red on the workflow as it stood before the removal and green on the current one, and red under a named injected break that treats every runner as hosted while a trigger is planted.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+- id: req-omn22946-reviewer-trigger-absent
+  statement: No pull request event starts a reviewer job on a runner that is not provably GitHub-hosted, and a planted reviewer trigger is named by the check.
+  acceptance:
+  - id: AC1
+    statement: 'AC1: a fresh pull-request event starts no reviewer job on a lab runner, read from the workflow files for every pull request event against dev and main -- falsifier: uv run --frozen pytest tests/unit/test_reviewer_trigger_absent.py -q -k fresh_event_no_lab_job'
+  - id: AC2
+    statement: 'AC2: a planted reviewer trigger on a pull_request workflow fails the check -- falsifier: uv run --frozen pytest tests/unit/test_reviewer_trigger_absent.py -q -k planted_trigger'
+evidence_requirements:
+- kind: tests
+  description: The reviewer trigger absence tests with their positive and negative controls
+  command: uv run --frozen pytest tests/unit/test_reviewer_trigger_absent.py -q
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+- id: dod-omn22946-fresh-event-no-lab-job
+  description: No pull request event starts a reviewer job on a lab runner.
+  source: manual
+  binds_ac:
+  - AC1
+  checks:
+  - check_type: test_passes
+    check_value: uv run --frozen pytest tests/unit/test_reviewer_trigger_absent.py -q -k fresh_event_no_lab_job
+    cwd: .
+- id: dod-omn22946-planted-trigger
+  description: A planted reviewer trigger is named by the check, and its negative controls are not.
+  source: manual
+  binds_ac:
+  - AC2
+  checks:
+  - check_type: test_passes
+    check_value: uv run --frozen pytest tests/unit/test_reviewer_trigger_absent.py -q -k planted_trigger
+    cwd: .

@@ -1000,6 +1000,39 @@ def test_a_run_of_one_refused_class_does_not_wedge_the_head(jdir: Path) -> None:
     assert len(quarantined) == 3
 
 
+class RefusingManyEmitter:
+    """Refuses several event types, as a broker login with no grant on two classes does."""
+
+    def __init__(self, *refused_event_types: str) -> None:
+        self.published: list[str] = []
+        self._refused = set(refused_event_types)
+
+    def publish(self, record: journal.JournalRecord) -> bool:
+        if record.event_type in self._refused:
+            return False
+        self.published.append(record.event_id)
+        return True
+
+
+def test_two_refused_classes_ahead_of_an_authorized_one_do_not_wedge_the_head(
+    jdir: Path,
+) -> None:
+    """OMN-19998: h053 and h051 jammed on prompt.submitted then content.captured.
+
+    A probe that asks one other class asked content.captured, which fails for its own
+    reason, so the head stayed and the authorized records behind both stayed
+    unpublished. The probe node asks up to three different classes.
+    """
+    for event_type in ("denied.one", "denied.two", "ok.class", "ok.class"):
+        journal.append(jdir, event_type=event_type, payload={}, correlation_id=None)
+
+    emitter = RefusingManyEmitter("denied.one", "denied.two")
+    _drain_n_cycles(jdir, emitter, drainer.DEFAULT_QUARANTINE_AFTER_FAILURES * 4)
+
+    assert len(emitter.published) == 2, emitter.published
+    assert journal.list_pending(jdir) == []
+
+
 def test_a_same_class_backlog_on_a_dead_broker_still_moves_nothing(
     jdir: Path,
 ) -> None:

@@ -11,7 +11,6 @@ rewrite goes through omnimarket's ``node_dev_tag_pin_mover_compute``.
 
 from __future__ import annotations
 
-import dataclasses
 import importlib.util
 import json
 import os
@@ -100,54 +99,64 @@ def test_parse_dev_tag_pins_reads_only_omninode_tag_pins(mod, tmp_path: Path) ->
 
 
 def test_pick_newest_green_tag_skips_red_and_unread(mod, tmp_path: Path) -> None:
+    clones = tmp_path / "clones"
     tags = _clone_with_tags(
-        tmp_path / "clones",
+        clones,
         "omnibase_core",
         ["20261019010000", "20261019020000", "20261019030000", "20261019040000"],
     )
     names = list(tags)
-    pin = mod.ModelDevTagPin(
-        distribution="omnibase-core",
-        repo="omnibase_core",
-        url=_CORE_URL,
-        tag=names[0],
+    pyproject = _pyproject(
+        tmp_path / "pyproject.toml",
+        f'omnibase-core = {{ git = "{_CORE_URL}", tag = "{names[0]}" }}\n',
     )
     verdicts = {tags[names[1]]: True, tags[names[2]]: True, tags[names[3]]: False}
+    reads: list[str] = []
 
     def green(repo: str, sha: str) -> bool | None:
         assert repo == "omnibase_core"
+        reads.append(sha)
         return verdicts.get(sha)
 
-    choice = mod.pick_train_tag(
-        pin=pin, clone=tmp_path / "clones" / "omnibase_core", is_green=green
+    plan = mod.run_dev_tag_train(
+        pyproject=pyproject,
+        registry_root=str(clones),
+        is_green=green,
+        mover=lambda path, pin, new_tag: None,
+        apply=True,
     )
-    assert choice.new_tag == names[2]
-    assert choice.examined == [names[3], names[2]]
-    assert choice.skipped == {names[3]: "red"}
+    assert [m.new_tag for m in plan.moves] == [names[2]]
+    # OMN-22636: every newer tag's CI is read, so the hook blocks' tag can be planned too.
+    assert reads == [tags[names[3]], tags[names[2]], tags[names[1]]]
+    assert plan.skipped == {"omnibase-core": {names[3]: "red"}}
 
 
 def test_pick_never_moves_backwards_or_to_unread(mod, tmp_path: Path) -> None:
+    clones = tmp_path / "clones"
     tags = _clone_with_tags(
-        tmp_path / "clones", "omnibase_core", ["20261019010000", "20261019020000"]
+        clones, "omnibase_core", ["20261019010000", "20261019020000"]
     )
     names = list(tags)
-    pin = mod.ModelDevTagPin(
-        distribution="omnibase-core", repo="omnibase_core", url=_CORE_URL, tag=names[1]
-    )
-    choice = mod.pick_train_tag(
-        pin=pin, clone=tmp_path / "clones" / "omnibase_core", is_green=lambda r, s: True
-    )
-    assert choice.new_tag is None
-    assert choice.examined == []
 
-    pin_old = dataclasses.replace(pin, tag=names[0])
-    unread = mod.pick_train_tag(
-        pin=pin_old,
-        clone=tmp_path / "clones" / "omnibase_core",
-        is_green=lambda r, s: None,
-    )
-    assert unread.new_tag is None
-    assert unread.skipped == {names[1]: "unread"}
+    def train(tag: str, verdict: bool | None):
+        pyproject = _pyproject(
+            tmp_path / "pyproject.toml",
+            f'omnibase-core = {{ git = "{_CORE_URL}", tag = "{tag}" }}\n',
+        )
+        return mod.run_dev_tag_train(
+            pyproject=pyproject,
+            registry_root=str(clones),
+            is_green=lambda repo, sha: verdict,
+            mover=lambda path, pin, new_tag: None,
+            apply=True,
+        )
+
+    newest = train(names[1], True)
+    assert newest.moves == [] and newest.skipped == {}
+
+    unread = train(names[0], None)
+    assert unread.moves == []
+    assert unread.skipped == {"omnibase-core": {names[1]: "unread"}}
 
 
 def test_train_moves_every_pin_in_one_plan_through_the_mover(

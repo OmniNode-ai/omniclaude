@@ -133,7 +133,11 @@ jobs:
     # dimension is folded into this job for the shadow surface — its conclusion is
     # passed as BOTH tests_conclusion and coverage_conclusion below.
     name: tests+coverage (shadow) (split ${{ matrix.split }}/2)
-    runs-on: ubuntu-latest
+    # ubuntu-latest became Ubuntu 26.04 on 2026-11-06. On it,
+    # tests/scripts/test_gh_user_shim.py::test_lock_two_stale_renders_refresh_once
+    # failed on some runs (two refreshers took the mkdir lock), and this job's
+    # conclusion feeds the required reason-graph context. The hosted image is pinned.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     # OMN-17427: single-job pytest measured 18m49s against a 20m ceiling;
     # the job was cancelled on every armed PR on 2026-10-07.

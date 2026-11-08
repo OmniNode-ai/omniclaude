@@ -523,9 +523,10 @@ def git_env(base: Mapping[str, str] | None = None) -> dict[str, str]:
     env = dict(os.environ if base is None else base)
     for key in _GIT_LOCATION_ENV:
         env.pop(key, None)
-    env["GIT_TERMINAL_PROMPT"] = "0"
+    # GIT_OPTIONAL_LOCKS=0 is --no-optional-locks for every call here: a status
+    # read must not hold index.lock, which a git killed mid-refresh strands.
+    env.update(GIT_TERMINAL_PROMPT="0", LC_ALL="C", GIT_OPTIONAL_LOCKS="0")
     env.setdefault("GIT_SSH_COMMAND", "ssh -o BatchMode=yes -o ConnectTimeout=20")
-    env["LC_ALL"] = "C"
     return env
 
 

@@ -94,3 +94,31 @@ def test_each_digest_matches_the_handler_it_checks() -> None:
     )
     # A divergence is only ever the handler genuinely moving ahead of dev.
     assert (local.group(1) == download.group(1)) == (here == there)
+
+
+def test_the_downloaded_handler_carries_the_workspace_pythonpath_fix() -> None:
+    """The commit the raw URL names serves a handler whose model_config reads
+    PYTHONPATH from the workspace clone.
+
+    A downloaded run writes the handler into the run directory, three levels
+    below a path that holds no omniclaude package, so a handler that derives
+    PYTHONPATH from ${BASH_SOURCE[0]} dies with ModuleNotFoundError and no
+    model server or Ollama can be set up. Checking the digests agree is not
+    enough: they agree whenever the pin is self-consistent, including at a
+    commit whose handler still has the fault. This asserts the served bytes
+    carry the fix, so the pin cannot be moved back to one that does not.
+    """
+    text = SCRIPT.read_text()
+    commit = re.search(
+        r"https://raw\.githubusercontent\.com/OmniNode-ai/omniclaude/([0-9a-f]{40})/\$rel",
+        text,
+    )
+    assert commit
+    if _git("cat-file", "-e", f"{commit.group(1)}^{{commit}}").returncode != 0:
+        _git("fetch", "--no-tags", "--depth=1", "origin", commit.group(1))
+    served = _git("show", f"{commit.group(1)}:{HANDLER_REL}")
+    assert served.returncode == 0, served.stderr.decode(errors="replace")
+    assert b'PYTHONPATH="$WORKSPACE/omniclaude/src"' in served.stdout, (
+        "the handler the raw URL serves still derives PYTHONPATH from its own "
+        "location, so a downloaded run cannot import omniclaude"
+    )
