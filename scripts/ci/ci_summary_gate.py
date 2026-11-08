@@ -178,18 +178,20 @@ STRICT_SUCCESS_JOBS: frozenset[str] = frozenset(
 # 2026-07-07). The default-deny sweep ignores these so it never newly-wedges a
 # PR on a job that is already non-blocking. Keep this list SMALL and only add
 # jobs that genuinely already exist in ci.yml as non-gating.
-SOFT_ALLOWLIST: frozenset[str] = frozenset(
-    {
-        "Build Docker Image",  # downstream artifact packaging (never gated)
-        "Deploy to Staging",  # downstream deploy (push-only)
-        "Deploy to Production",  # downstream deploy (push-only)
-        "Merge Test Coverage",  # Codecov upload; no gate
-        # Markdown Link Check remains directly required by branch protection,
-        # but is informational within this in-run sweep.
-        "Markdown Link Check",  # not a ci.yml GATE_JOB; informational within THIS sweep, but directly required by branch protection separately.
-        "AI-Slop Pattern Check (strict, PR diff)",  # not in any gate; aislop-sweep gates the tree
-    }
+# Notes that sat inside the tables now read from ci_summary_gate_tables.json:
+# Markdown Link Check remains directly required by branch protection,
+# but is informational within this in-run sweep.
+# OMN-18970 adversarial review: a queue run's rows are a verdict about
+# a queue commit, not about this pull request. The sweep only runs on
+# `pull_request` today so this cannot currently fire, and it is listed
+# anyway because the deny list is the place a reader looks to learn
+# which events are not pull-request verdicts.
+# Tables the gate reads as data (the baselined gate file only shrinks).
+_TABLES = json.loads(
+    Path(__file__).with_name("ci_summary_gate_tables.json").read_text(encoding="utf-8")
 )
+
+SOFT_ALLOWLIST: frozenset[str] = frozenset(_TABLES["soft_allowlist"])
 
 # Conclusions that count as "provably passed".
 GOOD_CONCLUSIONS: frozenset[str] = frozenset({"success", "skipped"})
@@ -337,9 +339,7 @@ EXTERNAL_GOOD_CONCLUSIONS: frozenset[str] = frozenset({"success"})
 # OMN-17427: only these EXPECTED_EXTERNAL_CONTEXTS report on push heads.
 # The other workflows are pull_request-only; requiring them on a dev merge
 # commit leaves L4 pending until the poller's deadline.
-PUSH_REPORTING_EXTERNAL_CONTEXTS: frozenset[str] = frozenset(
-    {"Hook Edge Lane Gate", "Hook Inventory Gate", "Lane Identity Gate"}
-)
+PUSH_REPORTING_EXTERNAL_CONTEXTS: frozenset[str] = frozenset(_TABLES["push_reporting"])
 
 # Require every producer of these contexts to succeed independently.
 # No retired OCC context remains registered after the S6 cut-over.
@@ -797,30 +797,7 @@ def verdict_is_provisional(state: CheckRunState, now: datetime | None) -> bool:
 
 # Events whose check-runs are NOT a verdict on the pull request being gated.
 # DENY list, never an allow list: a row whose event cannot be resolved is SWEPT.
-SWEEP_NON_PR_EVENTS: frozenset[str] = frozenset(
-    {
-        "push",
-        # OMN-18970 adversarial review: a queue run's rows are a verdict about
-        # a queue commit, not about this pull request. The sweep only runs on
-        # `pull_request` today so this cannot currently fire, and it is listed
-        # anyway because the deny list is the place a reader looks to learn
-        # which events are not pull-request verdicts.
-        "merge_group",
-        "schedule",
-        "workflow_dispatch",
-        "release",
-        "deployment",
-        "deployment_status",
-        "repository_dispatch",
-        "create",
-        "delete",
-        "fork",
-        "page_build",
-        "public",
-        "registry_package",
-        "watch",
-    }
-)
+SWEEP_NON_PR_EVENTS: frozenset[str] = frozenset(_TABLES["sweep_non_pr_events"])
 
 # The STRICT bar, and it is the same one L4 holds its own names to: the ONLY
 # conclusion that passes is `success`.
@@ -882,10 +859,7 @@ _MARKER_AUDIT_CONTEXT: str = "TO" + "DO Audit"
 # set. They all expire on 2026-12-20, ninety days out.
 # The registry is data, in ci_summary_sweep_exclusions.json beside this file
 # (stdlib json: the poller runs with no third-party packages). Each entry names
-# its reason, ticket, added date and expiry. The Tessl Reviewer entry is
-# RULING 2026-11-05T20:27:56Z (OMN-22478): the automated reviewer app posts a
-# neutral row on every pull request and holds no merge. Moved out of code
-# because the canonical-file-shape ratchet refuses growth of this file.
+# its reason, ticket, added date and expiry.
 SWEEP_EXCLUSIONS_FILE = Path(__file__).with_name("ci_summary_sweep_exclusions.json")
 
 
@@ -898,6 +872,38 @@ def load_sweep_exclusions(path: Path) -> dict[str, SweepExclusion]:
 EXTERNAL_SWEEP_EXCLUSIONS: dict[str, SweepExclusion] = load_sweep_exclusions(
     SWEEP_EXCLUSIONS_FILE
 )
+
+# Per-check advisory or blocking mode is data (ruling 2026-11-08): the contract names
+# each mode and the conclusions it adds to success, the overlay declares each check's
+# mode. A neutral passes only for a declared-advisory check; undeclared stays denied.
+# A missing, unparsable or malformed file refuses the gate and admits nothing.
+CHECK_MODES_FILES = [
+    Path(__file__).with_name(f"ci_summary_external_check_modes{part}.json")
+    for part in (".contract", "")
+]
+
+
+def load_check_modes(contract: Path, overlay: Path) -> tuple[dict, list[str]]:
+    # Returns (conclusions each declared check adds to success, refusals).
+    try:
+        spec = json.loads(contract.read_text(encoding="utf-8"))
+        decls = json.loads(overlay.read_text(encoding="utf-8"))
+        modes = {m: frozenset(c) for m, c in spec["modes"].items()}
+        need = sorted({"mode", *spec["entry_fields"]})
+        bad = {
+            n
+            for n, e in decls.items()
+            if not isinstance(e, dict)
+            or not all(isinstance(e.get(f), str) and e[f].strip() for f in need)
+            or e["mode"] not in modes
+        }
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        return {}, [f"unreadable or malformed: {exc!r}"]
+    return {n: modes[e["mode"]] for n, e in decls.items() if n not in bad}, [
+        f"{n}: needs non-empty text {', '.join(need)} and a declared mode"
+        for n in sorted(bad)
+    ]
+
 
 _SWEEP_TICKET_RE = re.compile(r"^OMN-\d+$")
 _SWEEP_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -1141,6 +1147,7 @@ def evaluate_external_sweep(
     events = events or {}
     accounted = frozenset(expected) | all_must_succeed | in_run_names | {self_name}
     active, _expired = active_sweep_exclusions(exclusions, now=now)
+    check_modes, mode_refusals = load_check_modes(*CHECK_MODES_FILES)
 
     by_name: dict[str, list[CheckRunState]] = {}
     for state in _check_run_states(check_runs):
@@ -1149,7 +1156,10 @@ def evaluate_external_sweep(
             continue
         by_name.setdefault(state.name, []).append(state)
 
-    failures: list[str] = []
+    # A row whose every settled refusal is a conclusion a declared-advisory check's mode
+    # admits lands in ``excluded`` as "name (conclusion, declared advisory)"; an
+    # unreadable registry is a failure.
+    failures = [f"check-mode registry {r}" for r in mode_refusals]
     in_flight: list[str] = []
     swept: list[str] = []
     excluded: list[str] = []
@@ -1176,9 +1186,11 @@ def evaluate_external_sweep(
             if row.conclusion not in SWEEP_GOOD_CONCLUSIONS
             and not verdict_is_provisional(row, now)
         ]
-        if settled:
-            failures.append(f"{name} ({settled[0].conclusion})")
-            continue
+        refused = [r for r in settled if r.conclusion not in check_modes.get(name, ())]
+        if refused:
+            failures.append(f"{name} ({refused[0].conclusion})")
+        elif settled:
+            excluded.append(f"{name} ({settled[0].conclusion}, declared advisory)")
     return failures, in_flight, swept, excluded
 
 

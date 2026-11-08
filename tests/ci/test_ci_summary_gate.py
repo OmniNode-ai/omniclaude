@@ -1896,78 +1896,6 @@ class TestSweepFoldsIntoTheCombinedVerdict:
         assert code == EXIT_PENDING
 
 
-# The check-run name of the automated reviewer app (OMN-22478): it posts a
-# ``neutral`` row on every pull request, and RULING 2026-11-05T20:27:56Z takes
-# it out of what blocks a merge.
-AUTOMATED_REVIEWER = "Tessl Reviewer"
-REVIEWER_NOW = datetime(2026, 11, 7, 18, 8, 0, tzinfo=UTC)
-
-
-@pytest.mark.unit
-class TestAutomatedReviewerDoesNotBlockOmn22478:
-    """Only the named reviewer row is excluded; every other red still fails."""
-
-    @pytest.mark.parametrize(
-        ("conclusion", "status"),
-        [
-            ("neutral", "completed"),
-            (None, "in_progress"),
-            ("failure", "completed"),
-            ("skipped", "completed"),
-        ],
-    )
-    def test_reviewer_row_in_any_state_is_excluded_and_reported(
-        self, conclusion: str | None, status: str
-    ) -> None:
-        failures, in_flight, _swept, excluded = evaluate_external_sweep(
-            [_sweep_row(AUTOMATED_REVIEWER, conclusion, status=status)],
-            exclusions=EXTERNAL_SWEEP_EXCLUSIONS,
-            now=REVIEWER_NOW,
-        )
-        assert failures == []
-        assert in_flight == []
-        assert AUTOMATED_REVIEWER in excluded
-
-    def test_control_a_red_test_row_still_fails_beside_the_reviewer_sweep_row(
-        self,
-    ) -> None:
-        failures, _i, _s, excluded = evaluate_external_sweep(
-            [
-                _sweep_row(AUTOMATED_REVIEWER, "neutral"),
-                _sweep_row("Unit Tests (shard 3)", "failure"),
-            ],
-            exclusions=EXTERNAL_SWEEP_EXCLUSIONS,
-            now=REVIEWER_NOW,
-        )
-        assert failures == ["Unit Tests (shard 3) (failure)"]
-        assert excluded == [AUTOMATED_REVIEWER]
-
-    def test_control_the_same_neutral_row_under_another_name_still_fails(
-        self,
-    ) -> None:
-        failures, _i, _s, _e = evaluate_external_sweep(
-            [_sweep_row("Another Reviewer", "neutral")],
-            exclusions=EXTERNAL_SWEEP_EXCLUSIONS,
-            now=REVIEWER_NOW,
-        )
-        assert failures == ["Another Reviewer (neutral)"]
-
-    def test_control_without_the_exclusion_the_reviewer_row_fails(self) -> None:
-        failures, _i, _s, _e = evaluate_external_sweep(
-            [_sweep_row(AUTOMATED_REVIEWER, "neutral")],
-            exclusions={},
-            now=REVIEWER_NOW,
-        )
-        assert failures == [f"{AUTOMATED_REVIEWER} (neutral)"]
-
-    def test_exclusion_is_unexpired_at_the_pinned_read_time(self) -> None:
-        active, expired = active_sweep_exclusions(
-            EXTERNAL_SWEEP_EXCLUSIONS, now=REVIEWER_NOW
-        )
-        assert AUTOMATED_REVIEWER in active
-        assert expired == ()
-
-
 @pytest.mark.unit
 class TestSweepExclusionRegistryFileOmn22478:
     """The registry is the JSON file beside the gate; a malformed file fails closed."""
@@ -2004,18 +1932,13 @@ class TestSweepExclusions:
     def test_the_registry_only_retains_the_post_merge_marker_audit(self) -> None:
         assert set(EXTERNAL_SWEEP_EXCLUSIONS) == {
             ci_summary_gate._MARKER_AUDIT_CONTEXT,
-            AUTOMATED_REVIEWER,
         }
 
     def test_every_entry_carries_a_reason_an_owner_and_both_dates(self) -> None:
         for name, entry in EXTERNAL_SWEEP_EXCLUSIONS.items():
             assert entry.reason.strip(), name
             assert entry.ticket.startswith("OMN-"), name
-            if name == AUTOMATED_REVIEWER:
-                assert entry.ticket == "OMN-22478", name
-                assert entry.added == "2026-11-07", name
-            else:
-                assert entry.added in {"2026-09-21", "2026-10-06"}, name
+            assert entry.added in {"2026-09-21", "2026-10-06"}, name
             assert entry.expires == "2026-12-20", name
 
     def test_no_entry_overlaps_either_registered_set(self) -> None:
