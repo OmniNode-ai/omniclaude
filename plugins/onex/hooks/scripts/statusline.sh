@@ -541,17 +541,25 @@ if [ "$HAS_JQ" -eq 1 ]; then
       # raced the previous refresher's release does not refresh a cache that was
       # just written.
       pr_lock="${PR_CACHE}.lock"
-      if ! mkdir "$pr_lock" 2>/dev/null; then
+      # mkdir alone does not decide who holds the lock: Ubuntu 26.04 ships Rust
+      # coreutils, whose mkdir let two processes started in the same microsecond
+      # both succeed (729 of 3000 paired runs on ubuntu:26.04), and that is the
+      # `20 == 10` red of test_lock_two_stale_renders_refresh_once on the hosted
+      # Tests (Split 3/5) job -- two refreshers 250 ns apart, the clock reading
+      # 0.001 s of skew. The holder's pid file is therefore written with a
+      # noclobber redirect, which bash opens O_EXCL itself: exactly one process
+      # creates it, whatever mkdir said, and the other takes the not-the-holder path.
+      # $BASHPID is this subshell; `$$` is the render that forked it, gone in milliseconds,
+      # so a bash without BASHPID (3.2) records a dead holder and the age rule decides.
+      pr_take() { mkdir "$pr_lock" 2>/dev/null && ( set -C; printf '%s\n' "$1" > "$pr_lock/pid" ) 2>/dev/null; }
+      if ! pr_take "${BASHPID:-$$}"; then
         # The taker may be between its mkdir and its pid write: read twice.
         holder=$(cat "$pr_lock/pid" 2>/dev/null || { sleep 1; cat "$pr_lock/pid" 2>/dev/null; })
         if kill -0 "${holder:-x}" 2>/dev/null; then stale="$PR_LOCK_MAX_HOLD"; else stale="$PR_LOCK_STALE"; fi
         [ $(( $(date +%s) - $(mtime_of "$pr_lock") )) -gt "$stale" ] || exit 0
         rm -f "$pr_lock/pid" 2>/dev/null; rmdir "$pr_lock" 2>/dev/null
-        mkdir "$pr_lock" 2>/dev/null || exit 0
+        pr_take "${BASHPID:-$$}" || exit 0
       fi
-      # $BASHPID is this subshell; `$$` is the render that forked it, gone in milliseconds.
-      # A bash without BASHPID (3.2) records no holder, so the age rule alone decides.
-      [ -n "${BASHPID:-}" ] && printf '%s\n' "$BASHPID" > "$pr_lock/pid" 2>/dev/null
       trap 'rm -f "$pr_lock/pid" 2>/dev/null; rmdir "$pr_lock" 2>/dev/null' EXIT
       [ $(( $(date +%s) - $(mtime_of "$PR_CACHE") )) -le "$PR_TTL" ] && exit 0
       counts=""; failed=""
