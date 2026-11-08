@@ -31,7 +31,7 @@ dod_evidence:
       - "AC1"
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/hooks/test_shared_tree_git_guard.py::test_scratch_is_hermetic_whatever_lane_runs_the_suite -q --no-cov"
+        check_value: "uv run pytest tests/hooks/test_shared_tree_git_guard.py -k test_scratch_is_hermetic_whatever_lane_runs_the_suite -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
   - id: dod-omn23127-ac2
     description: "the test file isolates the lane variables and its scratch directory; at origin/dev it does neither, so this check fails there"
