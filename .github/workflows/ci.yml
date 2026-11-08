@@ -45,6 +45,11 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
+      # OMN-18512: provision Python from the runner toolcache so `uv sync` does
+      # not download CPython from github.com at run time (504 on 2026-11-08).
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
       - uses: astral-sh/setup-uv@v7
         with:
           version: "0.8.3"
@@ -86,6 +91,10 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      # OMN-18512: same as comment-render-delegation; no run-time CPython download.
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
       - uses: astral-sh/setup-uv@v7
         with:
           version: "0.6.1"
