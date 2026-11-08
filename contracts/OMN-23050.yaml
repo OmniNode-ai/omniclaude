@@ -1,0 +1,52 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+schema_version: "1.0.0"
+ticket_id: OMN-23050
+title: "omniclaude's repo-evidence caller moves to the omnibase_core receipt-gate that counts a pin-train hook rev swap as pin-only"
+summary: >
+  repo-evidence / dod-verify is red on omniclaude pull requests whose diff moves a first-party hook rev in
+  .pre-commit-config.yaml beside the dependency pin (omniclaude#3201, #3212 and #3213). The caller
+  (.github/workflows/call-repo-evidence-gate.yml) calls the omnibase_core receipt-gate reusable at
+  dev-20261101005012-ac2f26e3e5bf, whose pin-swap classifier refuses .pre-commit-config.yaml. omnibase_core#2284
+  added the exemption in dev-20261108023315-fe0d8082717e: every changed line must swap the dev merge tag of a rev line
+  whose owning repo is a first-party repository, and the change must ride with a dependency manifest change. This
+  change moves the caller's reusable ref and the test-side copy of the pin to that tag. verifier-tag, shadow,
+  compare-with-occ, the triggers, the permissions and the job id are unchanged, so the check is not widened. A pull
+  request that changes a hook in any other way still needs evidence.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn23050-caller-hook-rev-exemption
+    statement: The repo-evidence caller calls the omnibase_core receipt-gate reusable at a dev-merge tag that carries the hook rev swap exemption.
+    acceptance:
+      - id: AC1
+        statement: "AC1: .github/workflows/call-repo-evidence-gate.yml calls OmniNode-ai/omnibase_core/.github/workflows/receipt-gate.yml@dev-20261108023315-fe0d8082717e and tests/ci/receipt_gate_pin.py holds the same tag -- falsifier: uv run pytest tests/ci/test_receipt_gate_caller_pin_omn20134.py tests/ci/test_repo_evidence_caller_workflow.py -q --no-cov fails at origin/dev with the pin moved back"
+  - id: req-omn23050-check-not-widened
+    statement: Every other line of the caller matches the merge base, so the check is neither widened nor loosened.
+    acceptance:
+      - id: AC2
+        statement: "AC2: the caller keeps verifier-tag, shadow false, compare-with-occ false, evidence-source caller, its triggers and its read-only permissions, and differs from the merge base only in the reusable ref -- falsifier: uv run pytest tests/ci/test_repo_evidence_occ_comparison_off_omn20975.py tests/ci/test_repo_evidence_caller_verifier_floor_omn17427.py -q --no-cov fails when any other caller line moves"
+evidence_requirements:
+  - kind: tests
+    description: "The caller tests assert the dev-merge tag shape of the reusable ref, its equality with the test-side pin and that no other caller line moved"
+    command: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py tests/ci/test_repo_evidence_caller_verifier_floor_omn17427.py tests/ci/test_receipt_gate_caller_pin_omn20134.py tests/ci/test_repo_evidence_occ_comparison_off_omn20975.py -q --no-cov -p no:randomly"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn23050-ac1-caller-pin
+    binds_ac: [AC1]
+    description: The caller pin tests pass with the reusable ref and the test-side pin both at the tag that carries the hook rev swap exemption.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_repo_evidence_caller_workflow.py tests/ci/test_receipt_gate_caller_pin_omn20134.py -q --no-cov -p no:randomly"
+  - id: dod-omn23050-ac2-check-not-widened
+    binds_ac: [AC2]
+    description: The merge-base comparison and the verifier floor tests pass, so the only caller line that moved is the reusable ref.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_repo_evidence_occ_comparison_off_omn20975.py tests/ci/test_repo_evidence_caller_verifier_floor_omn17427.py -q --no-cov -p no:randomly"
