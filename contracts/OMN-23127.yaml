@@ -1,0 +1,44 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-23127
+title: "omniclaude's shared-tree git guard tests pass inside a lane, so a lane's commit is not refused by its own guards"
+summary: >
+  tests/hooks/test_shared_tree_git_guard.py asserts on the guard's decision outside a lane, but ran against the lane that runs it: pytest's scratch directory sat under the lane's lab-run/runs workdir, which the guard's lane-path arm (the git-fetch arm and the publishing arm) reads as a lane whatever the environment says, so five tests failed and hook-preflight stopped the commit. The tests now set the environment they assert on: every lane variable is cleared with monkeypatch and the scratch repositories are made under a system temp root that is not a lane path. No test is skipped and the guard is unchanged.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn23127-hermetic
+    statement: The shared-tree git guard tests pass inside a lane environment and still fail when the guard is broken.
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: test_shared_tree_git_guard.py passes when run inside a lane environment (ONEX_LANE set, lane guards active) and still fails on a guard that is broken -- falsifier: uv run pytest tests/hooks/test_shared_tree_git_guard.py with ONEX_LANE set, and with the guard reverted"
+      - id: "AC2"
+        statement: "AC2: a lane commit to omniclaude passes hook-preflight in one attempt -- falsifier: one lane commit's hook-preflight result"
+evidence_requirements:
+  - kind: tests
+    description: "The guard test file passes with ONEX_LANE set; with the guard's decision core broken it reports 172 failures, and with the fetch arm broken the hermetic scratch test fails"
+    command: "uv run pytest tests/hooks/test_shared_tree_git_guard.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn23127-ac1
+    description: "the guard test file passes, including the test that the scratch directory is not a lane path"
+    source: manual
+    binds_ac:
+      - "AC1"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_shared_tree_git_guard.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn23127-ac2
+    description: "the test file isolates the lane variables and its scratch directory; at origin/dev it does neither, so this check fails there"
+    source: manual
+    binds_ac:
+      - "AC2"
+    checks:
+      - check_type: command
+        check_value: "grep -q -e '_AMBIENT_LANE_ENV' tests/hooks/test_shared_tree_git_guard.py"
+        cwd: "${OMNI_HOME}/omniclaude"
