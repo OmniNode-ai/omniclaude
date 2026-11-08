@@ -19,6 +19,8 @@ requirements:
     acceptance:
       - id: AC4
         statement: "AC4: the Record red dev heads job fetches scripts/ci_bus_lanes.py, loads it, and calls no private helper of the removed publish_occ_autobind_command.py -- falsifier: uv run pytest tests/ci/test_dev_head_monitor_omn18836.py -q -k shared_lane_module fails"
+      - id: AC5
+        statement: "AC5: the omnibase_core handshake pin in .github/workflows/check-handshake.yml is 2fe30fd9dc47fcf0e25bead887ea7505b39612b9 -- falsifier: grep -q for that sha in the workflow exits non-zero"
 evidence_requirements:
   - kind: tests
     description: "Dev-head monitor tests pass"
@@ -36,3 +38,10 @@ dod_evidence:
       - check_type: test_passes
         check_value: "uv run pytest tests/ci/test_dev_head_monitor_omn18836.py -q --no-cov -k shared_lane_module"
         cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn9050-ac5-core-pin-bump
+    description: "The omnibase_core handshake pin in check-handshake.yml names 2fe30fd9dc47fcf0e25bead887ea7505b39612b9. Fails at the merge base, which pinned 1adbf46062bd."
+    source: manual
+    binds_ac: [AC5]
+    checks:
+      - check_type: command
+        check_value: "grep -q 'ref: 2fe30fd9dc47fcf0e25bead887ea7505b39612b9' .github/workflows/check-handshake.yml"
