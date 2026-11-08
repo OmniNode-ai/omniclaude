@@ -52,9 +52,11 @@ def developer_event_suppressed(event_type: str) -> bool:
     # OMN-21773: a work.ledger.* row is written by the ledger of record, not a developer's hook,
     # and onex-ledger runs this under an interpreter whose omnimarket may lack the admission
     # node. The refusal then dropped every ledger row with exit 0 and no record.
+    # OMN-23077: the same for the PR watcher's pr.state.observed (the pr_state projection
+    # stopped at 2026-10-31T00:11:36Z while the watcher marked every digest emitted).
     admission = getattr(_load_bus_handler(), "developer_event_suppressed", None)
-    ledger = journal.is_ledger_event_type(event_type)
-    return bool(admission and not ledger and admission(event_type))
+    own = journal.is_ledger_event_type(event_type) or event_type == "pr.state.observed"
+    return bool(admission and not own and admission(event_type))
 
 
 def _parse_payload(raw: str) -> dict[str, Any]:
