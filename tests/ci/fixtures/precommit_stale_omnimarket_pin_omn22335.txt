@@ -1,0 +1,5 @@
+2026-11-03T05:22:37.6475219Z Internal siblings resolve from dev merge tags (OMN-19998)...............................................Failed
+2026-11-03T05:22:37.6477848Z - hook id: check-internal-sibling-pins
+2026-11-03T05:22:37.6479377Z - exit code: 1
+2026-11-03T05:22:37.6481254Z FAIL: pyproject.toml:1: [stale_pin] stale_pin: omnimarket@dev-20261102102425-ce12119225dc trails newest dev tag dev-20261103020838-7b42a4c63edc by 75 merges and 15.7369 hours
+2026-11-03T05:22:37.6484463Z FAIL: first_party_ref (2 findings)
