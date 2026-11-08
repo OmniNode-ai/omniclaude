@@ -49,6 +49,14 @@ plain, with no redirect, pipe or `&&`.
 |---|---|---|
 | success | `result.response` exactly, a blank line, then `Run: <correlation_id>` | 0 |
 | failure, including a refusal before dispatch | the one error line, then `Run: <correlation_id>` when the object has one | non-zero |
+| `returned_to_caller`: no model you chose answered | the reason line, then `Run: <correlation_id>`, then you do the task yourself in this session | non-zero |
+
+`returned_to_caller` (`result.terminal_failure_cause`) means the whole ladder of models you
+chose failed and the run was handed back: it has no answer and books zero savings. The skill
+prints the reason (`result.terminal_failure_reason`, else `result.error_message`) and the run
+line, then the session does the task itself with its own tools. Do not delegate it again and do
+not ask the user to retry. Any other failure still stops after the error line. `prompt.md` has
+the procedure.
 
 A refusal of `--session-model` (`Error: No such option '--session-model'`, exit 2, nothing dispatched) is neither row: the installed `onex` predates the flag. Run the same command once more without `--session-model` and reply from that run.
 
