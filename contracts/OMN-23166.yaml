@@ -1,0 +1,29 @@
+schema_version: "1.0.0"
+ticket_id: "OMN-23166"
+title: "The delegate skill tells the Claude Code session to do the task itself when no model in the ladder answers"
+summary: "plugins/onex-delegate/skills/delegate/SKILL.md and prompt.md now name returned_to_caller: on that terminal cause the skill prints the reason and the run line, then the session does the task itself; every other failure still stops after the error line. A new test pins both files."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-returned-to-caller-surface"
+    statement: "The delegate skill hands a returned_to_caller run back to the session to do the task."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: both files name returned_to_caller and the instruction to do the task -- falsifier: `grep -c returned_to_caller plugins/onex-delegate/skills/delegate/SKILL.md plugins/onex-delegate/skills/delegate/prompt.md` is at least 1 for each file"
+evidence_requirements:
+  - kind: "tests"
+    description: "The returned_to_caller surface tests."
+    command: "uv run pytest plugins/onex-delegate/tests/test_delegate_returned_to_caller_omn23166.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn23166-returned-to-caller"
+    description: "AC1: both skill files name returned_to_caller and the instruction to do the task."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest plugins/onex-delegate/tests/test_delegate_returned_to_caller_omn23166.py -q --no-cov"
+    binds_ac: ["AC1"]
