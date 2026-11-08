@@ -8,6 +8,15 @@ summary: >
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
+requirements:
+  - id: req-omn18512-uv-sync-python-provisioned
+    statement: >
+      Every ci.yml job that runs uv sync provisions Python with
+      actions/setup-python before the sync, so uv does not download CPython
+      from github.com at run time.
+    acceptance:
+      - id: AC1
+        statement: "AC1: every ci.yml job that runs uv sync has an actions/setup-python step before it, and the guard fails on a ci.yml where one lacks it -- falsifier: uv run pytest tests/ci/test_ci_uv_sync_python_provisioned_omn18512.py -q --no-cov"
 evidence_requirements:
   - kind: tests
     description: "Comment-sweep render delegation tests pass"
@@ -23,3 +32,11 @@ dod_evidence:
     checks:
       - check_type: command
         check_value: "uv run pytest tests/unit/nodes/test_comment_sweep_delegation.py -q"
+  - id: dod-uv-sync-python-provisioned-before-sync
+    description: "The guard reads ci.yml and fails for a job that runs uv sync with no earlier actions/setup-python step; at the merge base comment-render-delegation and refusal-surface have none, so this check fails there"
+    source: manual
+    binds_ac:
+      - "AC1"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/ci/test_ci_uv_sync_python_provisioned_omn18512.py -q --no-cov"
