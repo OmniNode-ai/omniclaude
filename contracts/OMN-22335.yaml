@@ -1,0 +1,48 @@
+schema_version: "1.0.0"
+ticket_id: OMN-22335
+title: "The omniclaude dev merge queue removes pull requests 3118 and 3119 because the Pre-commit Suite fails on their merge groups"
+summary: >
+  The Pre-commit Suite hook check-internal-sibling-pins (core rule stale_pin, at most 50 merges
+  and 72 hours behind the newest dev merge tag) failed on 2026-11-03 because dev pinned omnimarket
+  at dev-20261102102425-ce12119225dc, 75 merges behind at the first recorded failed log. The cause
+  was omniclaude dev itself, not the two pull requests. Dev has since moved the pin (#3162 and later),
+  and both pull requests have merged (#3118 and #3119). This change carries the regression test and the
+  recorded failed-log fixture from the branch omn-22335-omnimarket-pin-newest-dev-tag, which fails on
+  the recorded stale pin and passes on the pin dev carries now. The hook stays check-only; nothing is
+  widened, skipped or excluded.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn22335-pin-regression
+    statement: "A regression test built from the recorded failed-log excerpt fails on the stale omnimarket pin and passes on the pin dev carries, and the Pre-commit Suite hook stays check-only."
+    acceptance:
+      - id: "AC2"
+        statement: "AC2: a regression test built from the recorded failed-log excerpt (fixture path named in the PR) fails on the broken code and passes on the fix -- falsifier: uv run pytest on the named test file in omniclaude, run on the lab through /omni:lab-run"
+      - id: "AC4"
+        statement: "AC4: the hook stays check-only and is not widened or skipped, and the pin-shape test still passes -- falsifier: uv run pytest -o addopts=\"\" tests/ci/test_precommit_suite_job_omn19612.py -q passes and the diff adds no exclude, skip or file-rewriting entry to .pre-commit-config.yaml"
+evidence_requirements:
+  - kind: tests
+    description: "The pin regression test built from the recorded failed-log excerpt and the Pre-commit Suite shape test."
+    command: "uv run pytest -o addopts='' tests/ci/test_omnimarket_pin_not_stale_omn22335.py tests/ci/test_precommit_suite_job_omn19612.py -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn22335-pin-regression
+    description: "The regression test built from the recorded failed-log excerpt passes at the head and fails on the stale pin."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest -o addopts='' tests/ci/test_omnimarket_pin_not_stale_omn22335.py -q"
+    binds_ac:
+      - "AC2"
+  - id: dod-omn22335-check-only
+    description: "The Pre-commit Suite shape test passes."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest -o addopts='' tests/ci/test_precommit_suite_job_omn19612.py -q"
+    binds_ac:
+      - "AC4"
