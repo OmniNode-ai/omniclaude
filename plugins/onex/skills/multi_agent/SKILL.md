@@ -334,11 +334,9 @@ PR_NUMBER=$(onex scm pr-list "$REPO" | python3 -c "import json,sys; b=sys.argv[1
 test -n "$PR_NUMBER" || { echo "ERROR: the watcher does not list a PR for $HEAD_BRANCH yet; retry after its next tick"; exit 1; }
 PR_URL="https://github.com/${REPO}/pull/${PR_NUMBER}"
 
-# 5. Enable automerge
-gh pr merge --auto --squash "$PR_NUMBER" --repo "$REPO"
-
+# 5. Hand the PR to the landing controller (a session never arms or merges; the controller arms it)
 echo "PR #$PR_NUMBER: $PR_URL"
-echo "Automerge armed. GitHub merges when all branch protection requirements are satisfied."
+echo "Handed to landing: the controller arms and merges when all branch protection requirements are satisfied."
 ```
 
 **Rule**: Phase 6 is git-only coordinator work. Do NOT dispatch to general-purpose agents.
