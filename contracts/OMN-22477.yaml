@@ -74,6 +74,15 @@ dod_evidence:
       - check_type: command
         check_value: gh api "repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/contract.yaml?ref=$(git rev-parse HEAD)" --jq .content | base64 -d | grep -q '24ca:661a:7af4:2089:d761:289c:8830:0853:ad47:2b62:0501:3ce5:48bb:d755:20ba:71b2'
         cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn22477-page-pin-serves-the-fixed-handler
+    description: "The commit the PARTICIPANT PAGE pins serves a script whose handler URL names the fix. The two pins are separate surfaces: pull request 3194 moved the script's own handler pin, and nothing a participant downloads reached it, because ONBOARDING.md still named ad5d6ef8, whose script curls the handler from 6596b867. This probe follows the whole chain a participant walks -- it reads the page from the deployed tree, takes the commit out of its download URL, fetches the script served at that commit, and asserts that script's handler URL names 149fbe85. Asserting the page's own two digests agree would not do, because agreement holds for any self-consistent pin, including one whose handler still derives PYTHONPATH from its own location, which is how this chain kept re-pinning. Falsifiable, and measured both ways before this was written: at this head the chain lands on 149fbe85 and the probe exits 0; at the merge base the page names ad5d6ef8, the script served there names 6596b867, and the probe exits 1."
+    source: manual
+    binds_ac:
+      - "AC2"
+    checks:
+      - check_type: command
+        check_value: 'S=$(gh api "repos/OmniNode-ai/omniclaude/contents/plugins/onex/ONBOARDING.md?ref=$(git rev-parse HEAD)" --jq .content | base64 -d | grep -oE "omniclaude/[0-9a-f]{40}/plugins/onex/skills/_bin/lab-onboarding.sh" | head -1 | cut -d/ -f2) && curl -fsSL "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/$S/plugins/onex/skills/_bin/lab-onboarding.sh" | grep -q 149fbe854d8f40e54ae90e8aa776ffe3506a3a4b'
+        cwd: "${OMNI_HOME}/omniclaude"
   - id: dod-omn22477-served-handler-carries-the-fix
     description: "The handler the entrypoint's raw URL serves carries the workspace PYTHONPATH, which is what a downloaded run actually loads: the pin and download_digest now name the commit the fix merged as, so a participant run gets the fixed handler rather than the one dev was serving while the fix was in flight. Asserting the two digests agree is not enough, because agreement holds for any self-consistent pin, including one at a commit whose handler still has the fault. Fails at the merge base, where the URL names 6596b867 and the served handler still derives PYTHONPATH from its own location."
     source: manual
