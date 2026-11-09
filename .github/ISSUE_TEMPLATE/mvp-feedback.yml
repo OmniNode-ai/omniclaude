@@ -1,0 +1,54 @@
+name: MVP feedback
+description: Tell us what broke, or what you wanted, while trying the MVP
+title: "[MVP feedback] "
+labels: ["mvp-feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying it. Install can fail before `onex` or a delegation receipt exists,
+        so only the first three questions are needed for every report. The receipt's
+        correlation id and the `onex doctor` output are needed only when a delegation ran.
+        Do not paste secrets or API keys.
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Where did it break?
+      description: Pick the first one if install, setup or the plugin failed before any delegation ran.
+      options:
+        - before a delegation ran
+        - during or after a delegation
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: The exact command you ran
+      description: Paste the command as you typed it.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: error
+    attributes:
+      label: The error or output you got
+      description: Paste the error message or the output, as complete as you can.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: correlation_id
+    attributes:
+      label: The receipt's correlation id
+      description: Needed only if you chose "during or after a delegation". Leave it empty if no delegation ran, or if no receipt exists.
+  - type: textarea
+    id: doctor_output
+    attributes:
+      label: "`onex doctor` output"
+      description: Needed only if you chose "during or after a delegation". Leave it empty if `onex` is not installed yet.
+      render: text
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected (optional)
+      description: What you thought would happen.
