@@ -44,6 +44,13 @@
 # (OMN-20134), which edits the uses line and RECEIPT_GATE_PIN_TAG in
 # tests/ci/receipt_gate_pin.py.
 # omniclaude does not host receipt-gate.yml.
+#
+# check-timeout-seconds (OMN-19998): the ceiling each dod_verify check may run.
+# Left empty the verifier keeps its own 30 s, and a bound `uv run pytest` check
+# that runs past it is skipped CHECK_BUDGET_EXCEEDED, which turns
+# repo-evidence / dod-verify red with no failing test (read on omniclaude#3229:
+# 32 to 36 s against the 30 s ceiling). omnimarket passes "300" and
+# omnibase_infra "180"; this caller passes "300".
 
 name: Repo Evidence Gate
 
@@ -68,3 +75,4 @@ jobs:
       verifier-tag: dev-20261101000200-949993edf3b7
       compare-with-occ: "false"
       shadow: "false"
+      check-timeout-seconds: "300"
