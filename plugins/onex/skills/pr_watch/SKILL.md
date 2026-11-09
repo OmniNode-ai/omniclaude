@@ -90,7 +90,7 @@ Poll GitHub PR review status. Auto-fix review comments (Critical/Major/Minor by 
 
 ## Poll Loop
 
-1. Fetch PR review state via `gh pr view {pr_number} --repo {repo} --json reviews,reviewDecision`
+1. Fetch PR review state via `onex scm pr-review {repo}#{pr_number}` (reviewDecision) or `python3 "${OMNI_PLUGIN_ROOT:?}"/skills/merge-drain/scripts/pr_state_local.py --pr {repo}#{pr_number}`
 2. If `reviewDecision == APPROVED`: exit with `status: approved`
 3. If `reviewDecision == CHANGES_REQUESTED` and `auto_fix=true` and cycles remaining:
    - Dispatch pr-review-dev agent with review comments

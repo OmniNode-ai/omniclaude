@@ -80,7 +80,7 @@ integration verification.
 
 1. Fetch the PR diff:
    ```bash
-   gh pr diff {pr_number} --repo {repo}
+   git -C "$OMNIBASE_PATH/{repo}" diff origin/<base>...origin/<pr_head_branch>   # head branch from `onex scm pr-view <owner>/<repo>#{pr_number}`
    ```
 
 2. Classify each changed file into one of:

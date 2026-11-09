@@ -216,7 +216,7 @@ evidence_requirements:
     command: "uv run pytest tests/ -m unit -x"
   - kind: ci
     description: "CI pipeline green"
-    command: "gh pr checks"
+    command: "onex scm pr-checks <owner>/<repo>#<n>"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -252,9 +252,8 @@ emergency_bypass:
 > **Correct fail-closed form for CI status checks:**
 >
 > ```bash
-> result=$(gh pr view {pr} --repo {repo} --json statusCheckRollup \
->   -q '[.statusCheckRollup[] | select(.name == "<check-name>") | .conclusion] | first // empty')
-> [ "$result" = "SUCCESS" ]
+> onex scm pr-checks {repo}#{pr} | python3 -c "import json,sys; r=json.loads(sys.stdin.read().strip().splitlines()[-1])['result']; n='<check-name>'; \
+>   sys.exit(0 if any(n in d[0] for d in r['detail']) and not any(n in x for x in r['red'] + r['pending']) else 1)"
 > ```
 >
 > Empty result → expression FALSE → DoD correctly fails. Do NOT add `[ -z "$result" ] ||` before it.
@@ -428,7 +427,7 @@ evidence_requirements:
     command: "uv run pytest tests/ -m unit -x"
   - kind: ci
     description: "CI pipeline green"
-    command: "gh pr checks"
+    command: "onex scm pr-checks <owner>/<repo>#<n>"
 emergency_bypass:
   enabled: false
   justification: ""

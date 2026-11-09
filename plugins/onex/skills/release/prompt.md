@@ -907,19 +907,19 @@ BRANCH="release/${run_id}/${repo}"
 GITHUB_REPO="${GITHUB_ORG}/${repo}"
 
 # Idempotency: check for existing PR on this branch
-EXISTING_PR=$(gh pr list --repo "${GITHUB_REPO}" --head "${BRANCH}" --json number,url --jq '.[0]')
+# (onex scm pr-list answers from the PR watcher's state: the open PRs and their head_ref)
+EXISTING_PR=$(onex scm pr-list "${GITHUB_REPO}" | python3 -c "import json,sys; b=sys.argv[1]; p=[x['number'] for x in json.loads(sys.stdin.read().strip().splitlines()[-1])['result']['prs'] if x['head_ref']==b]; print(p[0] if p else '')" "${BRANCH}")
 
 if [ -n "$EXISTING_PR" ]; then
-  PR_NUMBER=$(echo "$EXISTING_PR" | jq -r '.number')
-  PR_URL=$(echo "$EXISTING_PR" | jq -r '.url')
+  PR_NUMBER="$EXISTING_PR"
+  PR_URL="https://github.com/${GITHUB_REPO}/pull/${PR_NUMBER}"
   echo "  PR already exists: #${PR_NUMBER} (${PR_URL})"
 else
   # Create PR
   # Cross-reference: pr-safety helpers for PR creation guards
-  PR_URL=$(gh pr create \
-    --repo "${GITHUB_REPO}" \
-    --title "release: ${repo} v${new_version}" \
-    --body "## Release: ${repo} v${new_version}
+  BODY_FILE=$(mktemp)
+  cat > "${BODY_FILE}" <<EOF
+## Release: ${repo} v${new_version}
 
 Coordinated release run: \`${run_id}\`
 
@@ -930,11 +930,20 @@ $(git log --format="- %s" "${LAST_TAG}..HEAD")
 - Bump: ${bump}
 - Previous: v${current_version}
 - Plan hash: ${plan_hash}
-" \
-    --base main \
-    --head "${BRANCH}")
-
-  PR_NUMBER=$(echo "$PR_URL" | grep -oE '[0-9]+$')
+EOF
+  # pr-create prints the write node's terminal event, not a URL: read the number back from the watcher's
+  # state (onex scm pr-list), which shows the PR after its next tick (retry for up to two minutes)
+  onex scm pr-create "${GITHUB_REPO}" \
+    --head "${BRANCH}" --base main \
+    --title "release: ${repo} v${new_version}" \
+    --body-file "${BODY_FILE}"
+  PR_NUMBER=""
+  for _ in 1 2 3 4; do
+    PR_NUMBER=$(onex scm pr-list "${GITHUB_REPO}" | python3 -c "import json,sys; b=sys.argv[1]; p=[x['number'] for x in json.loads(sys.stdin.read().strip().splitlines()[-1])['result']['prs'] if x['head_ref']==b]; print(p[0] if p else '')" "${BRANCH}")
+    [ -n "$PR_NUMBER" ] && break
+    sleep 30
+  done
+  PR_URL="https://github.com/${GITHUB_REPO}/pull/${PR_NUMBER}"
   echo "  Created PR: #${PR_NUMBER} (${PR_URL})"
 fi
 ```
@@ -947,14 +956,14 @@ fi
 cd "${WORKTREE_PATH}"
 GITHUB_REPO="${GITHUB_ORG}/${repo}"
 # PR and CI state come from the PR watcher's state file, never from GitHub: the gh shim refuses
-# gh pr view and gh pr checks from lanes. PR_STATE_LOCAL is the omni plugin's
+# PR reads from lanes. PR_STATE_LOCAL is the omni plugin's
 # skills/merge-drain/scripts/pr_state_local.py; there is no default path.
 PR_STATE_LOCAL="${PR_STATE_LOCAL:?set PR_STATE_LOCAL to the omni plugin skills/merge-drain/scripts/pr_state_local.py}"
 
-# Idempotency: the declared exact-head check, the one PR read the shim allows right before a mutation
-PR_STATE=$(ONEX_GH_EXACT_HEAD="${GITHUB_REPO}#${PR_NUMBER}" gh pr view "${PR_NUMBER}" --repo "${GITHUB_REPO}" --json state | jq -r '.state')
+# Idempotency: the PR watcher's state for the PR (a local read)
+PR_LINE=$(python3 "${PR_STATE_LOCAL}" --pr "${GITHUB_REPO}#${PR_NUMBER}" 2>/dev/null || true)
 
-if [ "$PR_STATE" = "MERGED" ]; then
+if [[ "${PR_LINE}" == *" state=MERGED "* ]]; then
   echo "  PR already merged, skipping"
 else
   # CI gate: one read of the PR watcher's verdict at the PR's head, never a watch loop and never a
@@ -1061,12 +1070,12 @@ that may not have merged yet.
 
 1. Determine the PR(s) for the current repo (`${repo}`) in this release run
    (from `state.pr_number`, or the repo-local PR list in the changelog).
-2. For each repo-local PR, verify `state == MERGED` with the declared exact-head check (the one
-   PR read the gh shim allows; `--jq` is not part of it, so `jq` reads the output):
+2. For each repo-local PR, verify `state == MERGED` from the PR watcher's state (a local read,
+   `PR_STATE_LOCAL` as in Sub-Step 10):
    ```bash
-   PR_STATE=$(ONEX_GH_EXACT_HEAD="${GITHUB_ORG}/${repo}#${PR_NUMBER}" gh pr view "${PR_NUMBER}" --repo "${GITHUB_ORG}/${repo}" --json state | jq -r '.state')
-   if [ "$PR_STATE" != "MERGED" ]; then
-     echo "  ERROR: PR #${PR_NUMBER} in ${repo} is not merged (state=${PR_STATE}). Cannot tag."
+   PR_LINE=$(python3 "${PR_STATE_LOCAL}" --pr "${GITHUB_ORG}/${repo}#${PR_NUMBER}" 2>/dev/null || true)
+   if [[ "${PR_LINE}" != *" state=MERGED "* ]]; then
+     echo "  ERROR: PR #${PR_NUMBER} in ${repo} is not merged (${PR_LINE}). Cannot tag."
      exit 1
    fi
    ```

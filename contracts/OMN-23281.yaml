@@ -1,0 +1,29 @@
+schema_version: "1.0.0"
+ticket_id: "OMN-23281"
+title: "The onex skills that subagents load read GitHub through onex scm verbs and the local watcher state, not through gh"
+summary: "24 onex skill files (pr-safety helpers, release, worktree, epic_team, decompose_epic, dashboard_sweep, gap and others) name onex scm verbs, pr_state_local.py or canonical-clone git in place of gh pr, gh run and gh api calls; the pr-safety helpers read an onex scm answer through one helper. A test pins the 24 files and a named break shows it failing."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-omn23281-onex-skills-mirror"
+    statement: "A subagent that loads an onex skill is told to read GitHub through the read-only mirror."
+    acceptance:
+      - id: "AC2"
+        statement: "AC2: the lane-facing callers named in the lane report read through mirror verbs, and a read the mirror lacks (job logs on a cache miss) is served by a mirror verb with a test -- falsifier: uv run pytest tests -q -k mirror in omniclaude"
+evidence_requirements:
+  - kind: "tests"
+    description: "The 24 onex skill files name no direct gh call, and a named break is refused."
+    command: "uv run pytest tests/unit/skills/test_onex_skills_name_no_direct_gh.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn23281-onex-skills-mirror"
+    description: "AC2: the 24 onex skill files name no direct gh call and the detector flags each refused shape and admits the mirror form -- proven by the named tests."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/unit/skills/test_onex_skills_name_no_direct_gh.py -q --no-cov -k mirror"
+    binds_ac: ["AC2"]
