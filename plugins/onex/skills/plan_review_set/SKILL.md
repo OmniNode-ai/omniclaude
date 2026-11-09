@@ -1,5 +1,5 @@
 ---
-description: Run a plan through a set of reviewers, ending with Fable 5.2 as the final reviewer, whose only output is a unified diff against the plan file. Use when asked to review a plan, run a plan review set, or get a plan ready to show.
+description: Bootstrap skill for running a plan through a set of reviewers, ending with Fable 5.2 as the final reviewer, whose only output is a unified diff against the plan file. Use when asked to review a plan, run a plan review set, or get a plan ready to show. No node replaces it yet; replace it if the review set is built as a node.
 mode: full
 version: 1.0.0
 level: basic
