@@ -32,13 +32,31 @@ emergency_bypass:
   follow_up_ticket_id: ""
 dod_evidence:
   - id: dod-omn23168-ladder-test
-    description: "A fresh HOME, a stub OpenRouter key server and the real onex secret and models commands give a ladder of two models; the entrypoint's print_ladder prints it as 1. and 2. lines ending paid and free, and phase 3 calls print_ladder after the models are tested. Fails at the merge base (print_ladder does not exist: StopIteration in 4 of 5 tests), fails against an onex with no --ladder, and fails when the printer drops each line's cost class."
+    description: "A fresh HOME, a stub OpenRouter key server and the real onex secret and models commands give a ladder of two models; the entrypoint's print_ladder prints it as 1. and 2. lines ending paid and free. Fails at the merge base (print_ladder does not exist) and fails against an onex with no --ladder."
     source: manual
     binds_ac:
       - "AC1"
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/skills/test_onboarding_ladder_omn23168.py -q --no-cov"
+        check_value: "uv run pytest tests/skills/test_onboarding_ladder_omn23168.py -q --no-cov -k test_a_fresh_install_with_one_key_and_two_models_prints_the_numbered_ladder"
+        cwd: "."
+  - id: dod-omn23168-ladder-break-test
+    description: "Injected break: the printer drops each line's cost class and the test goes red. Fails at the merge base (print_ladder does not exist). Its own check, because the verifier ends a check at 30 s and the real onex commands this test runs take about 16 s."
+    source: manual
+    binds_ac:
+      - "AC1"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_ladder_omn23168.py -q --no-cov -k test_injected_break_the_cost_class_is_dropped"
+        cwd: "."
+  - id: dod-omn23168-ladder-seam-tests
+    description: "An onex with no --ladder prints no ladder, the assertion has teeth, and phase 3 calls print_ladder after the models are tested. Fails at the merge base (print_ladder does not exist)."
+    source: manual
+    binds_ac:
+      - "AC1"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_ladder_omn23168.py -q --no-cov -k 'test_the_assertion_has_teeth or test_an_onex_that_lists_no_ladder_prints_no_ladder or test_phase_3_calls_print_ladder_after_the_models_are_tested'"
         cwd: "."
   - id: dod-deploy-omn23168-entrypoint-prints-the-ladder
     description: "The onboarding entrypoint at the head the check runs on calls print_ladder in phase 3. Fails at the merge base, which has no such call."
