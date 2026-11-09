@@ -80,6 +80,15 @@ dod_evidence:
     binds_ac:
       - "AC2"
     checks:
+      # The behaviour check. It walks the chain out of git rather than out of the
+      # page's own claims: page -> script served at that commit -> handler that
+      # script serves -> that handler's model_config. Measured both ways before it
+      # was bound: 3 pass at this head; against the merge base's page, which pins
+      # ad5d6ef8, the two chain tests fail and only the self-consistency control
+      # passes -- which is the whole reason the page's own digests are not evidence.
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_guide_pin_serves_the_fixed_handler_omn22477.py -q --no-cov"
+        cwd: "."
       - check_type: command
         # Every fetch lands in a file before it is read. Piping curl into `grep -q`
         # makes grep exit on the first match, curl loses the pipe and returns 23, and
