@@ -838,6 +838,14 @@ components:
   path: plugins/onex/skills/record_friction/SKILL.md
   backing_nodes: []
   rationale: class=pure_skill (pure methodology, no runtime dependency), no findings. Beta-CANDIDATE pending Phase 2 admission proof.
+- id: recursive_five_whys
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: pure_skill
+  path: plugins/onex/skills/recursive_five_whys/SKILL.md
+  backing_nodes: []
+  rationale: class=pure_skill (bootstrap skill moved from the internal omni plugin under OMN-23383, the hand-run form of the recursive five whys); replaced by its node-backed skill when a node writes the cause tree itself, not yet ticketed.
 - id: redeploy
   kind: skill
   exposure: hidden
