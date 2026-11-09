@@ -62,6 +62,8 @@ requirements:
     statement: "The statusline PR-count refresh lock is broken when its recorded holder is gone and stands while the holder is alive, however old the lock directory's mtime reads, so two stale renders run one sweep."
   - id: req-omn19998-public-reusables-leave-lab
     statement: "A public repository's job never reaches a lab runner through a reusable workflow of omniclaude: the fleet route is taken only by a private caller, and the runner label gate runs GitHub-hosted."
+  - id: req-omn19998-repo-evidence-check-timeout
+    statement: "The repo-evidence caller passes check-timeout-seconds, so a bound check that runs past the verifier's own 30 s is not skipped CHECK_BUDGET_EXCEEDED and repo-evidence / dod-verify does not read red with no failing test."
 evidence_requirements:
   - kind: tests
     description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
@@ -448,3 +450,15 @@ dod_evidence:
     - AC1
     - AC2
     - AC3
+  - id: dod-omn19998-repo-evidence-check-timeout
+    description: The caller passes a quoted check-timeout-seconds the reusable accepts and no lower than the fleet floor of 180 s. The merge base's caller passes none, so the test fails there.
+    source: manual
+    checks:
+    - check_type: test_passes
+      check_value: env -u PYTHONPATH uv run --frozen pytest tests/ci/test_repo_evidence_caller_check_timeout_omn19998.py -q --no-cov
+      cwd: ${OMNI_HOME}/omniclaude
+    - check_type: command
+      check_value: grep -nE 'check-timeout-seconds:[[:space:]]+"300"' .github/workflows/call-repo-evidence-gate.yml
+      cwd: ${OMNI_HOME}/omniclaude
+    binds_ac:
+    - AC1
