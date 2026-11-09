@@ -97,7 +97,7 @@ logic here.
 Queries GitHub branch protection required status checks and compares against actual CI job
 names from the most recent PR. Any required check name not present in actual checks is drift.
 
-Evidence method: `python3 "${OMNI_PLUGIN_ROOT:?}"/skills/merge-drain/scripts/pr_state_local.py --settings {repo}:main` (or `onex scm branch-protection`) — reads the required status checks of `main`.
+Evidence method: `python3 "${OMNI_PLUGIN_ROOT:?}"/skills/merge-drain/scripts/pr_state_local.py --settings {repo}:main` (or `onex scm branch-protection`) — reads the required status checks of `main`. A lane never runs `gh api` for it (the same read `gh api` made on `branches/main/protection/required_status_checks`).
 
 **Proof blob schema**:
 ```json
@@ -113,7 +113,7 @@ Evidence method: `python3 "${OMNI_PLUGIN_ROOT:?}"/skills/merge-drain/scripts/pr_
 
 **Auto-fix**: removes stale required check names from `required_status_checks`. A lane has no GitHub write, so
 it hands the proof blob (`valid_checks` is the new contexts list, `"strict": true`) to landing with `/omni:pr-handoff`;
-landing or the operator applies it.
+landing or the operator applies it. The write is a PATCH of `required_status_checks` that a lane never runs with `gh api`; the landing controller or operator sends it.
 
 Only removes stale checks; keeps all valid checks intact. Gate if no valid checks remain.
 
