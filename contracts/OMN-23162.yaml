@@ -1,0 +1,34 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-23162
+title: "omniclaude reads omnimarket from the dev merge tag that carries the A3a wire change"
+summary: "Move the omnimarket pin from dev-20261108120016-294b7a0fe265 to dev-20261108203540-db43d2dfcd3e, the merge tag of omnimarket#5470, so omnimarket's wire-compatibility check can grade a probe_ladder declaration against a pin that already carries it."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-omn23162-omnimarket-pin-a3a"
+    statement: "omniclaude pins omnimarket at dev-20261108214213-103aba6d4a53, at or after the A3a merge tag, in pyproject.toml and uv.lock alike."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: the omnimarket pin names dev-20261108214213-103aba6d4a53 in pyproject.toml and uv.lock and the omnimarket pin tests pass -- falsifier: at origin/dev the grep finds no such tag and the lock names dev-20261108120016-294b7a0fe265"
+evidence_requirements:
+  - kind: tests
+    description: "The omnimarket pin floor, staleness and resolver tests pass on the bumped pin"
+    command: "uv run pytest -q --no-cov tests/ci/test_omnimarket_pin_a3a_omn23162.py tests/ci/test_omnimarket_pin_floor_omn19998.py tests/ci/test_omnimarket_pin_not_stale_omn22335.py tests/ci/test_omnimarket_pin_resolver_omn21900.py"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn23162-omnimarket-pin-a3a"
+    description: "AC1: pyproject.toml and uv.lock read omnimarket from dev merge tag dev-20261108214213-103aba6d4a53 (at or after the A3a merge tag dev-20261108203540-db43d2dfcd3e) and the pin tests pass"
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "grep -c 'dev-20261108214213-103aba6d4a53' pyproject.toml uv.lock"
+        cwd: "${OMNI_HOME}/omniclaude"
+      - check_type: "test_passes"
+        check_value: "uv run pytest -q --no-cov tests/ci/test_omnimarket_pin_a3a_omn23162.py tests/ci/test_omnimarket_pin_floor_omn19998.py tests/ci/test_omnimarket_pin_not_stale_omn22335.py tests/ci/test_omnimarket_pin_resolver_omn21900.py"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC1"]
