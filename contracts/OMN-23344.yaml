@@ -1,0 +1,29 @@
+schema_version: "1.0.0"
+ticket_id: "OMN-23344"
+title: "The onex dev plugin loads on the Mac: its delegate skill files live inside the plugin directory instead of symlinking out of it"
+summary: "plugins/onex/skills/delegate/SKILL.md and prompt.md are real files, byte-identical to their single source in plugins/onex-delegate, and the done-flip guard test lives inside plugins/onex/hooks/tests with the symlink pointing the other way, so no file under plugins/onex or plugins/onex-delegate resolves outside its plugin directory. A test refuses an escaping symlink, a dangling symlink and a delegate copy that drifts from its source."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-omn23344-plugin-paths-stay-inside"
+    statement: "Claude Code loads the onex dev plugin because every plugin file resolves inside the plugin directory."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: no file in the onex plugin resolves outside its plugin directory, and a test refuses a symlink that escapes it -- falsifier: uv run pytest -q -k plugin_paths_stay_inside in omniclaude"
+evidence_requirements:
+  - kind: "tests"
+    description: "The plugin directories hold no escaping symlink, the delegate copies match their source, and the detector flags an escaping and a dangling symlink."
+    command: "uv run pytest tests/test_plugin_paths_stay_inside.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn23344-plugin-paths-stay-inside"
+    description: "AC1: plugins/onex and plugins/onex-delegate hold no symlink that resolves outside them, the delegate copies match their source, and the detector is shown flagging an escaping symlink."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/test_plugin_paths_stay_inside.py -q --no-cov -k plugin_paths_stay_inside"
+    binds_ac: ["AC1"]
