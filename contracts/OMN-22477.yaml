@@ -81,7 +81,11 @@ dod_evidence:
       - "AC2"
     checks:
       - check_type: command
-        check_value: 'S=$(gh api "repos/OmniNode-ai/omniclaude/contents/plugins/onex/ONBOARDING.md?ref=$(git rev-parse HEAD)" --jq .content | base64 -d | grep -oE "omniclaude/[0-9a-f]{40}/plugins/onex/skills/_bin/lab-onboarding.sh" | head -1 | cut -d/ -f2) && curl -fsSL "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/$S/plugins/onex/skills/_bin/lab-onboarding.sh" | grep -q 149fbe854d8f40e54ae90e8aa776ffe3506a3a4b'
+        # Every fetch lands in a file before it is read. Piping curl into `grep -q`
+        # makes grep exit on the first match, curl loses the pipe and returns 23, and
+        # under pipefail the check fails on a chain that is in fact correct -- which it
+        # did here once ("curl: (23) Failure writing output to destination").
+        check_value: 'T=$(mktemp -d) && gh api "repos/OmniNode-ai/omniclaude/contents/plugins/onex/ONBOARDING.md?ref=$(git rev-parse HEAD)" --jq .content > "$T/b64" && base64 -d < "$T/b64" > "$T/page.md" && S=$(grep -m1 -oE "omniclaude/[0-9a-f]{40}/plugins/onex/skills/_bin/lab-onboarding.sh" "$T/page.md" | cut -d/ -f2) && curl -fsSL "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/$S/plugins/onex/skills/_bin/lab-onboarding.sh" -o "$T/script.sh" && grep -q 149fbe854d8f40e54ae90e8aa776ffe3506a3a4b "$T/script.sh"'
         cwd: "${OMNI_HOME}/omniclaude"
   - id: dod-omn22477-served-handler-carries-the-fix
     description: "The handler the entrypoint's raw URL serves carries the workspace PYTHONPATH, which is what a downloaded run actually loads: the pin and download_digest now name the commit the fix merged as, so a participant run gets the fixed handler rather than the one dev was serving while the fix was in flight. Asserting the two digests agree is not enough, because agreement holds for any self-consistent pin, including one at a commit whose handler still has the fault. Fails at the merge base, where the URL names 6596b867 and the served handler still derives PYTHONPATH from its own location."
