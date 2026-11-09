@@ -15,7 +15,7 @@ requirements:
 evidence_requirements:
   - kind: tests
     description: "The omnimarket pin floor, staleness and resolver tests pass on the bumped pin"
-    command: "uv run pytest -q --no-cov tests/ci/test_omnimarket_pin_floor_omn19998.py tests/ci/test_omnimarket_pin_not_stale_omn22335.py tests/ci/test_omnimarket_pin_resolver_omn21900.py"
+    command: "uv run pytest -q --no-cov tests/ci/test_omnimarket_pin_a3a_omn23162.py tests/ci/test_omnimarket_pin_floor_omn19998.py tests/ci/test_omnimarket_pin_not_stale_omn22335.py tests/ci/test_omnimarket_pin_resolver_omn21900.py"
 emergency_bypass:
   enabled: false
   justification: ""
@@ -29,6 +29,6 @@ dod_evidence:
         check_value: "grep -c 'dev-20261108203540-db43d2dfcd3e' pyproject.toml uv.lock"
         cwd: "${OMNI_HOME}/omniclaude"
       - check_type: "test_passes"
-        check_value: "uv run pytest -q --no-cov tests/ci/test_omnimarket_pin_floor_omn19998.py tests/ci/test_omnimarket_pin_not_stale_omn22335.py tests/ci/test_omnimarket_pin_resolver_omn21900.py"
+        check_value: "uv run pytest -q --no-cov tests/ci/test_omnimarket_pin_a3a_omn23162.py tests/ci/test_omnimarket_pin_floor_omn19998.py tests/ci/test_omnimarket_pin_not_stale_omn22335.py tests/ci/test_omnimarket_pin_resolver_omn21900.py"
         cwd: "${OMNI_HOME}/omniclaude"
     binds_ac: ["AC1"]
