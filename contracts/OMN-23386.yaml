@@ -1,0 +1,34 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-23386
+title: "omniclaude's omnimarket pin moves forward in pyproject.toml and uv.lock so first-party-ref reads green on dev"
+summary: "Move the omnimarket pin from dev-20261109052000-c4ed6ae7662e to dev-20261109213140-ea2af8addd71, the newest omnimarket dev merge tag, in pyproject.toml (two places) and uv.lock, so the first-party-ref stale_pin rule accepts it."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-omn23386-omnimarket-pin-forward"
+    statement: "omniclaude pins omnimarket at dev-20261109213140-ea2af8addd71 in pyproject.toml and uv.lock alike, and the first-party-ref validator reports zero findings."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: the omnimarket pin names dev-20261109213140-ea2af8addd71 in pyproject.toml and uv.lock and the first-party-ref validator reports zero findings -- falsifier: at origin/dev the validator reports a stale_pin finding for dev-20261109052000-c4ed6ae7662e"
+evidence_requirements:
+  - kind: tests
+    description: "The omnimarket pin floor, staleness and resolver tests pass on the bumped pin"
+    command: "uv run pytest -q --no-cov tests/ci/test_omnimarket_pin_floor_omn19998.py tests/ci/test_omnimarket_pin_not_stale_omn22335.py tests/ci/test_omnimarket_pin_resolver_omn21900.py"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn23386-omnimarket-pin-forward"
+    description: "AC1: pyproject.toml and uv.lock read omnimarket from dev merge tag dev-20261109213140-ea2af8addd71 and the pin tests pass"
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "grep -c 'dev-20261109213140-ea2af8addd71' pyproject.toml uv.lock"
+        cwd: "${OMNI_HOME}/omniclaude"
+      - check_type: "test_passes"
+        check_value: "uv run pytest -q --no-cov tests/ci/test_omnimarket_pin_floor_omn19998.py tests/ci/test_omnimarket_pin_not_stale_omn22335.py tests/ci/test_omnimarket_pin_resolver_omn21900.py"
+        cwd: "${OMNI_HOME}/omniclaude"
+    binds_ac: ["AC1"]
