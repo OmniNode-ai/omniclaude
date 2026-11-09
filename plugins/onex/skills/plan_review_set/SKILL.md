@@ -36,7 +36,9 @@ Repeat rounds 1 and 2 until a round returns no finding you agree with. Two round
 
 ## Final round: Fable 5.2, diffs only
 
-Send Fable 5.2 the committed plan file with its path, and these instructions, word for word:
+Run Fable 5.2 as a plain reply with no tools and no hooks: start it from an empty temporary directory with tool use turned off and no project or user hooks loaded. In the first run it had tools and hooks, so a hook refused its reply over ticket ids and it wrote the patch to a file instead of returning it. The reply itself must be the diff.
+
+Send Fable 5.2 the committed plan file's text with its path, and these instructions, word for word:
 
 > You are the final reviewer of this plan. Do not write a review, a summary or any explanation. Return only a unified diff against the file at the given path that fixes every problem you find: wrong facts, steps that cannot be built or tested, missing acceptance checks, contradictions, unclear wording. If the plan needs no change, return an empty diff. Each hunk must apply cleanly to the file as given. Nothing outside the diff.
 
