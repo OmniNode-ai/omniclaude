@@ -432,3 +432,14 @@ Apple silicon and Intel. It also runs in a macOS 14+ VM with 4 vCPU, 8 GB RAM an
 the disk cannot be grown past the image from inside the guest), where the Docker stack is
 not offered. The install of the local-model path uses about 5 GB of that, so 17 GB free
 clears the 10 GB minimum with room to spare.
+
+---
+
+## Tell us what broke
+
+If setup, the plugin or a delegation fails, or does not do what you expected, open an
+[MVP feedback report](https://github.com/OmniNode-ai/omniclaude/issues/new?template=mvp-feedback.yml)
+(the form is `.github/ISSUE_TEMPLATE/mvp-feedback.yml`). It asks where it broke, then for the exact
+command you ran and the error or output you got. If a delegation ran, add the receipt's
+correlation id and the output of `onex doctor`; if install failed before `onex` or a receipt
+existed, leave those two empty.
