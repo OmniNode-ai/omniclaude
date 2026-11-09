@@ -103,7 +103,7 @@ Run each phase in sequence, advancing the FSM via `handler.advance()`. For each 
 1. **PRE_FLIGHT**: Load ticket contract from Linear, validate repo target, check environment
 2. **IMPLEMENT**: Execute ticket work (delegates to ticket-work skill)
 3. **LOCAL_REVIEW**: Run local-review loop until N consecutive clean passes
-4. **CREATE_PR**: Create PR via `gh pr create`, enable auto-merge
+4. **CREATE_PR**: Create PR via `onex scm pr-create <owner>/<repo> --head <branch> --base <base> --title <t> --body-file <f>`, then hand it to landing with `/omni:pr-handoff` (landing arms auto-merge)
 5. **TEST_ITERATE**: Fix failing tests up to `--max-test-iterations` cycles
 6. **CI_WATCH**: Poll CI until green or timeout; auto-fix failures
 7. **PR_REVIEW**: Address human review comments

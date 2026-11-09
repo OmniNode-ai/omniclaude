@@ -318,7 +318,7 @@ deterministic changed-file-to-target mapping.
 
 ### Target mapping
 
-Applied first-match-wins against `gh pr diff --name-only`:
+Applied first-match-wins against `git -C "$OMNIBASE_PATH/<repo>" diff --name-only origin/<base>`:
 
 | Changed-file pattern | Verification target | Check |
 |---|---|---|

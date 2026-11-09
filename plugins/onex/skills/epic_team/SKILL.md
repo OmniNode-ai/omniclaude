@@ -230,8 +230,12 @@ When creating PRs for sequential tasks that modify the same files:
 CHANGED_FILES=$(git diff --name-only main...)
 
 # Check open PRs from same epic for overlapping files
-for PR_NUM in $(gh pr list --label "epic:<EPIC-ID>" --json number -q '.[].number'); do
-  PR_FILES=$(gh pr view $PR_NUM --json files -q '.files[].path')
+# Open PRs naming the epic come from the PR watcher state (one `<repo>#<n> state=OPEN ...` line each); a PR's head
+# branch comes from `onex scm pr-view`, its files from the canonical clone
+for PR in $(python3 "${OMNI_PLUGIN_ROOT:?}"/skills/merge-drain/scripts/pr_state_local.py --find "<EPIC-ID>" | awk '$2=="state=OPEN"{print $1}'); do
+  PR_NUM="${PR##*#}"
+  HEAD_REF=$(onex scm pr-view "OmniNode-ai/$PR" | tail -n 1 | python3 -c "import json,sys; print(json.load(sys.stdin)['result']['head_ref'])")
+  PR_FILES=$(git -C "$OMNIBASE_PATH/${PR%%#*}" diff --name-only "origin/main...origin/$HEAD_REF")
   OVERLAP=$(comm -12 <(echo "$CHANGED_FILES" | sort) <(echo "$PR_FILES" | sort))
   if [[ -n "$OVERLAP" ]]; then
     echo "Overlapping files with PR #$PR_NUM: $OVERLAP"

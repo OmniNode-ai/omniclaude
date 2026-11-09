@@ -310,16 +310,14 @@ git add -A
 git commit -m "feat: <concise description from Phase 1 task summary>"
 
 # 3. Resolve repo and push
-REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+REPO=$(git remote get-url origin | sed -E 's#^.*github\.com[:/]##; s#\.git$##')
 git push -u origin "$HEAD_BRANCH"
 
-# 4. Create PR — resolve number via gh pr view on the PR URL (deterministic anchor)
+# 4. Create PR — resolve number from the PR URL (deterministic anchor)
 # PR Title Rule: The title MUST contain an OMN-XXXX ticket reference unless the
 # PR is a dependency bump or release. The PR Title Check CI workflow blocks merge without it.
-PR_URL=$(gh pr create \
-  --title "<conventional commit>: <description> [OMN-XXXX]" \
-  --repo "$REPO" \
-  --body "$(cat <<'EOF'
+BODY_FILE=$(mktemp)
+cat > "$BODY_FILE" <<'EOF'
 ## Summary
 <bullet points from Phase 1 requirements>
 
@@ -327,11 +325,14 @@ PR_URL=$(gh pr create \
 - CI must pass
 - Changes validated by Phase 3 quality checks
 EOF
-)")
-echo "$PR_URL" | grep -qE 'https://github\.com/.*/pull/[0-9]+' \
-  || { echo "ERROR: PR_URL doesn't look like a PR URL: $PR_URL"; exit 1; }
-PR_NUMBER=$(gh pr view "$PR_URL" --json number -q .number)
-test -n "$PR_NUMBER" || { echo "ERROR: failed to resolve PR number from: $PR_URL"; exit 1; }
+# pr-create prints the write node's terminal event, not a URL: read the number back from the watcher's state
+# (onex scm pr-list), which shows the PR after its next tick
+onex scm pr-create "$REPO" --head "$HEAD_BRANCH" --base <base> \
+  --title "<conventional commit>: <description> [OMN-XXXX]" \
+  --body-file "$BODY_FILE"
+PR_NUMBER=$(onex scm pr-list "$REPO" | python3 -c "import json,sys; b=sys.argv[1]; p=[x['number'] for x in json.loads(sys.stdin.read().strip().splitlines()[-1])['result']['prs'] if x['head_ref']==b]; print(p[0] if p else '')" "$HEAD_BRANCH")
+test -n "$PR_NUMBER" || { echo "ERROR: the watcher does not list a PR for $HEAD_BRANCH yet; retry after its next tick"; exit 1; }
+PR_URL="https://github.com/${REPO}/pull/${PR_NUMBER}"
 
 # 5. Enable automerge
 gh pr merge --auto --squash "$PR_NUMBER" --repo "$REPO"

@@ -48,7 +48,7 @@ args:
 
 Thin shim that dispatches to `node_verification_receipt_generator` in omnimarket.
 Checks task completion claims against CI and test evidence. Kills rubber-stamping:
-the node probes `gh pr checks` and/or runs `pytest` in the worktree and returns
+the node probes `onex scm pr-checks` and/or runs `pytest` in the worktree and returns
 structured per-dimension verification evidence.
 
 ---

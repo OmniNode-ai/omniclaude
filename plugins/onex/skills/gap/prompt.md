@@ -87,7 +87,7 @@ logic here.
 | 2.9 | auth_config | CONTRACT_DRIFT | NO (GATE) |
 | 2.10 | migration_parity | ARCHITECTURE_VIOLATION | NO (GATE) |
 | 2.11 | legacy_config | ARCHITECTURE_VIOLATION | YES (search-replace) |
-| 2.12 | branch_protection | INTEGRATION_HEALTH | YES (gh api) |
+| 2.12 | branch_protection | INTEGRATION_HEALTH | YES (landing/operator applies) |
 
 ### Probe 2.12: Branch Protection Drift
 
@@ -97,7 +97,7 @@ logic here.
 Queries GitHub branch protection required status checks and compares against actual CI job
 names from the most recent PR. Any required check name not present in actual checks is drift.
 
-Evidence method: `gh api` — queries `repos/{ORG}/{repo}/branches/main/protection/required_status_checks`.
+Evidence method: `python3 "${OMNI_PLUGIN_ROOT:?}"/skills/merge-drain/scripts/pr_state_local.py --settings {repo}:main` (or `onex scm branch-protection`) — reads the required status checks of `main`.
 
 **Proof blob schema**:
 ```json
@@ -111,11 +111,9 @@ Evidence method: `gh api` — queries `repos/{ORG}/{repo}/branches/main/protecti
 }
 ```
 
-**Auto-fix**: removes stale required check names from `required_status_checks` via:
-```bash
-gh api -X PATCH repos/{ORG}/{repo}/branches/main/protection/required_status_checks \
-  --input - <<< '{"strict": true, "contexts": [<valid_checks>]}'
-```
+**Auto-fix**: removes stale required check names from `required_status_checks`. A lane has no GitHub write, so
+it hands the proof blob (`valid_checks` is the new contexts list, `"strict": true`) to landing with `/omni:pr-handoff`;
+landing or the operator applies it.
 
 Only removes stale checks; keeps all valid checks intact. Gate if no valid checks remain.
 
@@ -127,7 +125,7 @@ Only removes stale checks; keeps all valid checks intact. Gate if no valid check
 | `db_url_drift` | `legacy_db_name_in_tests` | `AUTO` |
 | `db_url_drift` | `legacy_env_var` | `AUTO` |
 | `legacy_config` | `legacy_denylist_match` | `AUTO` |
-| `branch_protection` | `required_check_name_stale` | `AUTO` (gh api; GATE if no valid checks remain) |
+| `branch_protection` | `required_check_name_stale` | `AUTO` (applied by landing/operator; GATE if no valid checks remain) |
 | `kafka_topic` | `producer_only_no_consumer` | `GATE` |
 | `api_contract` | `missing_openapi` | `GATE` |
 | All other cases | — | `GATE` |

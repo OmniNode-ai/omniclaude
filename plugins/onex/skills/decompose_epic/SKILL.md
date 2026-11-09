@@ -94,8 +94,10 @@ from the repo manifest, and returns `ModelSkillResult` with created ticket detai
       git add contracts/OMN-*.yaml
       git commit -m "feat: auto-generate contracts for {epic_id} decomposition ({N} tickets)"
       git push origin auto/contracts-{epic_id}
-      gh pr create --title "auto: contracts for {epic_id} ({N} tickets)" \
-        --body "Auto-generated ticket contracts from decompose-epic" --auto
+      echo "Auto-generated ticket contracts from decompose-epic" > "$BODY_FILE"
+      onex scm pr-create <owner>/<repo> --head auto/contracts-{epic_id} --base <base> \
+        --title "auto: contracts for {epic_id} ({N} tickets)" --body-file "$BODY_FILE"
+      # then hand it to landing with /omni:pr-handoff
       ```
    This ensures tickets created by decompose-epic have the same contract coverage
    as tickets created by plan-to-tickets.
