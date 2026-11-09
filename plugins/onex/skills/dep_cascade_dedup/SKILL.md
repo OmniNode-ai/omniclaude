@@ -15,7 +15,7 @@ author: OmniClaude Team
 composable: true
 args:
   - name: --repos
-    description: "Comma-separated list of repos to scan (default: all OmniNode-ai repos discovered via gh repo list OmniNode-ai --json name)"
+    description: "Comma-separated list of repos to scan (default: all OmniNode-ai repos read from the repository names under $OMNIBASE_PATH)"
     required: false
   - name: --dry-run
     description: "List superseded PRs without closing them"
@@ -62,13 +62,13 @@ Designed to run as a post-release hook or on-demand cleanup.
 
 ### Step 1: Discover repos and open dep PRs <!-- ai-slop-ok: skill-step-heading -->
 
-For each repo (all OmniNode-ai repos discovered via `gh repo list OmniNode-ai --json name`, or filtered by `--repos`):
+For each repo (all OmniNode-ai repos read from the repository names under `$OMNIBASE_PATH`, or filtered by `--repos`):
 
 ```bash
-gh pr list --repo OmniNode-ai/{repo} --state open --label "${label:-dependencies}" --json number,title,headRefName,author,createdAt
+onex scm pr-list OmniNode-ai/{repo}
 ```
 
-Filter to PRs authored by `dependabot[bot]`, `renovate[bot]`, or `app/dependabot`.
+Filter to PRs labelled `${label:-dependencies}` and authored by `dependabot[bot]`, `renovate[bot]`, or `app/dependabot`.
 
 ### Step 2: Group by package <!-- ai-slop-ok: skill-step-heading -->
 

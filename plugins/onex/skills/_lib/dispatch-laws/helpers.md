@@ -67,7 +67,7 @@ refactor, and needs operator sign-off.
    by the receipt-honesty verifier (EFFECT-based claims validator), re-probed against live
    GitHub BEFORE the orchestrator accepts your receipt:
    - A **merged** claim requires `kind: pr_ship` with `pr: {number, state: MERGED, merge_sha, repo}`.
-     The verifier re-probes `gh pr view --json mergeCommit`; a missing or mismatched
+     The verifier re-probes the merge commit (`onex scm pr-merge-commit`); a missing or mismatched
      `merge_sha` is a block. Never assert "merged" in prose without this block.
    - A **deploy** claim requires `kind: deploy` with `deploy: {target, container_digest}`
      (digest must contain `sha256:`). Never assert "deployed/redeployed" in prose without it.

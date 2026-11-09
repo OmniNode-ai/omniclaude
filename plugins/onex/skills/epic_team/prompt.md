@@ -185,7 +185,7 @@ def dispatch_ticket(repo, ticket_id, ticket_title, ticket_url, repo_path, epic_i
 STACKED BRANCH: This ticket depends on a prior ticket's branch.
 - Use get_worktree() from _lib/pr-safety/helpers.md with base_ref='{base_branch}' instead of main.
 - Open your PR targeting '{base_branch}' instead of main:
-    gh pr create --base {base_branch}
+    onex scm pr-create <owner>/<repo> --head <branch> --base {base_branch} --title <t> --body-file <f>
 - If '{base_branch}' does not exist on the remote, fall back to main.
 """
     try:

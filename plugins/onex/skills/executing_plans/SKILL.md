@@ -231,7 +231,7 @@ the plan. Do not exit plan mode or stop to "await direction" in any other circum
 
 When all tickets/tasks close:
 
-1. **Discover open PRs**: `gh pr list --head <branch> --json number,title,state`
+1. **Discover open PRs**: `onex scm pr-list <owner>/<repo>` (the PRs whose head is `<branch>`)
 2. **If PRs have review comments**: offer `pr-polish`
 3. **Offer**: "All work complete. Run onex:finishing-a-development-branch? [Y/n]"
 4. If Y: invoke finishing-a-development-branch

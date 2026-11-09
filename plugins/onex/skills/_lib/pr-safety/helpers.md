@@ -3,9 +3,9 @@
 **Single mutation surface for all PR-mutating skills.**
 
 Every skill that mutates a PR (merge, push, comment, checkout, worktree creation) MUST import
-this library and call the appropriate function. Direct use of `gh pr merge`, `gh pr comment`,
-`gh pr edit`, `gh pr checkout`, `git push`, `git worktree add`, or `gh api .*/merge` outside
-this file is a CI enforcement violation.
+this library and call the appropriate function. A direct GitHub call (merge, comment, edit, checkout),
+`git push`, `git worktree add`, or the merge API outside this file is a CI enforcement violation; a PR is
+edited or commented through `onex scm pr-edit` and `onex scm pr-comment`, and merged by the landing controller.
 
 ## Import
 
@@ -501,12 +501,29 @@ def heartbeat_claim(pr_key: str, run_id: str) -> threading.Thread:
 Live-fetch PR state; compare SHA and updated_at; return fresh record.
 
 ```python
+import json
 import subprocess
+
+
+def _scm_result(verb: str, *args: str) -> dict:
+    """Run one `onex scm <verb>` read and return the `result` record of its JSON answer.
+
+    The answer is one JSON object on the last stdout line (a `bus-binding` status line may precede it); a read
+    that did not complete raises, so no caller reads a stale or empty record as an answer. Every snippet in
+    this file that reads GitHub state calls this helper.
+    """
+    proc = subprocess.run(
+        ["onex", "scm", verb, *args], capture_output=True, text=True, timeout=60, check=True
+    )
+    answer = json.loads(proc.stdout.strip().splitlines()[-1])
+    if answer.get("outcome") != "completed":
+        raise subprocess.CalledProcessError(1, proc.args, output=proc.stdout, stderr=proc.stderr)
+    return answer.get("result") or {}
 
 
 def ensure_pr_fresh(inventory_record: dict) -> dict:
     """
-    Fetch live PR state via `gh pr view` and compare against inventory_record.
+    Fetch live PR state via `onex scm pr-view` and compare against inventory_record.
 
     If the live head_sha or updated_at differs from the inventory record, logs a
     drift warning and returns the freshly fetched record. Otherwise returns the
@@ -524,7 +541,7 @@ def ensure_pr_fresh(inventory_record: dict) -> dict:
 
     Raises:
         ValueError — pr_key missing or invalid.
-        subprocess.CalledProcessError — gh command failed.
+        subprocess.CalledProcessError — onex scm command failed.
     """
     pr_key = inventory_record.get("pr_key")
     if not pr_key:
@@ -534,23 +551,9 @@ def ensure_pr_fresh(inventory_record: dict) -> dict:
     # Extract owner/repo and number from pr_key
     repo_part, number_part = pr_key.rsplit("#", 1)
 
-    result = subprocess.run(
-        [
-            "gh", "pr", "view", number_part,
-            "--repo", repo_part,
-            "--json", "headRefOid,updatedAt,title,state,reviewDecision,statusCheckRollup",
-        ],
-        capture_output=True, text=True, timeout=30,
-    )
-    if result.returncode != 0:
-        raise subprocess.CalledProcessError(
-            result.returncode, result.args,
-            output=result.stdout, stderr=result.stderr
-        )
-
-    live = json.loads(result.stdout)
-    live_sha = live.get("headRefOid", "")
-    live_updated = live.get("updatedAt", "")
+    live = _scm_result("pr-view", f"{repo_part}#{number_part}")
+    live_sha = live.get("head_sha", "")
+    live_updated = live.get("updated_at", "")
 
     cached_sha = inventory_record.get("head_sha", "")
     cached_updated = inventory_record.get("updated_at", "")
@@ -843,18 +846,13 @@ def resolve_branch(pr_number: int | str, repo: str) -> str:
         The headRefName string from GitHub.
 
     Raises:
-        subprocess.CalledProcessError -- gh CLI failed
+        subprocess.CalledProcessError -- onex scm command failed
         ValueError -- empty headRefName returned
     """
-    result = subprocess.run(
-        ["gh", "pr", "view", str(pr_number), "--repo", repo,
-         "--json", "headRefName", "--jq", ".headRefName"],
-        capture_output=True, text=True, check=True, timeout=30,
-    )
-    branch = result.stdout.strip()
+    branch = _scm_result("pr-ticket", f"{repo}#{pr_number}").get("head_ref", "")
     if not branch:
         raise ValueError(
-            f"resolve_branch: gh pr view returned empty headRefName for "
+            f"resolve_branch: onex scm pr-ticket returned empty headRefName for "
             f"PR #{pr_number} in {repo}"
         )
     return branch
@@ -1055,49 +1053,13 @@ def resolve_review_threads(repo_full: str, pr_number: int) -> dict:
     Raises:
         subprocess.CalledProcessError — gh command failed
     """
-    # Step 1: Query unresolved threads with comment bodies and positions
-    query = '''
-    query($owner:String!, $repo:String!, $pr:Int!) {
-      repository(owner:$owner, name:$repo) {
-        pullRequest(number:$pr) {
-          reviewThreads(first:50) {
-            nodes {
-              id
-              isResolved
-              path
-              line
-              comments(first:10) {
-                nodes { body author { login } }
-              }
-            }
-          }
-        }
-      }
-    }
-    '''
-    owner, repo = repo_full.split("/", 1)
-    result = subprocess.run(
-        [
-            "gh", "api", "graphql",
-            "-f", f"query={query}",
-            "-f", f"owner={owner}",
-            "-f", f"repo={repo}",
-            "-F", f"pr={pr_number}",
-            "--jq", ".data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)",
-        ],
-        capture_output=True, text=True, timeout=30,
-    )
-    if result.returncode != 0:
-        raise subprocess.CalledProcessError(
-            result.returncode, result.args,
-            output=result.stdout, stderr=result.stderr,
-        )
+    # Step 1: Read the unresolved threads (comment bodies and positions) from the mirror
+    # The result carries `threads` (each with the review comment ids and the GraphQL node id `PRRT_...`; confirm
+    # the item field names against one live `onex scm pr-threads` result before relying on them below).
+    threads = _scm_result("pr-threads", f"{repo_full}#{pr_number}").get("threads", [])
 
-    # Parse unresolved threads (one JSON object per line from --jq)
-    unresolved = []
-    for line in result.stdout.strip().splitlines():
-        if line.strip():
-            unresolved.append(json.loads(line))
+    # Keep the threads that are not resolved
+    unresolved = [t for t in threads if not t.get("isResolved")]
 
     summary = {
         "threads_found": len(unresolved),
@@ -1110,7 +1072,9 @@ def resolve_review_threads(repo_full: str, pr_number: int) -> dict:
         return summary
 
     for thread in unresolved:
-        thread_id = thread["id"]
+        thread_id = thread["id"]  # the GraphQL node id (PRRT_...)
+        # `pr-thread-reply --thread` takes the id of the review comment that starts the thread
+        reply_comment_id = thread.get("comments", {}).get("nodes", [{}])[0].get("databaseId")
         path = thread.get("path", "")
         line_num = thread.get("line")
         comments = [c["body"] for c in thread.get("comments", {}).get("nodes", [])]
@@ -1152,19 +1116,11 @@ def resolve_review_threads(repo_full: str, pr_number: int) -> dict:
 
         # Step 3: Post reply
         try:
-            reply_mutation = '''
-            mutation($body:String!, $threadId:ID!) {
-              addPullRequestReviewThreadReply(input:{body:$body, pullRequestReviewThreadId:$threadId}) {
-                comment { id }
-              }
-            }
-            '''
             subprocess.run(
                 [
-                    "gh", "api", "graphql",
-                    "-f", f"query={reply_mutation}",
-                    "-f", f"body={reply_body}",
-                    "-f", f"threadId={thread_id}",
+                    "onex", "scm", "pr-thread-reply", f"{repo_full}#{pr_number}",
+                    "--thread", str(reply_comment_id),
+                    "--body", reply_body,
                 ],
                 capture_output=True, text=True, timeout=30, check=True,
             )
@@ -1176,18 +1132,10 @@ def resolve_review_threads(repo_full: str, pr_number: int) -> dict:
 
         # Step 4: Resolve the thread
         try:
-            resolve_mutation = '''
-            mutation($threadId:ID!) {
-              resolveReviewThread(input:{threadId:$threadId}) {
-                thread { isResolved }
-              }
-            }
-            '''
             subprocess.run(
                 [
-                    "gh", "api", "graphql",
-                    "-f", f"query={resolve_mutation}",
-                    "-f", f"threadId={thread_id}",
+                    "onex", "scm", "pr-thread-resolve", f"{repo_full}#{pr_number}",
+                    "--review-thread", thread_id,  # the GraphQL node id (PRRT_...); refused without a reply from this lane
                 ],
                 capture_output=True, text=True, timeout=30, check=True,
             )
@@ -1209,13 +1157,13 @@ def resolve_review_threads(repo_full: str, pr_number: int) -> dict:
 
 ## check_merge_state(repo_full, pr_number)
 
-Check the merge state of a PR via the GitHub REST API. Returns `mergeable_state` and
+Check the merge state of a PR via `onex scm pr-status` (mergeStateStatus). Returns `mergeable_state` and
 `rebaseable` fields. Used by merge-sweep Step 6a to detect BEHIND branches.
 
 ```python
 def check_merge_state(repo_full: str, pr_number: int) -> dict:
     """
-    Fetch PR merge state via `gh api repos/{repo}/pulls/{N}`.
+    Fetch PR merge state via `onex scm pr-status {repo}#{N}`.
 
     Returns:
         {"mergeable_state": str, "rebaseable": bool}
@@ -1224,67 +1172,28 @@ def check_merge_state(repo_full: str, pr_number: int) -> dict:
     Raises:
         subprocess.CalledProcessError — gh command failed
     """
-    result = subprocess.run(
-        [
-            "gh", "api",
-            f"repos/{repo_full}/pulls/{pr_number}",
-            "--jq", "{mergeable_state, rebaseable}",
-        ],
-        capture_output=True, text=True, timeout=30,
-    )
-    if result.returncode != 0:
-        raise subprocess.CalledProcessError(
-            result.returncode, result.args,
-            output=result.stdout, stderr=result.stderr,
-        )
-    return json.loads(result.stdout)
+    return _scm_result("pr-status", f"{repo_full}#{pr_number}")
 ```
 
 ---
 
 ## update_pr_branch(repo_full, pr_number)
 
-Update a PR branch by merging the base branch into the PR head. Used by merge-sweep
+Update of a PR branch (the base merged into the PR head) is the landing controller's. Used by merge-sweep
 Step 6a for PRs with `mergeable_state == "behind"`.
 
-```python
-def update_pr_branch(repo_full: str, pr_number: int) -> dict:
-    """
-    Update PR branch via `gh api -X PUT repos/{repo}/pulls/{N}/update-branch`.
-
-    This merges the base branch (typically main) into the PR head branch.
-
-    Returns:
-        {"status": "updated"} on success.
-
-    Raises:
-        subprocess.CalledProcessError — gh command failed (e.g., 403 rate limit,
-        422 conflicts, 404 not found).
-    """
-    result = subprocess.run(
-        [
-            "gh", "api", "-X", "PUT",
-            f"repos/{repo_full}/pulls/{pr_number}/update-branch",
-        ],
-        capture_output=True, text=True, timeout=60,
-    )
-    if result.returncode != 0:
-        raise subprocess.CalledProcessError(
-            result.returncode, result.args,
-            output=result.stdout, stderr=result.stderr,
-        )
-    return {"status": "updated"}
-```
+A lane does not call GitHub to update a PR branch (there is no `onex scm` verb for it). A PR whose
+`mergeable_state` is `behind` is handed to landing with `/omni:pr-handoff`, which updates the branch.
 
 ---
 
 ## patch_pr_body(repo_full, pr_number, body) / patch_pr_title(repo_full, pr_number, title)
 
-**The only sanctioned way to edit a PR body or title.** Never use `gh pr edit` (<TICKET>).
+**The only sanctioned way to edit a PR body or title** is `onex scm pr-edit`. Never use `gh pr edit` (<TICKET>).
 
 ### Why not `gh pr edit`
 
-`gh pr edit` is a documented trap on repos with classic Projects enabled (`has_projects:
+Editing a PR with the gh CLI is a documented trap on repos with classic Projects enabled (`has_projects:
 true` — ALL OmniNode-ai repos as of 2026-07-03) when the token lacks the `read:project`
 scope (the standard `gh auth login` token has `repo, workflow, admin:org, ...` but NOT
 `read:project`):
@@ -1310,19 +1219,15 @@ read-back check cannot silently no-op.
 ```python
 def _patch_pr_field(repo_full: str, pr_number: int, field: str, value: str) -> dict:
     """
-    PATCH a single PR field via REST and verify by read-back.
+    Edit a single PR field via `onex scm pr-edit` and verify by read-back.
 
     Raises:
-        subprocess.CalledProcessError — gh command failed
-        RuntimeError — PATCH returned success but read-back does not match
+        subprocess.CalledProcessError — onex scm command failed
+        RuntimeError — the edit returned success but read-back does not match
                        (the silent-no-op class this helper exists to kill)
     """
     result = subprocess.run(
-        [
-            "gh", "api", "-X", "PATCH",
-            f"repos/{repo_full}/pulls/{pr_number}",
-            "-f", f"{field}={value}",
-        ],
+        ["onex", "scm", "pr-edit", f"{repo_full}#{pr_number}", f"--{field}", value],
         capture_output=True, text=True, timeout=30,
     )
     if result.returncode != 0:
@@ -1332,14 +1237,17 @@ def _patch_pr_field(repo_full: str, pr_number: int, field: str, value: str) -> d
         )
 
     # Mandatory read-back: PATCH success alone is not proof of application.
-    verify = subprocess.run(
-        ["gh", "api", f"repos/{repo_full}/pulls/{pr_number}", "--jq", f".{field}"],
-        capture_output=True, text=True, timeout=30,
-    )
+    # Title: `onex scm pr-view`. Body: `onex scm pr-view` carries no body, so read it from the watcher
+    # record's body file (see the landing worker brief) once the watcher's next tick has seen the edit.
+    try:
+        live_value = _scm_result("pr-view", f"{repo_full}#{pr_number}").get(field, "")
+        verify = None
+    except subprocess.CalledProcessError as exc:
+        live_value, verify = "", exc
     # GitHub normalizes line endings; compare normalized.
     def _norm(s: str) -> str:
         return s.replace("\r\n", "\n").strip()
-    if verify.returncode != 0 or _norm(verify.stdout) != _norm(value):
+    if verify is not None or _norm(live_value) != _norm(value):
         raise RuntimeError(
             f"patch_pr_{field}: PATCH reported success but read-back of "
             f"{repo_full}#{pr_number}.{field} does not match — silent no-op detected"
@@ -1363,12 +1271,12 @@ Write the new body to a file first (survives quoting/newlines), PATCH, then prov
 application by diffing the read-back — a zero-diff is the evidence line:
 
 ```bash
-# body from file: -F value with @ prefix reads the file contents
-gh api -X PATCH "repos/$REPO_FULL/pulls/$PR_NUM" -F "body=@$BODY_FILE"
+# body from file
+onex scm pr-edit "$REPO_FULL#$PR_NUM" --body-file "$BODY_FILE"
 
-# mandatory read-back proof (exit 0 = applied; any diff = silent no-op, hard-fail)
-gh api "repos/$REPO_FULL/pulls/$PR_NUM" --jq .body \
-  | diff - "$BODY_FILE"
+# mandatory read-back proof: read the body back with `onex scm pr-view` and diff it against the
+# file (exit 0 = applied; any diff = silent no-op, hard-fail)
+onex scm pr-view "$REPO_FULL#$PR_NUM"
 ```
 
 Raw `gh pr edit` in a non-allowlisted skill is flagged by the existing
@@ -1384,6 +1292,9 @@ Detect whether a GitHub repo has a merge queue enabled on its default branch.
 Results are cached per-repo for the duration of the caller's session.
 
 ```python
+import os
+import subprocess
+
 # Cache for merge queue detection per-repo
 _merge_queue_cache: dict[str, bool] = {}
 
@@ -1391,8 +1302,8 @@ _merge_queue_cache: dict[str, bool] = {}
 def has_merge_queue(repo_full: str) -> bool:
     """Detect whether a GitHub repo has a merge queue enabled on its default branch.
 
-    Uses the GitHub REST API to check branch protection rules, with a GraphQL
-    fallback to check the mergeQueue field. Results are cached per-repo.
+    Reads the ruleset rules through `pr_state_local.py --settings <repo>:<branch>`.
+    Results are cached per-repo.
 
     Args:
         repo_full: Full repo name (e.g., "OmniNode-ai/omniclaude").
@@ -1403,23 +1314,13 @@ def has_merge_queue(repo_full: str) -> bool:
     if repo_full in _merge_queue_cache:
         return _merge_queue_cache[repo_full]
 
-    result = subprocess.run([
-        "gh", "api", f"repos/{repo_full}/branches/main/protection",
-        "--jq", ".required_pull_request_reviews.merge_queue // false",
-    ], capture_output=True, text=True)
-
-    # Also check via the merge queue GraphQL field as a fallback
-    if result.returncode != 0 or result.stdout.strip() == "false":
-        org, repo_name = repo_full.split("/")
-        gql_result = subprocess.run([
-            "gh", "api", "graphql", "-f",
-            f'query=query {{ repository(owner: "{org}", name: "{repo_name}") '
-            f'{{ mergeQueue(branch: "main") {{ id }} }} }}',
-            "--jq", ".data.repository.mergeQueue.id",
-        ], capture_output=True, text=True)
-        has_queue = gql_result.returncode == 0 and bool(gql_result.stdout.strip())
-    else:
-        has_queue = True
+    # The rulesets line of the settings read names the rule types: `rules=merge_queue`.
+    result = subprocess.run(
+        ["python3", f"{os.environ['OMNI_PLUGIN_ROOT']}/skills/merge-drain/scripts/pr_state_local.py",
+         "--settings", f"{repo_full.split('/')[-1]}:main"],
+        capture_output=True, text=True,
+    )
+    has_queue = result.returncode == 0 and "merge_queue" in result.stdout
 
     _merge_queue_cache[repo_full] = has_queue
     return has_queue
@@ -1429,75 +1330,10 @@ def has_merge_queue(repo_full: str) -> bool:
 
 ## enqueue_to_merge_queue(repo_full, pr_number)
 
-Enqueue a PR into the repo's merge queue via the GraphQL `enqueuePullRequest`
-mutation. This is the **only** place in the codebase that calls the enqueue
-mutation directly.
+Enqueue a PR into the repo's merge queue.
 
-`gh pr merge --auto` does NOT enqueue into merge queues. Repos with
-merge queues must use this function instead.
-
-```python
-def enqueue_to_merge_queue(repo_full: str, pr_number: int) -> dict:
-    """Enqueue a PR into the GitHub merge queue via GraphQL.
-
-    Two-step process:
-    1. Fetch the PR's GraphQL node ID
-    2. Call the enqueuePullRequest mutation
-
-    Args:
-        repo_full: Full repo name (e.g., "OmniNode-ai/omniclaude").
-        pr_number: PR number.
-
-    Returns:
-        {"status": "enqueued"} on success.
-        {"status": "unresolved_conversations"} if blocked by unresolved review threads.
-        {"status": "failed", "error": str} on other failures.
-
-    Raises:
-        subprocess.CalledProcessError — only on node ID fetch failure.
-    """
-    org, repo_name = repo_full.split("/")
-
-    # Step 1: Get the PR's GraphQL node ID
-    node_id_result = subprocess.run([
-        "gh", "api", "graphql",
-        "-f", f'query=query {{ repository(owner: "{org}", name: "{repo_name}") '
-              f'{{ pullRequest(number: {pr_number}) {{ id }} }} }}',
-        "--jq", ".data.repository.pullRequest.id",
-    ], capture_output=True, text=True, timeout=30)
-
-    if node_id_result.returncode != 0 or not node_id_result.stdout.strip():
-        return {
-            "status": "failed",
-            "error": f"Failed to get PR node ID: {node_id_result.stderr.strip()}",
-        }
-
-    pr_node_id = node_id_result.stdout.strip()
-
-    # Step 2: Enqueue via GraphQL enqueuePullRequest mutation
-    enqueue_result = subprocess.run([
-        "gh", "api", "graphql",
-        "-f", f'query=mutation {{ enqueuePullRequest(input: '
-              f'{{pullRequestId: "{pr_node_id}"}}) '
-              f'{{ mergeQueueEntry {{ position state }} }} }}',
-    ], capture_output=True, text=True, timeout=30)
-
-    if enqueue_result.returncode == 0:
-        return {"status": "enqueued"}
-
-    stderr = enqueue_result.stderr or ""
-    stdout = enqueue_result.stdout or ""
-    if "All comments must be resolved" in stderr or "UNRESOLVED_CONVERSATIONS" in stdout:
-        return {
-            "status": "unresolved_conversations",
-            "error": "Unresolved review conversations block enqueue — resolve threads then retry",
-        }
-
-    return {
-        "status": "failed",
-        "error": stderr.strip() or stdout.strip(),
-    }
-```
+`gh pr merge --auto` does NOT enqueue into merge queues. Enqueueing is the landing controller's, not a lane's, and no `onex scm` verb enqueues. A lane hands the
+PR to landing with `/omni:pr-handoff` and stops touching it.
 
 ---
 
@@ -1576,8 +1412,8 @@ grep -r "pr-queue/runs/"     plugins/onex/skills/ --include="*.md" | grep -v "_l
 grep -r "$ONEX_STATE_DIR/pr-queue" plugins/onex/skills/ --include="*.md" | grep -v "_lib/pr-safety"
 
 # Mutation bans — only _lib/pr-safety/ may call these directly
-grep -r "gh pr merge\|gh pr comment\|gh pr edit\|gh pr checkout\|git push" plugins/onex/skills/ --include="*.md" | grep -v "_lib/pr-safety"
-grep -r "gh api.*merge\|gh api.*pulls" plugins/onex/skills/ --include="*.md" | grep -v "_lib/pr-safety"
+grep -r "gh pr \(merge\|comment\|edit\|checkout\)\|git push" plugins/onex/skills/ --include="*.md" | grep -v "_lib/pr-safety"
+grep -r "gh[ ]api.*\(merge\|pulls\)" plugins/onex/skills/ --include="*.md" | grep -v "_lib/pr-safety"
 
 # Worktree ban
 grep -r "git worktree add" plugins/onex/skills/ --include="*.md" | grep -v "_lib/pr-safety"
