@@ -361,15 +361,9 @@ disk_free_gb() {
   if [ -n "${ONBOARD_TEST_DISK_GB:-}" ]; then echo "$ONBOARD_TEST_DISK_GB"; return; fi
   df -Pk "$HOME" 2>/dev/null | awk 'NR==2 {printf "%d\n", $4/1048576}'
 }
-is_vm() {
-  if [ -n "${ONBOARD_TEST_VM:-}" ]; then [ "$ONBOARD_TEST_VM" = "1" ]; return; fi
-  [ "$(sysctl -n kern.hv_vmm_present 2>/dev/null || echo 0)" = "1" ]
-}
+is_vm() { [ "${ONBOARD_TEST_VM:-$(sysctl -n kern.hv_vmm_present 2>/dev/null || echo 0)}" = "1" ]; }
 is_rosetta() { [ "$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)" = "1" ]; }
-is_admin() {
-  if [ -n "${ONBOARD_TEST_ADMIN:-}" ]; then [ "$ONBOARD_TEST_ADMIN" = "1" ]; return; fi
-  id -Gn 2>/dev/null | tr ' ' '\n' | grep -qx admin
-}
+is_admin() { [ "${ONBOARD_TEST_ADMIN:-$(id -Gn 2>/dev/null | tr ' ' '\n' | grep -qx admin && echo 1)}" = "1" ]; }
 avail_mem_gb() { # free + inactive + speculative pages
   vm_stat 2>/dev/null | awk '
     /page size of/ { ps = $8 }
@@ -1374,6 +1368,15 @@ record_model_status() { # provider
   printf 'model=%s result=%s detail="%s"\n' "$1" "$verdict" "$(printf '%s' "${r#*:}" | tr '"' "'")" >>"$STATUS"
 }
 
+# print_ladder: the models delegation tries, in the order it tries them, as
+# `onex models list --ladder` gives them: one numbered line each, ending in free
+# or paid (unknown where no price is declared; never shown as free).
+print_ladder() {
+  local out; out="$(models_cmd list --ladder 2>>"$LOG")" && [ -n "$out" ] || { say "  The delegation order could not be listed; run 'onex models list --ladder' to see it."; return 1; }
+  say "  Delegation tries your models in this order, each marked free or paid:"
+  printf '%s\n' "$out" | while IFS= read -r line; do say "    $line"; done
+}
+
 # cause_of < text -> the line that says why a delegation failed: the last
 # "Error: ..." line, else the last refusal, else nothing. A summary such as "the
 # test delegation exited with status 1" is never the whole message on its own.
@@ -1446,6 +1449,8 @@ phase3() {
         phase_fail "see the log; the local model must be on the unpinned delegation ladder"
       ;;
   esac
+
+  print_ladder
 
   # One delegation with no pin: delegation chooses the model, as it will for the
   # developer's own work.
