@@ -71,11 +71,14 @@ def test_ci_runs_the_validator_with_the_baseline_and_feeds_quality_gate() -> Non
     workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text("utf-8"))
     job = workflow["jobs"]["first-party-ref"]
     commands = "\n".join(step.get("run", "") for step in job["steps"])
-    assert RUNTIME in commands
-    assert f"--baseline {BASELINE}" in commands
+    # OMN-19612: the validator allows one home per tag literal and reads a literal,
+    # so the job runs the hook ids whole-tree at the rev the pre-commit block owns.
+    for hook_id in HOOK_IDS:
+        assert f"pre-commit run {hook_id} --all-files" in commands
+    assert not re.search(r"dev-[0-9]{14}-[0-9a-f]{12}", commands)
     assert "first-party-ref" in workflow["jobs"]["quality-gate"]["needs"]
-    pre_commit_tag = _hook_rows()["check-action-pins"][0]["rev"]
-    assert pre_commit_tag not in commands
+    rows = _hook_rows()
+    assert all(hook["args"] == ["--baseline", BASELINE] for _, hook in rows.values())
 
 
 def test_pyproject_first_party_sources_name_a_tag_never_a_rev() -> None:
