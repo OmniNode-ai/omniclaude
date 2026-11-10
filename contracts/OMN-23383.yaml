@@ -1,0 +1,34 @@
+schema_version: "1.0.0"
+ticket_id: OMN-23383
+title: "The recursive five whys skill moves from the internal omni plugin to the onex plugin"
+summary: >
+  The operator ruled on 2026-11-09 that skills which name no private infrastructure ship in the
+  onex plugin of this repository. The recursive five whys procedure reads no private host, record
+  or repository, so it ships here as a bootstrap skill, with its distribution manifest entry and a
+  test, after a public-hygiene pass. The internal copy is deleted in the paired internal pull request.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn23383-recursive-five-whys
+    statement: The recursive five whys skill exists in the onex plugin, classified in the distribution manifest, and passes the public hygiene gate.
+    acceptance:
+      - id: AC1
+        statement: "AC1: plugins/onex/skills/recursive_five_whys/SKILL.md exists as a bootstrap skill with its manifest entry and every section -- falsifier: uv run pytest tests/skills/test_recursive_five_whys_omn23383.py -q --no-cov"
+evidence_requirements:
+  - kind: tests
+    description: "The recursive five whys skill test and the skill-to-node coverage test pass"
+    command: "uv run pytest tests/skills/test_recursive_five_whys_omn23383.py tests/unit/nodes/test_skill_node_coverage.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn23383-ac1-skill
+    description: "The skill, its manifest entry and its test exist. Fails at the merge base, where the skill directory does not exist."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_recursive_five_whys_omn23383.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
