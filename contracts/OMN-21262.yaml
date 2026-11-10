@@ -84,3 +84,11 @@ dod_evidence:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_onboarding_bootstrap_handler_omn21087.py tests/skills/test_onboarding_ladder_notice_omn21262.py -q --no-cov"
         cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21262-ac2-anchor-carries-returned-to-caller
+    description: 'The script anchors an omnibase_infra commit whose sibling pin names an omnimarket that has 8333e5c1 (OMN-21264, returned_to_caller) as an ancestor, so the notice ships only where the anchored code ends an exhausted ladder as returned_to_caller. The test fails on any anchor recorded as pinning an omnimarket without it, the previous anchor bf256f9660f2520dddb56328d2983f00bafdc910 included.'
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lab_onboarding_anchor_returned_to_caller_omn21262.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
