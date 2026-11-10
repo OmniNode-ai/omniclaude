@@ -49,8 +49,6 @@ REGISTRY_REPOS: Final[frozenset[str]] = frozenset(
         "omninode_infra",
         "omnimarket",
         "omniweb",
-        "onex_change_control",
-        "omnibase_compat",
     }
 )
 

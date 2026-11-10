@@ -61,11 +61,9 @@ DEFAULT_REPOS = (
     "omnibase_core",
     "omnibase_spi",
     "omnibase_infra",
-    "omnibase_compat",
     "omniintelligence",
     "omnimemory",
     "omninode_infra",
-    "onex_change_control",
 )
 
 

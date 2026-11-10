@@ -100,8 +100,6 @@ _KNOWN_REPOS = {
     "omninode_infra",
     "omnimarket",
     "omniweb",
-    "onex_change_control",
-    "omnibase_compat",
 }
 
 
