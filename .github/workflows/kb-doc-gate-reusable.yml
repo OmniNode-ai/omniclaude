@@ -196,17 +196,61 @@ jobs:
           echo "sha=$resolved_pin" >> "$GITHUB_OUTPUT"
           echo "kb-doc-gate pin: $resolved_pin"
 
+      # OMN-23527: a rate-limit or 5xx answer is retried with backoff a bounded number of
+      # times, and a fetch that is still refused fails the job AND says so in the job
+      # summary: the gate did not run, so the red is not a finding about the caller's
+      # docs. The ref is the validated 40-hex pin above, so no default-branch lookup is
+      # possible. The step never exits 0 unless the validator was fetched, and a failure
+      # that is not a rate limit or a 5xx fails at once without a retry. The next step
+      # still asserts the checkout is at the pin.
       - name: Fetch kb-doc-gate validator (omniclaude canonical source)
+        id: fetch
         if: github.repository != 'OmniNode-ai/omniclaude'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: OmniNode-ai/omniclaude
-          ref: ${{ steps.pin.outputs.sha }}
-          path: .omniclaude-kb-doc-gate
-          persist-credentials: false
-          sparse-checkout: |
-            scripts/kb_doc_gate.py
-          sparse-checkout-cone-mode: false
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VALIDATOR_REF: ${{ steps.pin.outputs.sha }}
+          VALIDATOR_REPOSITORY: OmniNode-ai/omniclaude
+          VALIDATOR_DEST: .omniclaude-kb-doc-gate
+          VALIDATOR_SPARSE_PATH: scripts/kb_doc_gate.py
+          FETCH_ATTEMPTS: "5"
+          FETCH_BACKOFF_SECONDS: "15"
+        run: |
+          set -uo pipefail
+          rm -rf "$VALIDATOR_DEST"
+          git init --quiet "$VALIDATOR_DEST"
+          git -C "$VALIDATOR_DEST" remote add origin "${GITHUB_SERVER_URL}/${VALIDATOR_REPOSITORY}"
+          git -C "$VALIDATOR_DEST" sparse-checkout set --no-cone "$VALIDATOR_SPARSE_PATH"
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          echo "::add-mask::${auth}"
+          attempt=1
+          while :; do
+            log="$(mktemp)"
+            if git -C "$VALIDATOR_DEST" -c "http.${GITHUB_SERVER_URL}/.extraheader=AUTHORIZATION: basic ${auth}" fetch --quiet --no-tags --depth 1 origin "$VALIDATOR_REF" >"$log" 2>&1; then
+              git -C "$VALIDATOR_DEST" -c advice.detachedHead=false checkout --quiet --detach FETCH_HEAD
+              echo "kb-doc-gate validator fetched at $(git -C "$VALIDATOR_DEST" rev-parse HEAD)"
+              exit 0
+            fi
+            cat "$log"
+            if ! grep -qiE 'rate limit|returned error: (429|5[0-9][0-9])|HTTP/[0-9.]+ (429|5[0-9][0-9])|error: 5[0-9][0-9]' "$log"; then
+              echo "::error::kb-doc-gate validator fetch failed and it is not a rate limit or server error (see the log above). THE GATE DID NOT RUN."
+              exit 1
+            fi
+            if [ "$attempt" -ge "$FETCH_ATTEMPTS" ]; then
+              break
+            fi
+            wait_seconds=$((FETCH_BACKOFF_SECONDS * 2 ** (attempt - 1)))
+            echo "::warning::kb-doc-gate validator fetch attempt ${attempt}/${FETCH_ATTEMPTS} was refused (rate limit or server error); retrying in ${wait_seconds}s"
+            sleep "$wait_seconds"
+            attempt=$((attempt + 1))
+          done
+          {
+            echo "### kb-doc-gate did not run: GitHub rate limit or server error"
+            echo
+            echo "The validator could not be fetched from ${VALIDATOR_REPOSITORY} after ${attempt} attempts."
+            echo "The gate did not run. This red is NOT a finding about the documents in this pull request; rerun the check once GitHub accepts requests again."
+          } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+          echo "::error::kb-doc-gate validator fetch was still refused by a GitHub rate limit or server error after ${attempt} attempts; the gate did not run (not a finding about the documents)."
+          exit 1
 
       - name: Assert the kb-doc-gate checkout is at the pin
         if: github.repository != 'OmniNode-ai/omniclaude'

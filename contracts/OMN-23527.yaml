@@ -1,0 +1,37 @@
+schema_version: 1.0.0
+ticket_id: OMN-23527
+title: Merge checks that fetch their checker report GitHub rate limits as such and retry
+summary: The kb-doc-gate reusable workflow fetched its validator with a plain checkout, so a GitHub rate limit left the check red with the gate never run. The fetch is now a step that retries a rate limit or 5xx with backoff, names a still-refused fetch in the job summary, fails any other error at once, and leaves a real gate violation failing exactly as before.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+- id: req-omn23527-rate-limit
+  statement: A GitHub rate limit or server error on the checker's input fetch is retried and named, never read as a finding about the code, and never makes the check pass.
+  acceptance:
+  - id: AC3
+    statement: 'AC3: the kb-doc-gate validator fetch retries a faked rate-limit or 503 answer with backoff, names a still-refused fetch in the job summary, fails a non-rate-limit error at once, and a faked gate violation still fails the gate step -- falsifier: uv run pytest tests/workflows/test_kb_doc_gate_fetch_retry_omn23527.py -q fails 6 of its 10 tests on the workflow as origin/dev holds it'
+evidence_requirements:
+- kind: tests
+  description: The focused workflow tests, each driving the step's own script with a faked rate-limit answer, a faked server error, a non-rate-limit failure and a faked real violation, with the pre-image failing control.
+  command: uv run pytest tests/workflows/test_kb_doc_gate_fetch_retry_omn23527.py -q
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+- id: dod-omn23527-tests
+  description: The focused tests pass on the branch and fail on the workflow as origin/dev holds it.
+  source: manual
+  binds_ac:
+  - AC3
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/workflows/test_kb_doc_gate_fetch_retry_omn23527.py -q
+- id: dod-omn23527-integration-proof
+  description: Run the focused tests on a lab host at the pushed head. Hosted CI cannot reach the lab, so only the local Done gate runs this unbound check.
+  source: manual
+  execution_scope: local_done_gate
+  checks:
+  - check_type: command
+    check_value: env PYTHONDONTWRITEBYTECODE=1 onex lab-work run --repo OmniNode-ai/omniclaude --sha "$(git rev-parse HEAD)" --lane dod-integration-proof-23527 --kind test -- env PYTHONDONTWRITEBYTECODE=1 uv run --frozen pytest tests/workflows/test_kb_doc_gate_fetch_retry_omn23527.py -q --no-cov
