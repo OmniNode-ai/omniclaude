@@ -1,0 +1,38 @@
+schema_version: "1.0.0"
+ticket_id: "OMN-23385"
+title: "The plan-review-set skill ends every plan review with Fable 5.2 returning only a diff against the plan file"
+summary: "plugins/onex/skills/plan_review_set/SKILL.md holds the review rounds, the final Fable 5.2 diff-only instruction and the apply-or-refuse step, and plugins/distribution_manifest.yaml classifies it beta. A test refuses a final round that allows prose."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-omn23385-plan-review-set"
+    statement: "A plan review set ends with a final reviewer whose only output is a unified diff against the plan file."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: the skill file holds the review rounds, the final Fable 5.2 diff-only instruction and the apply-or-refuse step -- falsifier: the file is absent or its final-round instruction allows prose output"
+      - id: "AC2"
+        statement: "AC2: the skill and manifest checks pass with the new skill -- falsifier: uv run pytest over the skill test fails on the PR head"
+evidence_requirements:
+  - kind: "tests"
+    description: "The skill file, its diff-only final round, its apply step and its beta manifest entry are asserted, and the control shows a prose-allowing final round is flagged."
+    command: "uv run pytest tests/skills/test_plan_review_set_omn23385.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn23385-skill-file"
+    description: "AC1: the skill file holds the rounds, the diff-only final instruction and the apply step."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/skills/test_plan_review_set_omn23385.py -q --no-cov -k 'declares_rounds or allows_only_a_diff or apply_step or detector_flags'"
+    binds_ac: ["AC1"]
+  - id: "dod-omn23385-manifest"
+    description: "AC2: the manifest classifies plan_review_set beta and the skill test passes."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/skills/test_plan_review_set_omn23385.py -q --no-cov -k manifest_classifies"
+    binds_ac: ["AC2"]
