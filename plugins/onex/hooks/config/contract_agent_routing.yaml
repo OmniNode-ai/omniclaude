@@ -107,8 +107,8 @@ bands:
   B5:
     score_min: 18
     score_max: 21
-    models: ["opus"]
-    efforts: ["xhigh"]
+    models: ["opus", "fable"]
+    efforts: ["xhigh", "high"]
     timeout_s: 10800
     max_concurrent: 5
     destination: "Opus lane plus adversarial verify lane"

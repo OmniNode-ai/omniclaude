@@ -89,6 +89,10 @@ _ROUTE_B4 = (
 _ROUTE_B5 = (
     "ROUTE: band=B5 score=18 dims=S3A3R2V2N3C2J3 dest=lane model=opus effort=xhigh"
 )
+_ROUTE_B5_FABLE = (
+    "ROUTE: band=B5 score=16 dims=S3A3R3V3N2C2J0 dest=claude model=fable effort=high "
+    "(complexity: operator ruling)"
+)
 
 
 def _check(source: str) -> list[Any]:
@@ -113,8 +117,9 @@ def _routed_call(route: str | None, model: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def test_shipped_allowlist_is_exactly_the_two_background_models() -> None:
-    assert set(ALLOWLIST) == {"opus", "sonnet"}
+def test_shipped_allowlist_is_exactly_the_three_background_models() -> None:
+    """Fable joined on 2026-11-10 (operator ruling) for large tasks at band B5."""
+    assert set(ALLOWLIST) == {"fable", "opus", "sonnet"}
 
 
 def test_shipped_allowlist_has_no_haiku() -> None:
@@ -131,7 +136,6 @@ def test_shipped_allowlist_has_no_inherit_escape_hatch() -> None:
     incident.
     """
     assert "inherit" not in ALLOWLIST
-    assert "fable" not in ALLOWLIST
 
 
 def test_allowlist_is_read_from_config_not_hardcoded(tmp_path: Path) -> None:
@@ -224,15 +228,20 @@ def test_model_built_by_concatenation_fails() -> None:
     assert "not a quoted string literal" in findings[0].reason
 
 
-def test_fable_fails_and_the_message_quotes_the_offending_value() -> None:
+def test_unlisted_model_fails_and_the_message_quotes_the_offending_value() -> None:
     """The banned model, named in the refusal so the author sees what they wrote."""
-    source = "await agent(`x`, { label: 'fable-call', model: 'fable' })"
+    source = "await agent(`x`, { label: 'other-call', model: 'gpt-5' })"
     findings = _check(source)
     assert len(findings) == 1
-    assert "'fable'" in findings[0].reason
+    assert "'gpt-5'" in findings[0].reason
     assert "not an allowed background model" in findings[0].reason
-    assert "opus, sonnet" in findings[0].reason
-    assert findings[0].label == "fable-call"
+    assert "fable, opus, sonnet" in findings[0].reason
+    assert findings[0].label == "other-call"
+
+
+def test_fable_passes_the_allowlist() -> None:
+    """Operator ruling 2026-11-10: Fable may run as a background agent."""
+    assert _check("await agent(`x`, { label: 'fable-call', model: 'fable' })") == []
 
 
 def test_model_only_inside_the_prompt_string_fails() -> None:
@@ -453,10 +462,10 @@ def test_agent_with_no_model_fails() -> None:
 
 def test_agent_with_disallowed_model_fails() -> None:
     findings = _GUARD.check_agent_input(
-        {"subagent_type": "general-purpose", "model": "fable"}, ALLOWLIST
+        {"subagent_type": "general-purpose", "model": "gpt-5"}, ALLOWLIST
     )
     assert len(findings) == 1
-    assert "'fable'" in findings[0].reason
+    assert "'gpt-5'" in findings[0].reason
 
 
 # ---------------------------------------------------------------------------
@@ -668,14 +677,14 @@ def test_registered_hook_reads_a_script_from_script_path(tmp_path: Path) -> None
     script is on disk rather than inline."""
     script = tmp_path / "on-disk.js"
     script.write_text(
-        "await agent(`x`, { label: 'from-disk', model: 'fable' })\n", encoding="utf-8"
+        "await agent(`x`, { label: 'from-disk', model: 'gpt-5' })\n", encoding="utf-8"
     )
     result = _run_hook(
         {"tool_name": "Workflow", "tool_input": {"scriptPath": str(script)}}, tmp_path
     )
     assert result.returncode == 2
     assert "from-disk" in result.stdout
-    assert "fable" in result.stdout
+    assert "gpt-5" in result.stdout
 
 
 # ---------------------------------------------------------------------------
@@ -714,10 +723,10 @@ def test_url_scheme_regex_does_not_hide_the_call_that_follows_it() -> None:
 def test_url_scheme_regex_does_not_hide_a_banned_model_on_the_same_line() -> None:
     """The same shape with an explicitly banned model still has to be caught."""
     findings = _check(
-        "const re = /a\\/\\//; agent('t', { label: 'x', model: 'fable' });\n"
+        "const re = /a\\/\\//; agent('t', { label: 'x', model: 'gpt-5' });\n"
     )
     assert len(findings) == 1, [f.render() for f in findings]
-    assert "'fable'" in findings[0].reason
+    assert "'gpt-5'" in findings[0].reason
 
 
 def test_quote_inside_a_character_class_does_not_swallow_later_calls() -> None:
@@ -1003,8 +1012,8 @@ def test_shipped_routing_declares_the_seven_dimensions_and_six_bands() -> None:
     assert ROUTING.bands["B2"].models == frozenset({"sonnet"})
     assert ROUTING.bands["B3"].models == frozenset({"sonnet"})
     assert ROUTING.bands["B4"].models == frozenset({"opus"})
-    assert ROUTING.bands["B5"].models == frozenset({"opus"})
-    assert ROUTING.bands["B5"].efforts == frozenset({"xhigh"})
+    assert ROUTING.bands["B5"].models == frozenset({"opus", "fable"})
+    assert ROUTING.bands["B5"].efforts == frozenset({"xhigh", "high"})
     assert ROUTING.bands["B4"].timeout_s == 7200
     assert ROUTING.bands["B4"].max_concurrent == 5
 
@@ -1077,6 +1086,38 @@ def test_contract_parser_refuses_yaml_outside_its_subset(text: str) -> None:
 )
 def test_matching_route_passes(route: str, model: str) -> None:
     assert _check_routed(_routed_call(route, model)) == []
+
+
+def test_fable_agent_with_a_valid_b5_route_passes() -> None:
+    """Operator ruling 2026-11-10: a Fable agent at band B5 with effort high."""
+    assert _check_routed(_routed_call(_ROUTE_B5_FABLE, "fable")) == []
+
+
+def test_fable_is_refused_below_band_b5() -> None:
+    route = _ROUTE_B4.replace("model=opus", "model=fable")
+    findings = _check_routed(_routed_call(route, "fable"))
+    assert len(findings) == 1
+    assert "band B4" in findings[0].reason
+
+
+def test_haiku_is_still_refused_at_every_band() -> None:
+    for route in (_ROUTE_B3, _ROUTE_B4, _ROUTE_B5_FABLE):
+        band = route.split("band=")[1].split()[0]
+        swapped = (
+            route.replace("model=fable", "model=haiku")
+            .replace("model=opus", "model=haiku")
+            .replace("model=sonnet", "model=haiku")
+        )
+        findings = _check_routed(_routed_call(swapped, "haiku"))
+        assert findings, band
+        assert any("haiku" in f.reason for f in findings), band
+
+
+def test_a_missing_model_is_still_refused_with_a_fable_route() -> None:
+    source = f"await agent(`{_ROUTE_B5_FABLE}\\ndo a thing`, {{ label: 'r' }})\n"
+    findings = _check_routed(source)
+    assert len(findings) == 1
+    assert "no model" in findings[0].reason
 
 
 def test_b4_route_with_sonnet_model_is_refused() -> None:
