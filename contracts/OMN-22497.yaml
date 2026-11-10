@@ -1,0 +1,42 @@
+schema_version: 1.0.0
+ticket_id: OMN-22497
+title: The sibling-pin refresh judges a dev tag on the base branch's required checks only, so a non-required red no longer holds a pin back
+summary: scripts/relock_git_sources.py stops reading every check run itself and asks omnimarket's dev-tag green-verdict oracle (judge_dev_tag_green, node_dev_tag_pin_mover_compute, merged in omnimarket#5145), so only the base branch's required checks decide a tag's colour; this is the ticket's second PR.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn22497-relock-required-checks-only
+    statement: The sibling-pin refresh judges a dev tag on the base branch's required checks only, so a non-required red no longer holds a pin back
+    acceptance:
+      - id: AC1
+        statement: "AC1: the tag verdict counts only the base branch's required status checks, so a commit whose only red is a non-required check reads green, and a commit with a red required check still reads red"
+      - id: AC2
+        statement: "AC2: when the required-check list cannot be read, the tag reads red, never green"
+evidence_requirements:
+  - kind: tests
+    description: Test that the relock script uses the omnimarket oracle for required checks only
+    command: uv run --frozen pytest tests/scripts/test_required_checks_only_omn22497.py -q
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+  - id: dod-omn22497-relock-required-only
+    description: Verify that non-required reds read green and required reds read red
+    source: manual
+    binds_ac:
+      - AC1
+    checks:
+      - check_type: test_passes
+        check_value: uv run --frozen pytest tests/scripts/test_required_checks_only_omn22497.py -q -k 'non_required_red_reads_green or required_red_still_reads_red or oracle_is_omnimarkets'
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn22497-relock-unreadable-is-red
+    description: Verify that an unreadable required-check list reads red
+    source: manual
+    binds_ac:
+      - AC2
+    checks:
+      - check_type: test_passes
+        check_value: uv run --frozen pytest tests/scripts/test_required_checks_only_omn22497.py -q -k unreadable_required_list_reads_red
+        cwd: ${OMNI_HOME}/omniclaude

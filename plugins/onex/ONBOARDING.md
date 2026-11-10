@@ -133,6 +133,22 @@ Every question comes before anything is installed:
    take the recommended order, so you never need to know or type a model id. Each chosen model
    is tested in phase 3. Change them later with `onex models add-model`, `onex models reorder`
    and `onex models remove`.
+
+When phase 3 has tested your models, it prints the order delegation will try them in, one
+numbered line per model, each ending in `free` or `paid`:
+
+```
+1. OpenRouter  gpt-4o  paid
+2. OpenRouter  google/gemma-4-31b-it:free  free
+```
+
+The same list is `onex models list --ladder` at any time. A model that runs on this Mac is
+free and is tried before any key, unless you chose another model first with `onex models
+first`; a key's models follow in the order you gave them. A model with no declared price is
+marked `unknown` and is never counted as free. Free models are tried first only when you put
+them first: choose them first in the numbered choice above, or move them with `onex models
+reorder`. To add a local model later, run `onex models add local --url <url> --model <name>`;
+it joins the list ahead of your keys.
 The command above passes `--no-containers`, so the run does not ask about the local Docker
 stack and phase 4 is skipped. That is a complete setup: onex runs your delegations natively on
 this Mac. Drop the flag to be asked, or pass `--containers` to answer it yes in advance.
@@ -159,7 +175,7 @@ find out something failed.
 | 0 | Preflight | Reads the machine and what an earlier setup left. Changes nothing unless you agree to set leftovers aside. Asks the questions above. |
 | 1 | Base tools | Xcode command-line tools, Homebrew, gh, jq, python@3.13, uv. |
 | 2 | Workspace | The clones at the script's anchor (see above), `OMNIBASE_PATH`, your `PATH`. |
-| 3 | onex + model key | The dispatch venv, onex, a local identity, your key, and **one delegation run on it**. |
+| 3 | onex + model key | The dispatch venv, onex, a local identity, your key, **one delegation run on it**, and then the numbered list of your models in the order they are tried, each marked free or paid. |
 | 4 | Docker | Only if you said yes. Installs or starts Docker Desktop, then the local stack on the same key. |
 | 5 | Claude Code | The onex plugin from your omniclaude clone. |
 | 6 | Verify | One line per check for the modes you chose. |
@@ -416,3 +432,14 @@ Apple silicon and Intel. It also runs in a macOS 14+ VM with 4 vCPU, 8 GB RAM an
 the disk cannot be grown past the image from inside the guest), where the Docker stack is
 not offered. The install of the local-model path uses about 5 GB of that, so 17 GB free
 clears the 10 GB minimum with room to spare.
+
+---
+
+## Tell us what broke
+
+If setup, the plugin or a delegation fails, or does not do what you expected, open an
+[MVP feedback report](https://github.com/OmniNode-ai/omniclaude/issues/new?template=mvp-feedback.yml)
+(the form is `.github/ISSUE_TEMPLATE/mvp-feedback.yml`). It asks where it broke, then for the exact
+command you ran and the error or output you got. If a delegation ran, add the receipt's
+correlation id and the output of `onex doctor`; if install failed before `onex` or a receipt
+existed, leave those two empty.

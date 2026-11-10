@@ -84,7 +84,7 @@ parseable, the check is authoritative.
 Depends on cross-repo search, SHA linkage, and drift artifact grep. Can produce
 UNKNOWN when linkage cannot be established cleanly.
 
-4. **PR_MERGED**: `gh pr list --search "{ticket_id}" --state merged --json number`
+4. **PR_MERGED**: `python3 "${OMNI_PLUGIN_ROOT:?}"/skills/merge-drain/scripts/pr_state_local.py --find {ticket_id}`
    across repos. If no PR found, record `UNKNOWN` with detail "No merged PR found
    matching ticket ID -- may indicate PR title/branch naming mismatch" rather than
    hard FAIL.

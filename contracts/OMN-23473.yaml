@@ -1,0 +1,45 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-23473
+title: "Move omniclaude's check tooling onto the shared-library build that drops the stale-version limit"
+summary: >
+  The check-internal-sibling-pins and check-action-pins hooks moved from omnibase_core tag
+  dev-20261101184124-fa758b315456 to dev-20261110003048-a84c3afcb9d3, a tag after the first one (dev-20261109232713-49e69fc7d3a4) that drops the
+  stale_pin age bound (omnibase_core#2303). The first-party-ref job in ci.yml now runs both hooks
+  whole-tree with pre-commit and holds no tag literal, so the tag has one home.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-omn23473-core-tag-one-home"
+    statement: "The pre-commit block owns the omnibase_core tag for the first-party-ref hooks, at a tag that drops the stale-version limit, and the CI job runs the hooks instead of repeating the tag."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: the check-internal-sibling-pins and check-action-pins hooks use a core dev tag at or after dev-20261109232713 -- falsifier: tests/ci/test_first_party_ref_wiring_omn21900.py::test_precommit_hooks_use_a_core_tag_that_drops_the_stale_pin_limit fails over the merge base"
+      - id: "AC2"
+        statement: "AC2: the first-party-ref job runs both hooks whole-tree and holds no dev tag literal -- falsifier: tests/ci/test_first_party_ref_wiring_omn21900.py::test_first_party_ref_job_runs_both_hooks_whole_tree_with_one_tag_home fails over the merge base"
+evidence_requirements:
+  - kind: tests
+    description: "The two wiring tests read .pre-commit-config.yaml and .github/workflows/ci.yml"
+    command: "uv run pytest tests/ci/test_first_party_ref_wiring_omn21900.py -q --no-cov -p no:cacheprovider -k 'stale_pin_limit or whole_tree_with_one_tag_home'"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn23473-ac1-core-tag"
+    description: "AC1: both hooks sit on a core tag that drops the stale-version limit"
+    source: "manual"
+    binds_ac: ["AC1"]
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_first_party_ref_wiring_omn21900.py -q --no-cov -p no:cacheprovider -k stale_pin_limit"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: "dod-omn23473-ac2-one-home"
+    description: "AC2: the CI job runs both hooks whole-tree and repeats no tag"
+    source: "manual"
+    binds_ac: ["AC2"]
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/ci/test_first_party_ref_wiring_omn21900.py -q --no-cov -p no:cacheprovider -k whole_tree_with_one_tag_home"
+        cwd: "${OMNI_HOME}/omniclaude"

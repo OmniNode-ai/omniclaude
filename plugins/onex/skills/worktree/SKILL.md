@@ -227,7 +227,7 @@ def classify(commits_ahead, has_uncommitted, last_commit, has_open_pr, stale_day
 
 PR check (only for potential STALE worktrees):
 ```bash
-gh pr list --head "${branch_name}" --state open --json number --jq 'length'
+onex scm pr-list "<owner>/<repo>"   # an open PR whose head is "${branch_name}" means has_open_pr
 ```
 
 ### Step 4: Execute actions (if --execute) <!-- ai-slop-ok: skill-step-heading -->
@@ -404,9 +404,11 @@ against the repo's actual integration branch (resolve dynamically as in Step 2 o
 integration_branch=$(git -C "$REPO_SLUG" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@')
 integration_branch="${integration_branch:-dev}"
 
-gh pr create --repo "$REPO_SLUG" --head "$BRANCH" --base "$integration_branch" \
+BODY_FILE=$(mktemp)
+echo "Auto-created by worktree skill (--triage)." > "$BODY_FILE"
+onex scm pr-create "$REPO_SLUG" --head "$BRANCH" --base "$integration_branch" \
   --title "chore: ship stale worktree $BRANCH" \
-  --body "Auto-created by worktree skill (--triage)."
+  --body-file "$BODY_FILE"
 ```
 
 **archive:** No action. Logged for manual review.
@@ -423,7 +425,7 @@ Tables: ship_it (with PR URLs), archive (with age/diff), prune (removed).
 Manages lifecycle of merged worktrees. Wraps `scripts/prune-worktrees.sh`.
 
 A worktree is stale when:
-- Its branch's PR has been merged (`gh pr list --state merged`)
+- Its branch's PR has been merged (`onex scm pr-heads`)
 - Its remote branch no longer exists
 
 ### Step 1: Run prune-worktrees.sh <!-- ai-slop-ok: skill-step-heading -->

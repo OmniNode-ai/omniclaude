@@ -1,0 +1,69 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-23168
+title: "Onboarding ends by printing the ladder: a numbered list of the chosen models, each marked free or paid"
+summary: >
+  After phase 3 has tested the developer's models, lab-onboarding.sh calls
+  print_ladder, which prints `onex models list --ladder` (OMN-23167) as a
+  numbered list, one line per model, each ending in its cost class. ONBOARDING.md
+  says the same and how to add a local model later. omnimarket is bumped to the
+  release that carries the ladder in pyproject.toml and uv.lock. The entrypoint
+  does not grow: two test-seam functions are written in the file's one-line style
+  to pay for the new ones. The test is a pytest (the ticket named a shell script;
+  the file-shape ratchet refuses a new shell script anywhere). The script's
+  INFRA_ANCHOR is not moved: no omnibase_infra commit yet pins an omnimarket that
+  carries the ladder (named follow-up on the ticket).
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn23168-onboarding-prints-the-ladder
+    statement: Phase 3 prints the numbered ladder of the chosen models, each line ending in free or paid, and the guide says the same.
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: a scripted onboarding on a fresh install with one OpenRouter key and two chosen models prints a numbered list whose lines end in free or paid -- falsifier: the onboarding script's test driven with a stub key server asserting both lines (`bash plugins/onex/skills/_bin/tests/test_lab_onboarding_ladder.sh`)"
+evidence_requirements:
+  - kind: tests
+    description: "The ladder test passes, and the onboarding script tests still pass"
+    command: "uv run pytest tests/skills/test_onboarding_ladder_omn23168.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn23168-ladder-test
+    description: "A fresh HOME, a stub OpenRouter key server and the real onex secret and models commands give a ladder of two models; the entrypoint's print_ladder prints it as 1. and 2. lines ending paid and free. Fails at the merge base (print_ladder does not exist) and fails against an onex with no --ladder."
+    source: manual
+    binds_ac:
+      - "AC1"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_ladder_omn23168.py -q --no-cov -k test_a_fresh_install_with_one_key_and_two_models_prints_the_numbered_ladder"
+        cwd: "."
+  - id: dod-omn23168-ladder-break-test
+    description: "Injected break: the printer drops each line's cost class and the test goes red. Fails at the merge base (print_ladder does not exist). Its own check, because the verifier ends a check at 30 s and the real onex commands this test runs take about 16 s."
+    source: manual
+    binds_ac:
+      - "AC1"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_ladder_omn23168.py -q --no-cov -k test_injected_break_the_cost_class_is_dropped"
+        cwd: "."
+  - id: dod-omn23168-ladder-seam-tests
+    description: "An onex with no --ladder prints no ladder, the assertion has teeth, and phase 3 calls print_ladder after the models are tested. Fails at the merge base (print_ladder does not exist)."
+    source: manual
+    binds_ac:
+      - "AC1"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_ladder_omn23168.py -q --no-cov -k 'test_the_assertion_has_teeth or test_an_onex_that_lists_no_ladder_prints_no_ladder or test_phase_3_calls_print_ladder_after_the_models_are_tested'"
+        cwd: "."
+  - id: dod-deploy-omn23168-entrypoint-prints-the-ladder
+    description: "The onboarding entrypoint at the head the check runs on calls print_ladder in phase 3. Fails at the merge base, which has no such call."
+    source: manual
+    binds_ac:
+      - "AC1"
+    checks:
+      - check_type: command
+        check_value: grep -qx '  print_ladder' plugins/onex/skills/_bin/lab-onboarding.sh
+        cwd: "${OMNI_HOME}/omniclaude"

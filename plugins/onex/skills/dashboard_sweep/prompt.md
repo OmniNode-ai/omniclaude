@@ -97,7 +97,7 @@ If `--dry-run`:
 - Set `DRY_RUN=true`; all write operations below are annotated `[DRY_RUN — skipped]`
 - No `Task()` dispatches
 - No `tracker.*` calls
-- No `gh pr create` or `gh pr merge` calls
+- No `onex scm pr-create` or `gh pr merge` calls
 - No deploy actions
 - JSON artifacts ARE written (read-only observation is always safe)
 
@@ -266,10 +266,8 @@ After all debug agents complete, for each domain with `status=fix_ready`:
 ```bash
 cd $ONEX_WORKTREES_ROOT/{dashboard_sweep_epic_id}/{repo}-{domain_id}
 git push -u origin <user>/{ticket_slug}-fix-{domain_id}
-gh pr create \
-  --repo OmniNode-ai/{repo} \
-  --title "fix(dashboard): {domain_id} — {root_cause} [{dashboard_sweep_epic_id}]" \
-  --body "$(cat <<'EOF'
+BODY_FILE=$(mktemp)
+cat > "$BODY_FILE" <<'EOF'
 ## Summary
 - Domain: {domain_id}
 - Pages fixed: {pages}
@@ -291,7 +289,10 @@ gh pr create \
 Sweep run: {dashboard_sweep_epic_id} / {run_id}
 Triage: {domain_id} | {fix_tier}
 EOF
-)"
+onex scm pr-create OmniNode-ai/{repo} \
+  --head <user>/{ticket_slug}-fix-{domain_id} --base <integration_branch> \
+  --title "fix(dashboard): {domain_id} — {root_cause} [{dashboard_sweep_epic_id}]" \
+  --body-file "$BODY_FILE"
 ```
 
 **Create Linear ticket:**

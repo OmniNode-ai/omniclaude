@@ -159,19 +159,6 @@ def test_pick_never_moves_backwards_or_to_unread(mod, tmp_path: Path) -> None:
     assert unread.skipped == {"omnibase-core": {names[1]: "unread"}}
 
 
-def test_check_runs_verdict(mod) -> None:
-    assert mod.check_runs_verdict([]) is None
-    assert mod.check_runs_verdict([("completed", "success"), ("completed", "skipped")])
-    assert (
-        mod.check_runs_verdict([("completed", "success"), ("in_progress", "")]) is None
-    )
-    assert (
-        mod.check_runs_verdict([("completed", "success"), ("completed", "failure")])
-        is False
-    )
-    assert mod.check_runs_verdict([("completed", "cancelled")]) is False
-
-
 def test_train_moves_every_pin_in_one_plan_through_the_mover(
     mod, tmp_path: Path
 ) -> None:

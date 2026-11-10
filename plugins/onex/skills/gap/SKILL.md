@@ -381,7 +381,7 @@ Phase 5: Report -- append fix section to .md artifact; update decisions ledger
 | `db_url_drift` | `legacy_env_var` | YES |
 | `topic_registry` | `topic_registry_missing_member` | YES (LOCAL-ONLY: adds enum member to local TopicRegistry only) |
 | `legacy_config` | `legacy_denylist_match` | YES (search-replace from denylist) |
-| `branch_protection` | `required_check_name_stale` | YES (removes stale checks via `gh api`; gate if no valid checks remain) |
+| `branch_protection` | `required_check_name_stale` | YES (landing/operator removes stale checks; gate if no valid checks remain) |
 | `kafka_topic` | `producer_only_no_consumer` | NO -- gate |
 | `api_contract` | `missing_openapi` | NO -- gate |
 | `env_activation` | `env_var_not_activated` | NO -- gate |

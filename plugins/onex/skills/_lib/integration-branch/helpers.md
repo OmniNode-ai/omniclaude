@@ -32,7 +32,7 @@ This is called once per epic, not once per ticket.
 
 Import `@_lib/pr-safety/helpers.md` before calling any mutation.
 
-1. Confirm PR is labeled `mergeable` (check labels via `gh pr view`)
+1. Confirm PR is labeled `mergeable` (check labels via `onex scm pr-view <owner>/<repo>#<n>`)
 2. Confirm PR is rebased on `epic/{epic_id}/integration`, not `dev`
    - If not: use `mutate_pr(pr_key, action="rebase_for_integration", run_id=run_id, fn=...)` to update the base branch
 3. Merge via `mutate_pr(pr_key, action="merge_into_integration", run_id=run_id, fn=...)`:

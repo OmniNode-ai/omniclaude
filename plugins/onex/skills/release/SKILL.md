@@ -73,7 +73,7 @@ outputs:
 > "succeeded"; the node does not execute the phase.
 >
 > Everything in the **"Target design (NOT YET IMPLEMENTED)"** section below — the
-> 14-phase pipeline, the per-repo `gh pr create` / `git tag` / PyPI-publish steps,
+> 14-phase pipeline, the per-repo `onex scm pr-create` / `git tag` / PyPI-publish steps,
 > the idempotency dedup table, and crash-safe state-file resume — describes the
 > intended future behavior. **None of it runs today.** Do not invoke `/release`
 > expecting it to cut a real release.
@@ -185,7 +185,7 @@ The target pipeline processes repos in dependency-tier order (tier 0 → tier N)
 1. **GATE**: Validate gate attestation (if provided) or proceed automatically
 2. **BUMP**: For each repo — infer or apply version bump; update `pyproject.toml` + `__version__` <!-- skill-boundary-ok: repo iteration is performed by node_release, this skill only dispatches -->
 3. **PIN**: Update cross-repo dependency pins in downstream repos
-4. **PR**: Create release PR per repo via `gh pr create`; enable auto-merge
+4. **PR**: Create release PR per repo via `onex scm pr-create`; enable auto-merge
 5. **MERGE**: Wait for CI + merge queue; confirm merged
 6. **TAG**: `git tag v{version}` + push; trigger PyPI publish workflow
 7. **WAIT**: Poll PyPI for package availability (unless `--skip-pypi-wait`)
@@ -264,7 +264,7 @@ The target design writes state atomically after each transition using a temp fil
 
 | Operation | Idempotency Key |
 |-----------|----------------|
-| PR dedupe | Check `gh pr list --head <branch>` before creating |
+| PR dedupe | Check `onex scm pr-list <owner>/<repo>` for the branch before creating |
 | Tag dedupe | Check `git tag -l <version>` before tagging |
 | Worktree reuse | Reuse existing worktree at `$ONEX_WORKTREES_ROOT/<run_id>/<repo>` |
 

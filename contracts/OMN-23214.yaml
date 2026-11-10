@@ -1,0 +1,38 @@
+schema_version: "1.0.0"
+ticket_id: "OMN-23214"
+title: "A developer can report what broke through an MVP feedback form linked from the guide, with the run's correlation id when a delegation ran"
+summary: "Adds .github/ISSUE_TEMPLATE/mvp-feedback.yml (stage field first; command and error required; correlation id and onex doctor output not required) and a last guide section linking it. A new test pins both."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-mvp-feedback-form"
+    statement: "A developer can report what broke, and install failures that precede any receipt are not blocked by the form."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: the form has the stage field, requires the command and error, and does not mark the correlation id or doctor output required -- falsifier: `uv run pytest tests/skills/test_mvp_feedback_form_omn23214.py -q --no-cov` passes"
+      - id: "AC2"
+        statement: "AC2: the guide links it -- falsifier: `grep -c mvp-feedback plugins/onex/ONBOARDING.md` is at least 1"
+evidence_requirements:
+  - kind: "tests"
+    description: "The MVP feedback form tests."
+    command: "uv run pytest tests/skills/test_mvp_feedback_form_omn23214.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn23214-form"
+    description: "AC1: the form has the stage field, requires the command and error, and does not require the correlation id or doctor output."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/skills/test_mvp_feedback_form_omn23214.py -q --no-cov"
+    binds_ac: ["AC1"]
+  - id: "dod-omn23214-guide-link"
+    description: "AC2: the guide links the form."
+    source: "manual"
+    checks:
+      - check_type: "command"
+        check_value: "grep -q mvp-feedback plugins/onex/ONBOARDING.md"
+    binds_ac: ["AC2"]

@@ -212,6 +212,10 @@ def test_every_other_caller_line_matches_the_merge_base(base_text: str) -> None:
     del expected_job["with"]["verifier-version"]
     expected_job["with"]["verifier-tag"] = head_job["with"]["verifier-tag"]
     assert re.fullmatch(r"dev-\d{14}-[0-9a-f]{12}", head_job["with"]["verifier-tag"])
+    # OMN-19998: the caller raises the per-check ceiling; the base passes none.
+    expected_job["with"]["check-timeout-seconds"] = head_job["with"][
+        "check-timeout-seconds"
+    ]
     assert head_job == expected_job
     expected = deepcopy(base)
     expected["jobs"]["repo-evidence"] = expected_job
@@ -219,7 +223,20 @@ def test_every_other_caller_line_matches_the_merge_base(base_text: str) -> None:
 
     head_s6, head_comments = comment_block(text, "# S6 cut-over (OMN-20074)")
     base_s5, base_comments = comment_block(base_text, "# S5 shadow count ")
-    assert head_comments == base_comments
+    # OMN-19998: drop the comment run that explains check-timeout-seconds.
+    kept: list[str] = []
+    skipping = False
+    for line in head_comments:
+        if line.startswith("# check-timeout-seconds (OMN-19998)"):
+            skipping = True
+            if kept and kept[-1] == "#":
+                kept.pop()
+        if skipping:
+            if line.endswith('this caller passes "300".'):
+                skipping = False
+            continue
+        kept.append(line)
+    assert kept == base_comments
     assert 'shadow and compare-with-occ are both "true"' in base_s5[0]
     assert not any(line.startswith("# S5 shadow count") for line in head_s6)
     assert 'shadow: "false" and compare-with-occ: "false"' in "\n".join(head_s6)

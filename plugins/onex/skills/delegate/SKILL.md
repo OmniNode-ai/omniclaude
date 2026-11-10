@@ -1,1 +1,248 @@
-../../../onex-delegate/skills/delegate/SKILL.md
+---
+version: 3.3.0
+description: "Single-command delegation to a model you choose: one you run, or your own provider key. Runs `onex delegate \"<prompt>\" --json` which builds the payload, dispatches node_delegate_skill_orchestrator, and prints the typed result on stdout; the skill shows the answer, then one `Run: <correlation_id>` line. Handled inline — no subagent, no payload file, no cat of workflow_result.json."
+skill_kind: dispatch
+mode: full
+level: basic
+debug: false
+category: delegation
+tags: [delegation, dispatch, single-command]
+composable: false
+args:
+  - name: prompt
+    description: "The task to delegate (e.g., 'write unit tests for verify_registration.py'), or `models` to list your models and `models first <provider> [<model>]` to choose the one delegation tries first"
+    required: true
+  - name: --task-type
+    description: "Override task classification: test, document, research, code_generation, refactor, reasoning, review (default: auto-classify from prompt)"
+    required: false
+  - name: --max-tokens
+    description: "Maximum tokens for the LLM response (default: 2048)"
+    required: false
+inputs:
+  - name: prompt
+    description: "User prompt to delegate to the model you configured (your own server or your own provider key)"
+outputs:
+  - name: status
+    description: "completed | failed | timeout"
+  - name: response
+    description: "LLM response content"
+  - name: model_name
+    description: "Model that handled the request"
+  - name: cost_savings_usd
+    description: "Estimated cost savings vs Claude baseline"
+---
+
+# /onex:delegate — single-command delegation
+
+**Skill ID**: `onex:delegate` · **Command**: `onex delegate` · **Backing node**: `node_delegate_skill_orchestrator` (omnimarket)
+
+A dispatch skill IS one CLI call. The procedure lives in the `onex delegate`
+entrypoint — payload construction, node dispatch, and result extraction are all
+internal. See `prompt.md` for the one command and how to present its output.
+
+Your context receives the typed result object; the skill replies with the answer and one
+closing line naming the run. The command is
+`onex delegate "<prompt>" --json --session-model <session-model-id> [--task-type <type>] [--max-tokens <n>]`, run
+plain, with no redirect, pipe or `&&`.
+
+| Outcome | Reply | Exit |
+|---|---|---|
+| success | `result.response` exactly, a blank line, then `Run: <correlation_id>` | 0 |
+| failure, including a refusal before dispatch | the one error line, then `Run: <correlation_id>` when the object has one | non-zero |
+| `returned_to_caller`: no model you chose answered | the reason line, then `Run: <correlation_id>`, then you do the task yourself in this session | non-zero |
+
+`returned_to_caller` (`result.terminal_failure_cause`) means the whole ladder of models you
+chose failed and the run was handed back: it has no answer and books zero savings. The skill
+prints the reason (`result.terminal_failure_reason`, else `result.error_message`) and the run
+line, then the session does the task itself with its own tools. Do not delegate it again and do
+not ask the user to retry. Any other failure still stops after the error line. `prompt.md` has
+the procedure.
+
+A refusal of `--session-model` (`Error: No such option '--session-model'`, exit 2, nothing dispatched) is neither row: the installed `onex` predates the flag. Run the same command once more without `--session-model` and reply from that run.
+
+`Run: <correlation_id>` is the run id: the same UUID is in the run's `receipt.json` and in
+the delegation record, so a reader can find the run from the reply alone. `--result-only`
+is not used: it prints the answer alone, and a caller that reads the command's output for
+the run id (the M4 board's C30 probe does) then finds none.
+
+The run's `receipt.json` (model, provider, cost, latency, attempts) and its
+`diagnostics.log` stay on disk. Read the receipt only when you ask for the cost, the
+model or the attempts, or when the error line alone cannot diagnose the failure.
+
+## Supported platforms
+
+| Platform | Install |
+|---|---|
+| macOS on Apple Silicon | the PyPI install below |
+| Linux | the PyPI install below |
+| macOS on Intel | build from source; the PyPI install below does not work there yet, see the quickstart |
+
+Docker is not required. Before offering to install, check the platform with `uname -sm`.
+`Darwin x86_64` is Intel macOS: do not offer the PyPI install, point at the quickstart's
+from-source instructions instead. Anything else in the table may be offered the install
+below.
+
+## Prerequisite: install the `onex` tool
+
+This is step 1 of the public OmniClaude Quickstart
+(`guides/onex-plugin-quickstart.md` in the `OmniNode-ai/knowledge_base` repository),
+and the command is the same. Three packages, one environment (the pins are declared in
+`plugin-compat.yaml` → `onex_cli`):
+
+| Package | Provides |
+|---|---|
+| `omnibase-core >= 0.46.8` | the `onex` console script and the `onex.cli` entry-point loader |
+| `omnibase-infra >= 0.38.67` | the `delegate` subcommand, registered into the `onex.cli` group, and its `--json` flag |
+| `omnimarket >= 0.4.205` | `node_delegate_skill_orchestrator`, the node the subcommand dispatches |
+
+Install (this is the command to run):
+
+```bash
+uv tool install --python 3.12 --with 'omnibase-infra>=0.38.67' --with 'omnimarket>=0.4.205' 'omnibase-core>=0.46.8'
+```
+
+`--python 3.12` is required: without it uv installs under the newest interpreter it can fetch
+(3.15 when this was written), and `confluent-kafka`, which `omnimarket` depends on, has no wheel
+for it, so the build fails. Python 3.12 and 3.13 both install cleanly; 3.12 is the floor the
+packages declare.
+
+All three come from PyPI. There is no source checkout to clone and no workspace variable to
+set. The version floors are the oldest releases supported; the command installs the newest
+published release of each. To update later: `uv tool upgrade omnibase-core`.
+
+If the install ends with a warning that `~/.local/bin` is not on your PATH, run
+`uv tool update-shell` once, then close the terminal window, open a new one, and start
+Claude Code again from that new window so it can find `onex`.
+
+With `pipx` instead of `uv`:
+
+```bash
+pipx install --python 3.12 'omnibase-core>=0.46.8' && pipx inject omnibase-core 'omnibase-infra>=0.38.67' 'omnimarket>=0.4.205'
+```
+
+Then, once per machine, give it an identity and a model (quickstart steps 2 and 3):
+
+```bash
+onex local init
+read -rs KEY && printf '%s' "$KEY" | onex secret set llm.openrouter.api_key && unset KEY
+```
+
+The second line registers your own OpenRouter key: it reads the key from what you paste,
+never from the command line or an environment variable, and shows nothing while you paste.
+Use `llm.glm.api_key` for GLM. To use a model server you run instead, declare it in
+`~/.omninode/delegation/bifrost_overrides.yaml` as the quickstart's step 3 option A shows.
+With neither, the first delegation refuses with `No local model is declared on this
+machine` before it reaches any model.
+
+The skill runs `onex delegate ... --json`. If `onex delegate --help` does not list
+`--json`, the installed `omnibase-infra` is older than the release that added it: run
+`uv tool upgrade omnibase-core` to take the newest releases.
+
+Verify: `onex --version` prints `onex version 0.47.x` or newer, from any directory.
+
+`onex delegate --help` answering is not proof the command works — click answers it before
+any dispatch. If `omnimarket` is missing entirely, `--help` still exits 0 and the first real
+invocation fails with `Error: Unknown node 'node_delegate_skill_orchestrator'`, listing ~130
+unrelated nodes as "known". The node is found through the `onex.nodes` entry-point group
+over **installed distributions**, so once installed this way the command works from any
+directory. The quickstart's step 4 (`onex delegate "say hello in one word"`) is the real test.
+
+The documented command is proven in CI: `plugins/onex-delegate/tests/test_install_works.py`
+installs exactly the `install_hint` from `plugin-compat.yaml` into a clean environment and
+resolves `node_delegate_skill_orchestrator` from the installed distribution.
+
+**Do not run `uv run onex delegate`.** `uv run` resolves the venv of whatever
+project the *current directory* belongs to, so the command only works inside a
+repo that happens to co-install `omnibase-infra`, and fails everywhere else with
+`Error: No such command 'delegate'`. Install the CLI as a tool (above) and call
+the bare `onex` on PATH.
+
+Installing `omnibase-core` alone is not enough — `onex` will load, but
+`onex delegate` exits 2 with `Error: No such command 'delegate'. Did you mean
+'gate'?`.
+
+## One-time permission rule
+
+Add `Bash(onex delegate:*)` to `permissions.allow` in `~/.claude/settings.json`
+(or via `/permissions`) once so `/onex:delegate` does not ask on every call:
+
+```json
+{
+  "permissions": { "allow": ["Bash(onex delegate:*)"] }
+}
+```
+
+This rule covers only `onex delegate` invocations. The one-time setup commands above
+(`onex local init`, `onex secret set`) are separate commands and ask once each.
+
+## Choosing the model delegation tries first
+
+After onboarding, you can pick which of your models delegation tries first without
+leaving Claude Code and without re-running onboarding:
+
+```
+/onex:delegate models
+/onex:delegate models first openrouter qwen/qwen3.8-27b
+/onex:delegate models first --clear
+```
+
+The first command lists your providers and their models; the one tried first is listed
+first. The second runs `onex models first <provider> <model>`, and the next delegation
+tries that model before any other. The third goes back to the usual order. The
+procedure is in `prompt.md`. Add `Bash(onex models:*)` to `permissions.allow` as well if
+you do not want a prompt each time.
+
+## Task Types
+
+| Task Type | When to use |
+|-----------|-------------|
+| `test` | write tests, pytest, assertions |
+| `document` | docstrings, README, explanations |
+| `research` | investigate, analyze, explain (default) |
+| `code_generation` | write code, create app, implement |
+| `refactor` | refactoring, cleanup |
+| `reasoning` | think through, analyze a decision |
+| `review` | code review, audit |
+
+Omit `--task-type` to auto-classify from the prompt (`onex delegate` applies the
+keyword table above; routing is owned by the node contract's `allowed_task_types`).
+
+## Prompt Size
+
+A long prompt is not refused. Delegation tries your local model first, if you declared one, and
+moves on to your provider key when the answer does not clear the quality bar or the prompt is
+too large for the model.
+
+| Kind of task | Comfortable size | Above it |
+|--------------|------------------|----------|
+| prose (`document`, `research`, `review`, `reasoning`, `summarization`, `planning`) | up to about 24,000 characters | still completes, but is slower and may move to a larger model |
+| code (`code_generation`, `refactor`, `test`) | up to about 200,000 characters | the same |
+
+A single delegation has a 4-minute time budget. If a long prompt runs out of it, split the
+material: one delegation per section, then one to combine the results. Free provider models can
+return an empty answer, which is retried on the next model; the result's `attempts` field shows
+what was tried. A provider whose key is not registered fails with `credential_absent`: run
+`onex secret set` for it (quickstart step 3).
+
+## Usage
+
+```
+/onex:delegate explain what a calendar app needs
+/onex:delegate --task-type code_generation write a Python HTTP server
+/onex:delegate --max-tokens 4096 analyze the routing architecture
+/onex:delegate --task-type test write unit tests for verify_registration.py
+```
+
+## What This Skill Does NOT Do
+
+- Construct a payload temp file, `cd` to omnimarket, or `cat` workflow_result.json (all internal to `onex delegate`)
+- Spawn a general-purpose subagent (exempted from the delegation enforcer — `skill_kind: dispatch`)
+- Call any LLM directly, publish through the legacy hook emission client, or open transport clients from the skill surface
+
+## Related
+
+- **CLI entrypoint**: `omnibase_infra/src/omnibase_infra/cli/cli_delegate.py`, registered as `[project.entry-points."onex.cli"] delegate` in `omnibase_infra/pyproject.toml`
+- **Console script**: `omnibase_core/pyproject.toml` `[project.scripts] onex`; the `onex.cli` group loader is `omnibase_core/src/omnibase_core/cli/cli_commands.py`
+- **Pin source of truth**: `plugins/onex-delegate/plugin-compat.yaml` → `onex_cli`
+- **Result model**: `omnimarket/src/omnimarket/models/delegation/wire/model_delegate_skill_response.py`
+- **Orchestrator contract**: `omnimarket/src/omnimarket/nodes/node_delegate_skill_orchestrator/contract.yaml`

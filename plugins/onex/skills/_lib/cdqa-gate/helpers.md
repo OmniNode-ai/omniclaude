@@ -40,11 +40,12 @@ Invoke: Skill(skill="onex:contract_compliance_check", args="{ticket_id}")
 Query the CI check named `arch-invariants` on the PR:
 
 ```bash
-gh pr checks {pr_number} --repo {repo} --json name,conclusion \
-  | python3 -c "import json,sys; checks=json.load(sys.stdin); \
-    match=[c for c in checks if 'arch-invariants' in c['name']]; \
-    print(match[0]['conclusion'] if match else 'not_found')"
+onex scm pr-checks {repo}#{pr_number} | python3 -c "import json,sys; r=json.loads(sys.stdin.read().strip().splitlines()[-1])['result']; n='arch-invariants'; \
+  print('failure' if any(n in x for x in r['red']) else 'pending' if any(n in x for x in r['pending']) \
+  else 'success' if any(n in d[0] for d in r['detail']) else 'not_found')"
 ```
+
+The printed word (`failure`, `pending`, `success`, `not_found`) routes below; `red`, `pending` and `detail` are the check-name lists of the `onex scm pr-checks` result.
 
 **Result routing**:
 - `success` → proceed to Gate 3
@@ -57,11 +58,12 @@ gh pr checks {pr_number} --repo {repo} --json name,conclusion \
 Query the CI check named `check-ai-slop` on the PR:
 
 ```bash
-gh pr checks {pr_number} --repo {repo} --json name,conclusion \
-  | python3 -c "import json,sys; checks=json.load(sys.stdin); \
-    match=[c for c in checks if 'check-ai-slop' in c['name'] or 'ai-slop' in c['name']]; \
-    print(match[0]['conclusion'] if match else 'not_found')"
+onex scm pr-checks {repo}#{pr_number} | python3 -c "import json,sys; r=json.loads(sys.stdin.read().strip().splitlines()[-1])['result']; n='ai-slop'; \
+  print('failure' if any(n in x for x in r['red']) else 'pending' if any(n in x for x in r['pending']) \
+  else 'success' if any(n in d[0] for d in r['detail']) else 'not_found')"
 ```
+
+The printed word (`failure`, `pending`, `success`, `not_found`) routes below; `red`, `pending` and `detail` are the check-name lists of the `onex scm pr-checks` result.
 
 **Result routing**:
 - `success` → all gates passed; proceed to merge

@@ -152,7 +152,7 @@ evidence_requirements:
     command: "uv run pytest tests/ -m unit -x"
   - kind: "ci"
     description: "CI pipeline green"
-    command: "gh pr checks"
+    command: "onex scm pr-checks <owner>/<repo>#<n>"
 emergency_bypass:
   enabled: false
   justification: ""

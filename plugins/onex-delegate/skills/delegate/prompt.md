@@ -71,7 +71,22 @@ Do not show the rest of the object: no receipt fields, no metrics, no attempts.
 If the command exits non-zero, or `result.status` is not `completed`, show the one error
 line (stderr's `Error: ...` line, else `result.error_message`) and the same
 `Run: <correlation_id>` line when the object has one, then stop. Do not fall back to an
-inline LLM call.
+inline LLM call. The one exception is `returned_to_caller`, below.
+
+## When no model answers: `returned_to_caller`
+
+When `result.terminal_failure_cause` is `returned_to_caller`, every model you chose
+failed and the run was handed back to this session: it carries no answer and booked zero
+savings. This is not a failure to stop at. Do this, in order:
+
+1. Print one line naming the reason: `result.terminal_failure_reason` when the object has
+   one (it is the cause that decided the last model), else `result.error_message`. Then
+   the same `Run: <correlation_id>` line.
+2. Do the task yourself, in this session, with your own tools, exactly as it was asked.
+   Do not call `onex delegate` again for it and do not tell the user to retry.
+
+Only `returned_to_caller` hands the task back. Any other non-`completed` status keeps the
+rule above: show the error line and the run line, then stop.
 
 ## Read the receipt only when needed
 

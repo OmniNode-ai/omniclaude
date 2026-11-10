@@ -55,7 +55,7 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_onboarding_model_config_outside_clone_omn22477.py tests/skills/test_onboarding_bootstrap_handler_omn21087.py -q --no-cov"
-        cwd: "."
+        cwd: "${OMNI_HOME}/omniclaude"
   - id: dod-omn22477-ollama-fault-is-not-a-config-guess
     description: "load_ollama_config sets OLLAMA_CONFIG_ERR to which of its two faults it hit, and setup_ollama reports that instead of the fixed sentence, so a failed model-config call is no longer named as the omnimarket config declaring no ollama block. Fails at the merge base, where three of the four cases fail because the variable does not exist and the collapsed sentence is still in the entrypoint."
     source: manual
@@ -64,7 +64,7 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_onboarding_ollama_config_fault_omn22477.py -q --no-cov"
-        cwd: "."
+        cwd: "${OMNI_HOME}/omniclaude"
   - id: dod-deploy-omn22477-fingerprint-on-github
     description: "The node contract on GitHub, at the commit this is probed from, carries the re-pinned bootstrap fingerprint of the fixed handler. That file is the runtime path this change touches, and the fingerprint is what a participant run checks the downloaded handler against, so the probe reads the deployed surface rather than anything this pull request authors locally. Falsifiable: at the merge base, and at any commit whose handler still derives PYTHONPATH from ${BASH_SOURCE[0]}, the file carries the old fingerprint and the grep exits nonzero."
     source: manual
@@ -73,6 +73,28 @@ dod_evidence:
     checks:
       - check_type: command
         check_value: gh api "repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator/contract.yaml?ref=$(git rev-parse HEAD)" --jq .content | base64 -d | grep -q '24ca:661a:7af4:2089:d761:289c:8830:0853:ad47:2b62:0501:3ce5:48bb:d755:20ba:71b2'
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn22477-page-pin-serves-the-fixed-handler
+    description: "The commit the PARTICIPANT PAGE pins serves a script whose handler URL names the fix. The two pins are separate surfaces: pull request 3194 moved the script's own handler pin, and nothing a participant downloads reached it, because ONBOARDING.md still named ad5d6ef8, whose script curls the handler from 6596b867. This probe follows the whole chain a participant walks -- it reads the page from the deployed tree, takes the commit out of its download URL, fetches the script served at that commit, and asserts that script's handler URL names 149fbe85. Asserting the page's own two digests agree would not do, because agreement holds for any self-consistent pin, including one whose handler still derives PYTHONPATH from its own location, which is how this chain kept re-pinning. Falsifiable, and measured both ways before this was written: at this head the chain lands on 149fbe85 and the probe exits 0; at the merge base the page names ad5d6ef8, the script served there names 6596b867, and the probe exits 1."
+    source: manual
+    binds_ac:
+      - "AC2"
+    checks:
+      # The behaviour check. It walks the chain out of git rather than out of the
+      # page's own claims: page -> script served at that commit -> handler that
+      # script serves -> that handler's model_config. Measured both ways before it
+      # was bound: 3 pass at this head; against the merge base's page, which pins
+      # ad5d6ef8, the two chain tests fail and only the self-consistency control
+      # passes -- which is the whole reason the page's own digests are not evidence.
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_guide_pin_serves_the_fixed_handler_omn22477.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+      - check_type: command
+        # Every fetch lands in a file before it is read. Piping curl into `grep -q`
+        # makes grep exit on the first match, curl loses the pipe and returns 23, and
+        # under pipefail the check fails on a chain that is in fact correct -- which it
+        # did here once ("curl: (23) Failure writing output to destination").
+        check_value: 'T=$(mktemp -d) && gh api "repos/OmniNode-ai/omniclaude/contents/plugins/onex/ONBOARDING.md?ref=$(git rev-parse HEAD)" --jq .content > "$T/b64" && base64 -d < "$T/b64" > "$T/page.md" && S=$(grep -m1 -oE "omniclaude/[0-9a-f]{40}/plugins/onex/skills/_bin/lab-onboarding.sh" "$T/page.md" | cut -d/ -f2) && curl -fsSL "https://raw.githubusercontent.com/OmniNode-ai/omniclaude/$S/plugins/onex/skills/_bin/lab-onboarding.sh" -o "$T/script.sh" && grep -q 149fbe854d8f40e54ae90e8aa776ffe3506a3a4b "$T/script.sh"'
         cwd: "${OMNI_HOME}/omniclaude"
   - id: dod-omn22477-served-handler-carries-the-fix
     description: "The handler the entrypoint's raw URL serves carries the workspace PYTHONPATH, which is what a downloaded run actually loads: the pin and download_digest now name the commit the fix merged as, so a participant run gets the fixed handler rather than the one dev was serving while the fix was in flight. Asserting the two digests agree is not enough, because agreement holds for any self-consistent pin, including one at a commit whose handler still has the fault. Fails at the merge base, where the URL names 6596b867 and the served handler still derives PYTHONPATH from its own location."
@@ -92,4 +114,4 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_onboarding_guide_pin_serves_the_fix_omn22477.py tests/skills/test_onboarding_guide_pin_omn21261.py -q --no-cov"
-        cwd: "."
+        cwd: "${OMNI_HOME}/omniclaude"
