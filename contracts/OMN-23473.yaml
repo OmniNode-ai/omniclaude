@@ -4,7 +4,7 @@ ticket_id: OMN-23473
 title: "Move omniclaude's check tooling onto the shared-library build that drops the stale-version limit"
 summary: >
   The check-internal-sibling-pins and check-action-pins hooks moved from omnibase_core tag
-  dev-20261101184124-fa758b315456 to dev-20261109232713-49e69fc7d3a4, the first tag that drops the
+  dev-20261101184124-fa758b315456 to dev-20261110003048-a84c3afcb9d3, a tag after the first one (dev-20261109232713-49e69fc7d3a4) that drops the
   stale_pin age bound (omnibase_core#2303). The first-party-ref job in ci.yml now runs both hooks
   whole-tree with pre-commit and holds no tag literal, so the tag has one home.
 is_seam_ticket: false
