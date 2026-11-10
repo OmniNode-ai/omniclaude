@@ -1,0 +1,30 @@
+schema_version: "1.0.0"
+ticket_id: "OMN-23467"
+title: "The public-repository check reads the private word list's repository and file locations from settings"
+summary: "The reusable public-repository hygiene workflow takes the vocabulary repository and the three vocabulary file locations from inputs or org variables and refuses to run when one is missing, absolute or contains a parent segment. Tests pin each refusal."
+is_seam_ticket: false
+interface_change: true
+interfaces_touched:
+  - ".github/workflows/public-repo-hygiene-reusable.yml workflow_call inputs"
+requirements:
+  - id: "req-hygiene-vocab-settings"
+    statement: "The hygiene check reads the private word list's repository and file locations from settings and refuses when one is missing."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: omniclaude's reusable hygiene workflow reads the vocabulary repository and the three file locations from inputs or org variables and refuses when one is missing -- falsifier: the workflow tests with one location removed (8 new tests fail against the old workflow)"
+evidence_requirements:
+  - kind: "tests"
+    description: "The hygiene workflow shape tests."
+    command: "uv run pytest tests/workflows/test_public_repo_hygiene_workflows.py tests/scripts/test_deployment_config_workflow_shapes_omn20923.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn23467-vocab-settings"
+    description: "AC1: the workflow resolves the four settings from inputs or org variables and refuses when one is missing."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/workflows/test_public_repo_hygiene_workflows.py tests/scripts/test_deployment_config_workflow_shapes_omn20923.py -q --no-cov"
+    binds_ac: ["AC1"]
