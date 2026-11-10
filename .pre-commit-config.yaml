@@ -39,9 +39,9 @@ repos:
   # check-first-party-ref does not exist. Findings that cannot be removed in the same
   # change are held in the generated shrink-only per-file baseline; the zero target
   # is stated in that file. CI twin: the first-party-ref job in .github/workflows/ci.yml,
-  # at a different omnibase_core tag (the validator allows one home per tag literal).
+  # which runs these hooks at this rev instead of repeating it (the validator allows one home per tag literal).
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: dev-20261101184124-fa758b315456
+    rev: dev-20261110003048-a84c3afcb9d3
     hooks:
       - id: check-internal-sibling-pins
         args: [--baseline, .onex/baselines/first_party_ref.yaml]

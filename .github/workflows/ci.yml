@@ -3972,8 +3972,9 @@ jobs:
   # home per literal (RULING 2026-10-29T01:50:26Z). The core validator reads the
   # workflow, pre-commit and pyproject surfaces; findings that cannot be removed in the
   # same change are held in .onex/baselines/first_party_ref.yaml, which only shrinks.
-  # Pre-commit twin: the check-internal-sibling-pins and check-action-pins hooks, at a
-  # different omnibase_core tag. Feeds Quality Gate; no `paths:` filter, `if: always()`.
+  # This job runs the check-internal-sibling-pins and check-action-pins hooks whole-tree,
+  # at the omnibase_core tag their pre-commit block owns. Feeds Quality Gate; no `paths:`
+  # filter, `if: always()`.
   first-party-ref:
     if: always()
     name: first-party-ref
@@ -3992,10 +3993,13 @@ jobs:
 
       - name: First-party references name dev-merge tags
         working-directory: ${{ github.workspace }}
+        # OMN-19612: one home per tag literal, and the validator reads a literal tag, so the
+        # job runs the pre-commit hook that owns the omnibase_core tag instead of repeating it.
+        # The hook args carry --baseline .onex/baselines/first_party_ref.yaml.
         run: |
-          uv run --no-project --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@dev-20261102040524-8f54bf966c41' \
-            python -m omnibase_core.nodes.node_first_party_tag_inventory_effect.runtime_first_party_ref \
-            --baseline .onex/baselines/first_party_ref.yaml
+          set -euo pipefail
+          uv run --no-project --with 'pre-commit==4.6.2' pre-commit run check-internal-sibling-pins --all-files --show-diff-on-failure
+          uv run --no-project --with 'pre-commit==4.6.2' pre-commit run check-action-pins --all-files --show-diff-on-failure
 
   quality-gate:
     name: Quality Gate
