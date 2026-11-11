@@ -58,6 +58,15 @@ dod_evidence:
       - check_type: test_passes
         check_value: "uv run pytest tests/unit/hooks/scripts/test_delegation_switch_omn22498.py -q --no-cov -k delegation_not_lite"
         cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn22498-ac3-installed-hook-routes
+    description: "install-delegation.sh --apply into a scratch HOME, then the installed PreToolUse command from settings.json run with /bin/bash, no CLAUDE_PLUGIN_ROOT and no PLUGIN_PYTHON_BIN, from a project that is not an OmniNode repo: with bit 11 on the hook reaches the routing runner; with it off the call passes through unchanged. Fails at the merge base, where the installer copies five scripts without error-guard.sh, the hook-bit table, mode.sh, repo_guard.sh or the runner, so the installed hook reports onex_hook_gate: command not found and never routes."
+    source: manual
+    binds_ac:
+      - "AC3"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_delegation_installed_hook_omn22498.py -q --no-cov -k delegation_not_lite"
+        cwd: "${OMNI_HOME}/omniclaude"
   - id: dod-omn22498-ac4-hook-set-no-stub
     description: "Every script hooks-delegation.v1.json names exists and does real work, and the prompt classifier stub is not registered; a positive control proves the detector flags a stub. Fails at the merge base, where user_prompt_delegation_classifier.sh is registered and only exits 0."
     source: manual

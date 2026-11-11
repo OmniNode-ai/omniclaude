@@ -136,8 +136,8 @@ run_install --apply --skip-pip >"${TMPDIR_SANDBOX}/apply.log" 2>&1 \
   || fail "hook config not written"
 [[ -f "${SANDBOX_HOME}/.omninode/delegation/rollback-manifest.json" ]] \
   || fail "rollback manifest not written"
-[[ -d "${SANDBOX_HOME}/.omninode/delegation/hook-scripts" ]] \
-  || fail "hook scripts dir not created"
+[[ -f "${SANDBOX_HOME}/.omninode/delegation/plugin/plugins/onex/hooks/lib/delegation_hook_runner.py" ]] \
+  || fail "hook scripts and routing runner not installed in the plugin layout (OMN-22498)"
 [[ -f "${SANDBOX_HOME}/.omninode/delegation/bifrost_overrides.yaml" ]] \
   || fail "bifrost endpoint overlay not written"
 [[ ! -f "${SANDBOX_HOME}/.omninode/delegation/bifrost_delegation.yaml" ]] \

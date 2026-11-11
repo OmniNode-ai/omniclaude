@@ -98,7 +98,7 @@ if [[ "$TOOL_NAME" != "Agent" && "$TOOL_NAME" != "Task" ]]; then
     exit 0
 fi
 
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 HOOKS_LIB="${PLUGIN_ROOT}/hooks/lib"
 RUNNER="${HOOKS_LIB}/delegation_hook_runner.py"
 
