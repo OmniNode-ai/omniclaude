@@ -33,18 +33,6 @@ entries:
     target: http
     ticket: OMN-20295
     expires: '2026-12-31'
-  - path: plugins/onex/skills/_bin/lab-onboarding.sh
-    kind: http
-    symbol: <script>
-    target: http
-    ticket: OMN-20295
-    expires: '2026-12-31'
-  - path: plugins/onex/skills/_bin/lab-onboarding.sh
-    kind: http
-    symbol: <script>
-    target: http
-    ticket: OMN-20295
-    expires: '2026-12-31'
   - path: plugins/onex/skills/_lib/decision_store/semantic_check.py
     kind: http
     symbol: semantic_check_async
