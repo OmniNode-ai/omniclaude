@@ -1,0 +1,92 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-22498
+title: "Claude Code delegates on its own behind one on/off switch: the dormant Agent|Task delegation hook is installed by setup and gated by a hook bit"
+summary: >
+  The delegation hook set installed by scripts/install-delegation.sh gated on
+  two names that are not hook bits (PRE_TOOL_USE_DELEGATION, COST_ACCOUNTING),
+  which onex_hook_gate lets through, so nothing could switch it off. Both hooks
+  now gate on the borrowed bit POST_SKILL_DELEGATION_ENFORCER (Jake's ruling on
+  the ticket, 2026-11-09). On a customer install the lite default and the
+  OmniNode-repo guard no longer silence them. The delegation hook clears
+  error-guard.sh's EXIT trap before exit 2, which the trap otherwise turned into
+  exit 0, letting Claude Code run the agent natively after delegating it. The
+  prompt classifier stub is removed from the hook set and the repository.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn22498-one-switch
+    statement: One named hook bit turns Claude Code delegation on and off.
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: one named hook bit turns Claude Code delegation on and off through onex hooks enable and onex hooks disable, and with the bit off the Agent|Task delegation hook passes the tool call through unchanged -- falsifier: uv run pytest tests -q -k delegation_switch in omniclaude, with the bit on and off, failing at dev because no such bit exists"
+  - id: req-omn22498-install-once
+    statement: The installer adds the delegation hook set once and leaves other tools' settings.json rows alone.
+    acceptance:
+      - id: "AC2"
+        statement: "AC2: the onboarding path installs the delegation hook set once, idempotently, so a second run leaves settings.json byte-identical -- falsifier: uv run pytest tests -q -k delegation_hook_install over a scratch HOME, run twice, failing on any diff or a missing PreToolUse Agent|Task entry"
+  - id: req-omn22498-customer-install-not-lite
+    statement: A customer who installed the delegation hooks is not silenced by the lite default.
+    acceptance:
+      - id: "AC3"
+        statement: "AC3: on a customer install (not a dev workspace) with the bit on, the hook is not silenced by the lite default -- falsifier: uv run pytest tests -q -k delegation_not_lite with a scratch HOME outside any workspace, failing when the hook exits 0 without a routing decision"
+  - id: req-omn22498-no-stub
+    statement: The installed hook set registers no script that only exits 0.
+    acceptance:
+      - id: "AC4"
+        statement: "AC4: the prompt classifier stub is either wired to a real decision or removed from the installed hook set, and the hook set registers no script that only exits 0 -- falsifier: uv run pytest tests -q -k delegation_hook_set_no_stub reading hooks-delegation.v1.json and each script it names"
+evidence_requirements:
+  - kind: tests
+    description: "The delegation switch, customer-install and hook-set tests pass"
+    command: "uv run pytest tests/unit/hooks/scripts/test_delegation_switch_omn22498.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn22498-ac1-delegation-switch
+    description: "With the default mask the delegation hook routes an Agent call and exits 2; with bit 11 cleared it passes the call through unchanged and never reaches the router; clearing bit 12 changes nothing; cost accounting works only while bit 11 is on. Fails at the merge base, where the hooks gate on names that are not hook bits and the exit 2 is turned into exit 0 by error-guard.sh."
+    source: manual
+    binds_ac:
+      - "AC1"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/hooks/scripts/test_delegation_switch_omn22498.py -q --no-cov -k delegation_switch"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn22498-ac2-delegation-hook-install
+    description: "Two install-delegation.sh --apply runs over a scratch HOME whose settings.json holds the OMN-23413 gateway groups, an unrelated user hook and an earlier installer's hook-scripts/ entry: the second run leaves settings.json byte-identical, exactly one legacy delegation PreToolUse Agent|Task entry remains and it is not the old hook-scripts/ copy, both gateway groups and the user hook are unchanged. A positive control proves the gateway detector sees a dropped group. Fails at the merge base, where the old hook-scripts/ entry is what the installer writes."
+    source: manual
+    binds_ac:
+      - "AC2"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_delegation_hook_install_omn22498.py -q --no-cov -k delegation_hook_install"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn22498-ac3-delegation-not-lite
+    description: "In lite mode, in a project that is not an OmniNode repo, an installed customer's Agent call reaches the router and cost accounting runs; a plugin user who never installed delegation keeps the lite no-op; the bit still switches it off. Fails at the merge base, where the lite default and the repo guard exit 0 before any routing decision."
+    source: manual
+    binds_ac:
+      - "AC3"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/hooks/scripts/test_delegation_switch_omn22498.py -q --no-cov -k delegation_not_lite"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn22498-ac3-installed-hook-routes
+    description: "install-delegation.sh --apply into a scratch HOME, then the installed PreToolUse command from settings.json run with /bin/bash, no CLAUDE_PLUGIN_ROOT and no PLUGIN_PYTHON_BIN, from a project that is not an OmniNode repo: with bit 11 on the hook reaches the routing runner; with it off the call passes through unchanged. Fails at the merge base, where the installer copies five scripts without error-guard.sh, the hook-bit table, mode.sh, repo_guard.sh or the runner, so the installed hook reports onex_hook_gate: command not found and never routes."
+    source: manual
+    binds_ac:
+      - "AC3"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_delegation_installed_hook_omn22498.py -q --no-cov -k delegation_not_lite"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn22498-ac4-hook-set-no-stub
+    description: "Every script hooks-delegation.v1.json names exists and does real work, and the prompt classifier stub is not registered; a positive control proves the detector flags a stub. Fails at the merge base, where user_prompt_delegation_classifier.sh is registered and only exits 0."
+    source: manual
+    binds_ac:
+      - "AC4"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/hooks/scripts/test_delegation_switch_omn22498.py -q --no-cov -k delegation_hook_set_no_stub"
+        cwd: "${OMNI_HOME}/omniclaude"

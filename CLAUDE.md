@@ -173,6 +173,26 @@ non-OmniNode repos, are passed through untouched.
 
 ---
 
+### Claude Code delegation switch (OMN-22498)
+
+The dormant delegation hook set (`plugins/onex/hooks/hooks-delegation.v1.json`:
+`pre_tool_use_delegation.sh` on `^(Agent|Task)$`, `post_tool_use_cost_accounting.sh`) is not in
+`hooks.json`; only `scripts/install-delegation.sh --apply` registers it, in `~/.claude/settings.json`.
+
+- **One switch**: `onex hooks disable POST_SKILL_DELEGATION_ENFORCER` turns it off; with the bit off
+  the PreToolUse hook passes the call through unchanged and cost accounting does nothing. The bit
+  (`0x800`, ordinal 11) is **borrowed**, as Jake ruled on OMN-22498: no free `EnumHookBit` ordinal
+  exists, the same reason as `PRE_TOOL_AGENT_DISPATCH_GATE` above. It is not the delegation hooks'
+  own bit, and disabling it also turns off the delegation enforcer.
+- **Customer install**: the installer writes `~/.omninode/delegation/hooks-delegation.json`. When it
+  exists, neither the lite default nor the OmniNode-repo guard silences the two hooks; without it a
+  plugin user keeps the lite no-op.
+- **Exit 2 is kept**: the delegation hook clears `error-guard.sh`'s EXIT trap before `exit 2`, or the
+  trap turns it into exit 0 and Claude Code runs the agent natively after delegating it.
+- Tests: `uv run pytest tests/unit/hooks/scripts/test_delegation_switch_omn22498.py -q`.
+
+---
+
 ## Emergency: disable omniclaude hooks (kill-switch)
 
 Two kill-switch spellings exist in the codebase — they are **not** interchangeable:

@@ -36,7 +36,12 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 INSTALL_ROOT="${HOME}/.omninode/delegation"
 INSTALL_DB="${INSTALL_ROOT}/delegation.sqlite"
 INSTALL_HOOKS_JSON="${INSTALL_ROOT}/hooks-delegation.json"
-INSTALL_SCRIPTS_DIR="${INSTALL_ROOT}/hook-scripts"
+# The installed hooks keep the plugin's own layout, so every path they resolve
+# relative to themselves (error-guard.sh, hook bits, mode.sh, repo_guard.sh,
+# the routing runner, cost_accounting as plugins.onex.hooks.lib) exists
+# (OMN-22498). The old flat hook-scripts/ copy could not run.
+INSTALL_PLUGIN_ROOT="${INSTALL_ROOT}/plugin/plugins/onex"
+INSTALL_SCRIPTS_DIR="${INSTALL_PLUGIN_ROOT}/hooks/scripts"
 ROLLBACK_MANIFEST="${INSTALL_ROOT}/rollback-manifest.json"
 
 CLAUDE_SETTINGS="${HOME}/.claude/settings.json"
@@ -412,38 +417,33 @@ install_hook_config() {
   # Rewrite ${CLAUDE_PLUGIN_ROOT} → INSTALL_ROOT so hook commands work outside
   # the plugin context.
   if "${DRY_RUN}"; then
-    log_dry "would rewrite \${CLAUDE_PLUGIN_ROOT}/hooks/scripts/* → ${INSTALL_SCRIPTS_DIR}/*"
-    log_dry "would copy hook scripts: ${SOURCE_HOOK_SCRIPTS} → ${INSTALL_SCRIPTS_DIR}"
+    log_dry "would rewrite \${CLAUDE_PLUGIN_ROOT} → ${INSTALL_PLUGIN_ROOT}"
+    log_dry "would copy hook scripts: ${SOURCE_HOOK_SCRIPTS%/hooks/scripts}/{hooks,lib} → ${INSTALL_PLUGIN_ROOT}"
     return 0
   fi
-  # Copy hook scripts referenced by hooks-delegation.v1.json.
-  local script
-  for script in session-start.sh session-end.sh pre_tool_use_delegation.sh \
-                post_tool_use_cost_accounting.sh user_prompt_delegation_classifier.sh; do
-    if [[ -f "${SOURCE_HOOK_SCRIPTS}/${script}" ]]; then
-      cp "${SOURCE_HOOK_SCRIPTS}/${script}" "${INSTALL_SCRIPTS_DIR}/${script}"
-      chmod +x "${INSTALL_SCRIPTS_DIR}/${script}"
-    else
-      log_warn "hook script missing in source: ${script} (skipped)"
-    fi
-  done
-  # Rewrite the JSON so commands point at INSTALL_SCRIPTS_DIR.
-  "${PYTHON_BIN}" - "${SOURCE_HOOK_CONFIG}" "${INSTALL_HOOKS_JSON}" "${INSTALL_SCRIPTS_DIR}" "${INSTALL_ROOT}" <<'PY'
-import json, sys, pathlib
-src, dst, scripts_dir, install_root = sys.argv[1:5]
+  # Install the plugin's hooks and lib trees (not their tests) in the plugin's
+  # own layout: the hook scripts source error-guard.sh, the hook-bit table,
+  # mode.sh and repo_guard.sh by relative path, and run the routing runner and
+  # cost_accounting from hooks/lib (OMN-22498). A fresh copy each run keeps a
+  # re-install from mixing two versions.
+  rm -rf "${INSTALL_ROOT}/plugin" "${INSTALL_ROOT}/hook-scripts" && mkdir -p "${INSTALL_PLUGIN_ROOT}"
+  cp -R "${SOURCE_HOOK_SCRIPTS%/hooks/scripts}/hooks" "${SOURCE_HOOK_SCRIPTS%/hooks/scripts}/lib" "${INSTALL_PLUGIN_ROOT}/"
+  rm -rf "${INSTALL_PLUGIN_ROOT}/hooks/tests" && find "${INSTALL_PLUGIN_ROOT}" -type d -name __pycache__ -prune -exec rm -rf {} +
+  # Rewrite the JSON so commands run the installed copy with the Python this
+  # installer resolved: Claude Code runs settings.json hooks with neither
+  # CLAUDE_PLUGIN_ROOT nor PLUGIN_PYTHON_BIN set.
+  "${PYTHON_BIN}" - "${SOURCE_HOOK_CONFIG}" "${INSTALL_HOOKS_JSON}" "${INSTALL_PLUGIN_ROOT}" "${PYTHON_BIN}" <<'PY'
+import json, shlex, sys, pathlib
+src, dst, plugin_root, python_bin = sys.argv[1:5]
 data = json.loads(pathlib.Path(src).read_text())
-def rewrite(value):
+def rewrite(value, key=""):
     if isinstance(value, str):
-        # The source uses "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/<name>". Rewrite
-        # it to point at the standalone install dir, taking care not to double
-        # up the "scripts" path segment.
-        v = value.replace("${CLAUDE_PLUGIN_ROOT}/hooks/scripts", scripts_dir)
-        v = v.replace("${CLAUDE_PLUGIN_ROOT}", install_root)
-        return v
+        v = value.replace("${CLAUDE_PLUGIN_ROOT}", plugin_root)
+        return f"PLUGIN_PYTHON_BIN={shlex.quote(python_bin)} {v}" if key == "command" else v
     if isinstance(value, list):
         return [rewrite(v) for v in value]
     if isinstance(value, dict):
-        return {k: rewrite(v) for k, v in value.items()}
+        return {k: rewrite(v, k) for k, v in value.items()}
     return value
 pathlib.Path(dst).write_text(json.dumps(rewrite(data), indent=2) + "\n")
 PY
@@ -495,7 +495,7 @@ PY
     PRE_INSTALL_BACKUP="${backup_path}"
   fi
 
-  "${PYTHON_BIN}" - "${CLAUDE_SETTINGS}" "${INSTALL_HOOKS_JSON}" <<'PY'
+  "${PYTHON_BIN}" - "${CLAUDE_SETTINGS}" "${INSTALL_HOOKS_JSON}" "${INSTALL_ROOT}" <<'PY'
 import json, pathlib, sys
 settings_path = pathlib.Path(sys.argv[1])
 hooks_path = pathlib.Path(sys.argv[2])
@@ -508,6 +508,15 @@ else:
     settings = {}
 
 existing = settings.setdefault("hooks", {})
+# Drop entries an earlier version of this installer wrote (under the install
+# root but not in the current set, e.g. the old hook-scripts/ copies that
+# could not run). Every other hook, including other tools' rows such as the
+# OMN-23413 gateway groups, stays exactly where it is (OMN-22498).
+new_cmds = {h.get("command") for gs in delegation_hooks.values() for g in gs for h in g.get("hooks", [])}
+for event in list(existing):
+    groups = [{**g, "hooks": [h for h in g.get("hooks", []) if f"{sys.argv[3]}/" not in (h.get("command") or "") or h.get("command") in new_cmds]} for g in existing[event]]
+    existing[event] = [g for g in groups if g["hooks"]]
+    if not existing[event]: existing.pop(event)
 # Merge per-event arrays without duplicating commands already present.
 for event, new_groups in delegation_hooks.items():
     cur_groups = existing.setdefault(event, [])
@@ -658,7 +667,7 @@ else:
     print(f"removed {settings} after clearing installer-managed hooks")
 PY
   rm -f "${INSTALL_HOOKS_JSON}"
-  rm -rf "${INSTALL_SCRIPTS_DIR}"
+  rm -rf "${INSTALL_ROOT}/plugin" "${INSTALL_ROOT}/hook-scripts"
   log_ok "removed installed hook config + scripts"
   log_info "preserved: ${INSTALL_DB} (delete manually to discard telemetry)"
   log_info "uninstall complete"
