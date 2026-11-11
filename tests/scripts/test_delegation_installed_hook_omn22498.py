@@ -16,6 +16,8 @@ Failure modes:
       the hook resolves relative to itself (mode.sh, repo_guard.sh) are not
       installed, so the hook never reaches a routing decision.
   F3. The installed copy ignores the switch: with bit 11 off it still routes.
+  F5. `onex hooks disable` saves the mask in ~/.omnibase/.env; the installed
+      hook ignored it, because only common.sh reads that file.
   F4. No Python is found: Claude Code runs a settings.json hook with no
       PLUGIN_PYTHON_BIN, so the command itself must carry the interpreter the
       installer resolved. The test environment sets none.
@@ -92,8 +94,9 @@ def _installed_pre_tool_command(home: Path) -> str:
 
 
 def _run_installed(
-    tmp_path: Path, home: Path, mask: int
+    tmp_path: Path, home: Path, mask: int | None
 ) -> tuple[subprocess.CompletedProcess[str], Path]:
+    """Run the installed hook; mask None leaves ONEX_HOOKS_MASK out of its env."""
     project = tmp_path / "customer-project"
     project.mkdir(exist_ok=True)
     (project / "README.md").write_text("a customer's own project\n")
@@ -103,9 +106,10 @@ def _run_installed(
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
         "TMPDIR": str(tmp_path),
         "ONEX_STATE_DIR": str(state),
-        "ONEX_HOOKS_MASK": hex(mask),
         "CLAUDE_PROJECT_DIR": str(project),
     }
+    if mask is not None:
+        env["ONEX_HOOKS_MASK"] = hex(mask)
     command = _installed_pre_tool_command(home)
     proc = subprocess.run(
         ["/bin/bash", "-c", command],
@@ -153,3 +157,39 @@ def test_delegation_not_lite_installed_hook_bit_off_passes_through(
     assert proc.stdout.strip() == _AGENT_CALL
     text = _log_text(log)
     assert "PASS tool=" not in text and "BLOCK tool=" not in text, text
+
+
+def _save_mask(home: Path, mask: int) -> None:
+    """Write the mask the way `onex hooks disable|enable` saves it."""
+    env_file = home / ".omnibase" / ".env"
+    env_file.parent.mkdir(parents=True, exist_ok=True)
+    env_file.write_text(f"ONEX_HOOKS_MASK={hex(mask)}\n")
+
+
+def _reached_runner(text: str) -> bool:
+    return any(
+        marker in text
+        for marker in ("PASS tool=Agent", "BLOCK tool=Agent", "WARN: runner exited")
+    )
+
+
+@pytest.mark.unit
+def test_delegation_switch_saved_by_onex_hooks_disable_holds(tmp_path: Path) -> None:
+    """F5: `onex hooks disable` saves the mask in ~/.omnibase/.env, and Claude
+    Code runs the installed hook with no ONEX_HOOKS_MASK in its environment.
+    The saved bit-11-off mask must stop the hook before the router."""
+    home = _install(tmp_path)
+    _save_mask(home, _DEFAULT_MASK & ~_BIT_11)
+    proc, log = _run_installed(tmp_path, home, None)
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.strip() == _AGENT_CALL
+    assert not _reached_runner(_log_text(log)), _log_text(log)
+
+
+@pytest.mark.unit
+def test_delegation_switch_saved_enable_still_routes(tmp_path: Path) -> None:
+    """Control for F5: a saved all-on mask still reaches the router."""
+    home = _install(tmp_path)
+    _save_mask(home, _DEFAULT_MASK)
+    _proc, log = _run_installed(tmp_path, home, None)
+    assert _reached_runner(_log_text(log)), _log_text(log)
