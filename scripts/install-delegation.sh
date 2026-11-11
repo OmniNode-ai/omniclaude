@@ -64,6 +64,8 @@ PYTHON_BIN=""
 ENDPOINT_URL=""
 SKIP_PIP=false
 SKIP_SMOKE=false
+GATEWAY=false
+ONEX_BIN=""
 
 # ---------------------------------------------------------------------------
 # Logging helpers
@@ -121,6 +123,8 @@ Options:
   --skip-pip              Skip pip install (assume omniclaude is already
                           importable; useful for CI and re-runs).
   --skip-smoke            Skip the post-install smoke test.
+  --gateway               Use the canonical ONEX gateway hook installer only.
+  --onex <path>           ONEX executable for --gateway (default: onex on PATH).
   -h, --help              Show this help.
 
 Examples:
@@ -133,46 +137,46 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --apply)        APPLY=true; DRY_RUN=false; shift ;;
-    --uninstall)    UNINSTALL=true; DRY_RUN=false; shift ;;
-    --from-source)
-      if [[ $# -lt 2 || -z "${2:-}" ]]; then
-        log_err "--from-source requires a path"
-        usage >&2
-        exit 2
-      fi
-      FROM_SOURCE="$2"
-      shift 2
-      ;;
-    --python)
-      if [[ $# -lt 2 || -z "${2:-}" ]]; then
-        log_err "--python requires an interpreter path"
-        usage >&2
-        exit 2
-      fi
-      PYTHON_BIN="$2"
-      shift 2
-      ;;
-    --endpoint-url)
-      if [[ $# -lt 2 || -z "${2:-}" ]]; then
-        log_err "--endpoint-url requires a URL"
-        usage >&2
-        exit 2
-      fi
-      ENDPOINT_URL="$2"
-      shift 2
-      ;;
-    --skip-pip)     SKIP_PIP=true; shift ;;
-    --skip-smoke)   SKIP_SMOKE=true; shift ;;
+    --apply)        APPLY=true; DRY_RUN=false; shift; continue ;;
+    --uninstall)    UNINSTALL=true; DRY_RUN=false; shift; continue ;;
+    --gateway)      GATEWAY=true; shift; continue ;;
+    --onex)         requirement="an executable path"; destination=ONEX_BIN ;;
+    --from-source)  requirement="a path"; destination=FROM_SOURCE ;;
+    --python)       requirement="an interpreter path"; destination=PYTHON_BIN ;;
+    --endpoint-url) requirement="a URL"; destination=ENDPOINT_URL ;;
+    --skip-pip)     SKIP_PIP=true; shift; continue ;;
+    --skip-smoke)   SKIP_SMOKE=true; shift; continue ;;
     -h|--help)      usage; exit 0 ;;
     *)              log_err "unknown argument: $1"; usage >&2; exit 2 ;;
   esac
+  if [[ $# -lt 2 || -z "${2:-}" ]]; then
+    log_err "$1 requires $requirement"
+    exit 2
+  fi
+  printf -v "$destination" '%s' "$2"
+  shift 2
 done
 
 if "${APPLY}" && "${UNINSTALL}"; then
   log_err "--apply and --uninstall are mutually exclusive"
-  usage >&2
   exit 2
+fi
+
+# Gateway hook ownership is the existing ONEX Claude binding effect's. This
+# compatibility entry point acquires no package, rewrites no model overlay and
+# merges no second settings copy. Both callers use the same canonical engine.
+if "${GATEWAY}"; then
+  if [[ -z "${ONEX_BIN}" ]]; then ONEX_BIN="$(command -v onex || true)"; fi
+  if [[ -z "${ONEX_BIN}" || ! -x "${ONEX_BIN}" ]]; then
+    log_err "ONEX CLI is required for gateway hook installation; install the CLI first or pass --onex PATH"
+    exit 1
+  fi
+  if "${UNINSTALL}"; then exec "${ONEX_BIN}" claude hooks uninstall --yes; fi
+  if "${DRY_RUN}"; then
+    log_dry "would run: ${ONEX_BIN} claude hooks install --yes"
+    exit 0
+  fi
+  exec "${ONEX_BIN}" claude hooks install --yes
 fi
 
 # ---------------------------------------------------------------------------

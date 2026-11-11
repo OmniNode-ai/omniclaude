@@ -36,23 +36,19 @@ def _section() -> str:
 def test_section_names_the_developer_install_owner() -> None:
     section = _section()
     assert "developer install" in section
-    assert "`.onex/workspace-config`" in section
+    assert "`config/onex/runtime/runtime_config.yaml`" in section
     assert "no private repository" in section
 
 
 def test_section_names_the_registry_install_owner() -> None:
     section = _section()
     assert "registry install" in section
-    assert "`omnibase_internal`" in section
+    assert "installed package" in section
 
 
 def test_section_states_the_resolution_order() -> None:
     section = _section()
-    env = section.find("`ONEX_WORKSPACE_CONFIG_ROOT`")
-    sibling = section.find("`omnibase_internal`")
-    developer = section.find("`.onex/workspace-config`")
-    assert -1 not in (env, sibling, developer)
-    assert env < sibling < developer, (
-        "the section must list the override, then the sibling, then the developer "
-        "workspace config, the order service_kernel.workspace_runtime_config_root tries them"
-    )
+    assert "`config.yaml`" in section
+    assert "`setup.json`" in section
+    assert "hand-written" in section
+    assert "preserved" in section

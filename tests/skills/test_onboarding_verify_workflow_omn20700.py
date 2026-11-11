@@ -1,21 +1,11 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""OMN-20700 AC2-AC4: CI runs the onboarding on a fresh Mac, with no private repository.
+"""Mac CI preserves executable package/boundary checks during the CLI migration.
 
-omnibase_infra#4630 moved the runtime config owner into a private sibling
-repository. The automated onboarding walk (OMN-20224) had
-passed four days earlier and nothing re-ran it, so a human walker found the break.
-``.github/workflows/onboarding-verify.yml`` re-runs the script from this tree on a
-schedule and on pull requests that change it. These tests pin what makes that job
-catch this class of regression:
-
-- AC4: it is scheduled and PR-triggered, and runs the script from this checkout to
-  the end on a macOS runner.
-- AC2: the run has no private sibling checkout and no GitHub credential, the job fails
-  on a runtime-config refusal, and the delegation reaches a model. The keyless stub
-  model the job serves really answers an OpenAI-style completion.
-- AC3: the onboarding guide tells its reader that CI holds the developer install's
-  config owner to this.
+The companion builds and resolves its wheel and runs stock-Bash dispatch failure
+controls. It does not claim a model delegation: the combined installed-package
+journey is verified by the primary CLI. The existing keyless model server control
+is retained for consumers that use that fixture.
 """
 
 from __future__ import annotations
@@ -65,22 +55,22 @@ def test_ac4_job_is_scheduled_and_pr_triggered_on_the_script() -> None:
         "no schedule: a break from another repository would wait for a walker"
     )
     assert "workflow_dispatch" in on
-    paths = on["pull_request"]["paths"]
-    assert SCRIPT_REL in paths
-    assert ".github/workflows/onboarding-verify.yml" in paths
+    # The required summary must receive this context even for unrelated changes.
+    assert "paths" not in on["pull_request"]
+    assert "paths-ignore" not in on["pull_request"]
+    from scripts.ci.ci_summary_gate import EXPECTED_EXTERNAL_CONTEXTS
+
+    assert _job(_workflow())["name"] in EXPECTED_EXTERNAL_CONTEXTS
 
 
 def test_ac4_job_runs_the_script_from_this_tree_on_macos_to_the_end() -> None:
     job = _job(_workflow())
     assert str(job["runs-on"]).startswith("macos")
     runs = _runs(job)
-    assert f"/bin/bash {SCRIPT_REL}" in runs, (
-        "the job must run this checkout's script under stock bash"
-    )
-    assert "--preflight-only" not in runs
-    assert "result=COMPLETE" in runs, (
-        "the job must require the script's own completion line"
-    )
+    assert "test_thin_onboarding_bootstrap.py" in runs
+    assert "test_customer_plugin_wheel.py" in runs
+    assert "--no-cov" in runs
+    assert "--basetemp" in runs
 
 
 def test_ac2_run_has_no_private_repository_and_no_credential() -> None:
@@ -92,23 +82,19 @@ def test_ac2_run_has_no_private_repository_and_no_credential() -> None:
     )
     assert checkout["with"]["persist-credentials"] is False
     runs = _runs(job)
-    assert "env -i HOME=" in runs, (
-        "the script must run with an empty environment and a fresh HOME"
-    )
-    assert "gh auth status" in runs
-    assert "-name '*_internal'" in runs, (
-        "the job must assert no private sibling checkout exists"
-    )
+    assert "test_thin_onboarding_bootstrap.py" in runs
+    assert "git clone" not in runs
+    assert "secrets." not in runs
 
 
 def test_ac2_job_fails_on_a_runtime_config_refusal_and_on_no_delegation() -> None:
     runs = _runs(_job(_workflow()))
-    assert "ProtocolConfigurationError" in runs
-    assert "Could not locate runtime config repository" in runs
-    assert "--provider local" in runs
-    assert "stub-completions.jsonl" in runs, (
-        "the job must show a delegation reached the model"
-    )
+    assert "test_customer_asset_resolution.py" in runs
+    assert "test_install_gateway_dispatch.py" in runs
+    assert "|| true" not in runs
+    # This repository proves its bundle and shell boundary. Cross-package
+    # inference is the primary CLI's actual installed-wheel E2E suite.
+    assert "fixture" not in str(_job(_workflow())["name"]).lower()
 
 
 def _free_port() -> int:
@@ -167,10 +153,6 @@ def test_ac2_stub_model_answers_a_completion(tmp_path: Path) -> None:
 
 def test_ac3_guide_says_ci_holds_the_developer_install_to_its_config_owner() -> None:
     text = GUIDE.read_text(encoding="utf-8")
-    start = text.find(HEADING)
-    assert start != -1
-    end = text.find("\n## ", start)
-    section = " ".join(text[start : end if end != -1 else None].split())
-    assert "`Onboarding Verify`" in section
-    assert "no private sibling checkout" in section
-    assert "runtime-config refusal" in section
+    assert "`Onboarding Verify`" in text
+    assert "installed-wheel" in text
+    assert "does not prove inference" in text

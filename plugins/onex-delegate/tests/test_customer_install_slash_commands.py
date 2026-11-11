@@ -57,7 +57,7 @@ ONBOARDING_SCRIPT = (
     REPO_ROOT / "plugins" / "onex" / "skills" / "_bin" / "lab-onboarding.sh"
 )
 
-CUSTOMER_MARKETPLACE = "OmniNode-ai/omniclaude"
+CUSTOMER_MARKETPLACE = str(REPO_ROOT / "plugins")
 CUSTOMER_PLUGIN = "onex@omninode-tools"
 DEVELOPER_PLUGIN = "onex@omninode-tools-dev"
 DELEGATE_COMMAND = "onex:delegate"
@@ -138,21 +138,26 @@ def _quickstart_commands() -> list[list[str]]:
     ]
 
 
-def test_onboarding_script_defaults_to_the_customer_plugin() -> None:
-    text = ONBOARDING_SCRIPT.read_text()
-    assert f'CUSTOMER_MARKETPLACE="{CUSTOMER_MARKETPLACE}"' in text
-    assert re.search(
-        rf"^CUSTOMER_MARKETPLACE=.*WANT_PLUGIN={re.escape(CUSTOMER_PLUGIN)};",
-        text,
-        re.M,
-    )
-    assert re.search(
-        rf'^\[ "\$DEVELOPER" -eq 1 \] && \{{ WANT_PLUGIN={re.escape(DEVELOPER_PLUGIN)};',
-        text,
-        re.M,
-    ), "the developer plugin tree must be installed only under --developer"
-    assert "--developer) DEVELOPER=1 ;;" in text
-    assert re.search(r"^RESTART=0; DEVELOPER=0$", text, re.M)
+def test_onboarding_script_defaults_to_the_customer_plugin(tmp_path: Path) -> None:
+    capture = tmp_path / "argv"
+    binary = tmp_path / "onex"
+    binary.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$CAPTURE"\n')
+    binary.chmod(0o755)
+    for flags in ([], ["--developer"]):
+        result = subprocess.run(
+            ["/bin/bash", str(ONBOARDING_SCRIPT), "--preflight-only", *flags],
+            env={
+                "HOME": str(tmp_path),
+                "PATH": str(tmp_path) + ":/usr/bin:/bin",
+                "CAPTURE": str(capture),
+            },
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        assert capture.read_text().splitlines() == ["setup", "--preflight-only", *flags]
 
 
 def test_customer_install_adds_only_the_delegate_command(tmp_path: Path) -> None:
@@ -166,8 +171,6 @@ def test_customer_install_adds_only_the_delegate_command(tmp_path: Path) -> None
     for argv in _quickstart_commands():
         # This checkout stands in for the GitHub repository the customer install names.
         argv = [claude, *argv[1:]]
-        if argv[2:4] == ["marketplace", "add"]:
-            argv[4] = str(REPO_ROOT)
         done = _run(argv, config, cwd)
         assert done.returncode == 0, (
             f"{shlex.join(argv)} failed: {done.stdout}{done.stderr}"

@@ -1,0 +1,16 @@
+{
+  "source": "GitHub check-runs API; observed 2026-11-11; producer identity only, not evidence for the new package behavior",
+  "check_runs_all": [
+    {
+      "completed_at": "2026-11-10T01:47:21Z",
+      "conclusion": "success",
+      "details_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/42737740323/job/129570996896",
+      "head_sha": "1a4a4ccd6e5f9f6888648040fa0720f412a925a1",
+      "html_url": "https://github.com/OmniNode-ai/omniclaude/actions/runs/42737740323/job/129570996896",
+      "id": 129570996896,
+      "name": "Fresh Mac onboarding",
+      "started_at": "2026-11-10T01:43:03Z",
+      "status": "completed"
+    }
+  ]
+}

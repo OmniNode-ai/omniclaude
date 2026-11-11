@@ -222,6 +222,7 @@ EXIT_PENDING = 2
 # enforced through CI Summary. "Hostile Review Gate" is absent for the reason
 # below.
 EXPECTED_EXTERNAL_CONTEXTS: tuple[str, ...] = (
+    "Fresh Mac onboarding",  # onboarding-verify.yml, all PRs
     # OMN-20923: presence and success are required by the existing CI Summary.
     # A missing or skipped whole-tree deployment ratchet cannot read green.
     "public-repo-hygiene / public-repo-hygiene",
@@ -437,11 +438,7 @@ def _effective_status(raw: dict[str, object]) -> str:
     """
 
     status = str(raw.get("status") or "")
-    if (
-        status != "completed"
-        and raw.get("conclusion") is not None
-        and raw.get("completed_at")
-    ):
+    if raw.get("conclusion") is not None and raw.get("completed_at"):
         return "completed"
     return status
 

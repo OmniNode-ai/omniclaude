@@ -1348,6 +1348,10 @@ class TestExternalContextCompleteness:
             (FIXTURES_DIR / "omn20923_hygiene_check_runs.json").read_text()
         )
         captured.update(row["name"] for row in hygiene["check_runs_all"])
+        onboarding = json.loads(
+            (FIXTURES_DIR / "omn23413_onboarding_check_run.json").read_text()
+        )
+        captured.update(row["name"] for row in onboarding["check_runs_all"])
         producers = set()
         for path in (REPO_ROOT / ".github/workflows").glob("*.yml"):
             workflow = yaml.safe_load(path.read_text())

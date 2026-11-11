@@ -1,445 +1,121 @@
-# Onboarding a Mac
+# ONEX onboarding
 
-One command takes a Mac from nothing installed to a working delegation on your own
-model key. Everything runs on your Mac. **Nothing here connects to the OmniNode lab:**
-the run installs no tailnet client, requests no lab identity, reads no lab address and
-points no model at a lab server.
-
-> This page assumes no tool is installed yet: not Claude Code, Python, uv, git or gh.
-
----
-
-## Before you start
-
-| | Minimum | For the Docker stack as well |
-|---|---|---|
-| macOS | 14 or newer | 14 or newer |
-| CPU cores | 4 | 8 |
-| Memory | 8 GB | 16 GB |
-| Free disk | 10 GB | 30 GB (20 GB if Docker Desktop is already installed) |
-
-The run checks all of this before it changes anything. Below the minimum it stops and
-installs nothing.
-
-If you will run the Docker stack, your terminal also needs **Full Disk Access**. macOS keeps
-Docker Desktop's settings in a protected folder (`~/Library/Group Containers/group.com.docker`),
-and the run reads them to size Docker's memory and CPUs. Without the access, phase 4 stops and
-names the folder. Grant it in System Settings > Privacy & Security > Full Disk Access (switch on
-Terminal, then quit and reopen it), or open Docker Desktop once, set Settings > Resources to the
-figures the run printed, leave it running, and run the same command again.
-
-You also need **a model key of your own**, unless you pick Ollama or a local model server.
-One of:
-
-- Google AI Studio (Gemini)
-- OpenRouter
-- OpenAI — the account needs credits
-- Ollama — runs a model on this Mac instead, no key. Slower, especially on Intel.
-- A local model server by URL — one you already run (LM Studio, llama.cpp, vLLM, MLX) that
-  speaks the OpenAI API, on this Mac or your network. You give its URL and the model name
-  it runs; no key. Setup stops, naming the URL, if nothing answers there.
-
-Your key is read with the input hidden, stored in onex's key store on this Mac, and is
-never printed, logged, or passed as a command-line argument.
-
----
-
-## Run it
-
-Fetch the script, check it is the one this page was written against, then run it:
+ONEX provides one setup command for model connections, delegation, the local
+dashboard, and selected Claude integrations:
 
 ```bash
-curl -fsSL -o lab-onboarding.sh \
-  https://raw.githubusercontent.com/OmniNode-ai/omniclaude/edc3286935f5500187c1957efcbf7d46fad55843/plugins/onex/skills/_bin/lab-onboarding.sh
-echo "40c83f09d8dd4d007feb786d9b0ec41e0b2c80d818fcb27a4eac0d2f0710a1d1  lab-onboarding.sh" | shasum -a 256 -c -
-bash lab-onboarding.sh --no-containers
+onex setup
 ```
 
-Three lines rather than one, for two reasons. The URL names a **commit**, not a branch, so the
-bytes it serves cannot change after this page was written. And `shasum -c` refuses to continue
-if they did change anyway — it prints `lab-onboarding.sh: OK` when the download matches, and
-`FAILED` otherwise, which stops you before `bash` ever sees the file. Do not skip that line.
+This branch contains the OMN-23413 preview. Its new CLI and packaged Claude assets
+must be built and tested together; these instructions do not claim the preview
+is already available in a public release.
 
-Inside Claude Code you can instead run `/onex:omninode_dev_setup`, which does the same thing from
-the plugin's own copy and needs no download.
+`Onboarding Verify` checks the stock Bash compatibility boundary and actual
+installed-wheel customer assets on macOS. This boundary suite does not prove inference.
+The combined delegation and gateway journey is verified in the primary CLI's
+installed-wheel E2E suite with the exact matching artifacts. Public distribution
+requires the corresponding reviewed releases.
 
-To see what the run would do to this machine without touching it:
+## Install an explicit package
+
+Install uv and Python separately. Select a released version or a local preview
+wheel, then use uv's tool installer to expose the ONEX executable owned by
+omnibase-core:
 
 ```bash
-bash lab-onboarding.sh --preflight-only
+uv tool install --no-python-downloads --with-executables-from omnibase-core --python 3.12 /absolute/path/to/omnimarket.whl
 ```
 
-### Reading the script before you run it
+Replace the example with your actual wheel path or selected package specification.
+Use `uv tool dir --bin` to find the executable directory and add it to your shell's
+PATH if needed. No repository checkout is required.
 
-You now have the script on disk, so read it before running it — sensible on any machine you
-care about, and required if your employer's policy says so:
+For the Claude customer plugin, install the matching `omninode-claude` wheel
+through the CLI's package owner:
 
 ```bash
-less lab-onboarding.sh
+onex install /absolute/path/to/omninode_claude.whl
 ```
 
-Because the URL above is pinned to a commit and the checksum is verified, what you read is
-exactly what runs.
+The wheel carries its own local marketplace and hook assets. Setup resolves that
+installed bundle instead of cloning a GitHub repository. Claude Code itself and
+any required external service must be available; the CLI reports missing
+components with their recovery action.
 
-### Following `dev` instead
+## Connect your models
 
-If you specifically want the newest version rather than the pinned one, replace the commit SHA
-in the URL with `dev`. Understand what you are choosing: `dev` is a moving branch, there is no
-checksum to verify against, and the script that runs tomorrow is not necessarily the one you
-read today. The pinned form above is the recommended one, and it is what the onboarding walks
-are graded against.
+Start Ollama or your other model service yourself. ONEX accepts its endpoint,
+discovers the advertised models, and lets you choose which to use. ONEX never
+installs, starts, or downloads Ollama or its models. Hosted providers use an
+endpoint plus a secret reference where authentication is required.
 
-### What the script installs: its anchor
+Use the installed command help for the provider and connection options:
 
-The pinned script freezes what you **run**. Its anchor freezes what it **installs**. The script
-names one omnibase_infra commit, `INFRA_ANCHOR` near the top of phase 2, and phase 2 checks
-omnibase_infra out at that commit, never at the tip of `dev`. Every other repository follows from
-it:
-
-- a repository named in that commit's `.github/sibling-pins.yaml` is checked out at its pin;
-- a repository with no pin there is checked out at the last commit of its default branch at or
-  before the anchor's commit time;
-- the workspace runtime config phase 2 writes names the anchor, and is recorded as one commit
-  dated at the anchor, so `onex delegate` reports the same config commit on every Mac.
-
-So the same pinned script installs the same commits no matter how far `dev` has moved since it
-was emailed, and two people who ran it a week apart have the same code. Every clone is left at a
-detached `HEAD`. That is expected only while a clone stays detached at the commit the floor
-marker (`.onex-workspace-floor.json`) names: `onex delegate` accepts a clone detached at that
-commit and refuses a clone detached anywhere else, printing
-`converge-canonical-clone.sh <repo> --execute` as the repair.
-
-**A fix reaches you through a new email, never through `dev`.** When something you were sent is
-broken, the fix is merged, a script naming a newer anchor is published, and a new email pins that
-script by commit and sha256. Running the script you already have again installs the same anchor
-again; it never picks up the fix on its own.
-
-### What it asks you
-
-Every question comes before anything is installed:
-
-0. **Only on a Mac that ran an earlier setup: set its leftovers aside?** See
-   [A Mac that ran an earlier setup](#a-mac-that-ran-an-earlier-setup). Asked only when
-   preflight found something that would interfere.
-1. **Which model.** Gemini, OpenRouter, OpenAI, Ollama or a local model server by URL. For
-   a local server you are asked its URL and model name, never a key. Then your key, with the input
-   hidden. If this Mac already has a key stored you are offered it rather than asked again.
-2. **Your models, for each key and for Ollama, in order.** After each key, onboarding lists
-   the models that key can use, read from the provider's own list for it, and you pick one or
-   more by number in the order to try them, for example `2,1`; the first is tried first. The
-   models onex prefers come first, marked recommended: the order the routing contract recommends
-   for that key. OpenRouter lists its free models. Ollama
-   lists the models this Mac has the memory for, the one sized to it recommended. Press Enter to
-   take the recommended order, so you never need to know or type a model id. Each chosen model
-   is tested in phase 3. Change them later with `onex models add-model`, `onex models reorder`
-   and `onex models remove`.
-
-When phase 3 has tested your models, it prints the order delegation will try them in, one
-numbered line per model, each ending in `free` or `paid`:
-
-```
-1. OpenRouter  gpt-4o  paid
-2. OpenRouter  google/gemma-4-31b-it:free  free
+```bash
+onex models connect --help
+onex models connections
+onex setup --help
+onex plugins list
 ```
 
-The same list is `onex models list --ladder` at any time. A model that runs on this Mac is
-free and is tried before any key, unless you chose another model first with `onex models
-first`; a key's models follow in the order you gave them. A model with no declared price is
-marked `unknown` and is never counted as free. Free models are tried first only when you put
-them first: choose them first in the numbered choice above, or move them with `onex models
-reorder`. To add a local model later, run `onex models add local --url <url> --model <name>`;
-it joins the list ahead of your keys.
-The command above passes `--no-containers`, so the run does not ask about the local Docker
-stack and phase 4 is skipped. That is a complete setup: onex runs your delegations natively on
-this Mac. Drop the flag to be asked, or pass `--containers` to answer it yes in advance.
+Keep keys out of chat, logs, and command-line arguments. Model discovery verifies
+the model list; an actual model request is required to prove inference works.
 
-Before the model questions, the run prints what every model failing costs you:
+## Set up and verify
 
-> If none of the models you choose can finish a task, free or paid, the task goes back to
-> Claude Code and Claude does it as usual. That task shows no savings, and any attempts your
-> models made are still billed by their provider.
+```bash
+onex setup --preflight-only
+onex setup
+onex setup --action verify
+onex setup --action repair
+```
 
-Every prompt has a **Quit setup** option. Choosing it before phase 1 leaves the machine
-untouched.
+The installed plugin manifests determine available components and dependencies.
+Setup preserves unrelated configuration, records each component's result, and
+reports actionable failures. The dashboard runs locally. Routing every Claude
+model request requires a native Messages-compatible endpoint and explicit gateway
+selection; ordinary OpenAI model discovery is insufficient.
 
----
+No global RAM, SSD, CPU, VM, or administrator requirement applies to the CLI.
+Optional services have their own requirements and are selected explicitly.
+Developer checkout setup is a separate opt-in profile.
 
-## What happens, phase by phase
+Completion audio is also opt-in: select `--component completion-audio` and,
+optionally, `--completion-name YOUR_NAME`. The reviewed setup selection is
+consent to use the already installed system voice after the other selected steps
+succeed. It downloads no audio, never plays during verification, and does not
+automatically replay on repair or rerun. Your operating system may request audio
+permission when it runs; a declined or interrupted playback is reported as an
+action-required result. Deselect the optional component to continue silently.
 
-Each phase prints PASS or FAIL the moment it finishes — in the terminal, as a macOS
-notification, and as a line in the status file. You never have to wait until the end to
-find out something failed.
-
-| | Phase | What it does |
-|---|---|---|
-| 0 | Preflight | Reads the machine and what an earlier setup left. Changes nothing unless you agree to set leftovers aside. Asks the questions above. |
-| 1 | Base tools | Xcode command-line tools, Homebrew, gh, jq, python@3.13, uv. |
-| 2 | Workspace | The clones at the script's anchor (see above), `OMNIBASE_PATH`, your `PATH`. |
-| 3 | onex + model key | The dispatch venv, onex, a local identity, your key, **one delegation run on it**, and then the numbered list of your models in the order they are tried, each marked free or paid. |
-| 4 | Docker | Only if you said yes. Installs or starts Docker Desktop, then the local stack on the same key. |
-| 5 | Claude Code | The onex plugin from your omniclaude clone. |
-| 6 | Verify | One line per check for the modes you chose. |
-
-**No GitHub account is needed.** The repositories the run clones are public, cloned
-over HTTPS, and nothing in the run asks you to log in to GitHub.
-
-Phase 5 is the one place that notices. Besides the onex plugin, which comes from your
-own clone and always installs, it offers two internal plugins from a private
-repository. Reading that needs a GitHub login with access and a loaded SSH key, so
-without them the run checks, says so, and skips them — which is why the phase is
-called "omni where you have access". **A skipped internal-plugins step is the correct
-outcome, not a failure.** Everything the setup is for works without them.
-
-Phase 3 is the one that matters: it ends by running a real delegation and reading back the
-receipt. If phase 3 passes, the machine works.
-
-Phase 3 writes the proven-floor marker `.onex-workspace-floor.json` in your workspace, naming the
-builds that delegation ran on, so a bare `onex delegate` in a new terminal is not refused as below
-the floor. There is nothing to run by hand for it.
+## Existing script users
 
 ### Where `onex` finds its runtime config
 
-`onex delegate` reads its runtime config from a config owner. It tries these in order and
-uses the first that exists:
+Both a registry install from an installed package and a developer install use
+the selected workspace's `config/onex/runtime/runtime_config.yaml` for the setup
+runtime. Setup writes its own marked configuration and reports a conflict when a
+hand-written file occupies that path; the existing file is preserved. This path
+needs no private repository.
 
-1. **`ONEX_WORKSPACE_CONFIG_ROOT`**, when it is set to a non-blank path.
-2. **A sibling `omnibase_internal` checkout**, next to your workspace. This is the owner of
-   a **registry install**, a workspace operated by the OmniNode team, which keeps its config
-   in that private repository.
-3. **`.onex/workspace-config`** inside your workspace. This is the owner of a **developer
-   install**, the one this guide builds. Phase 2 writes it and exports
-   `ONEX_WORKSPACE_CONFIG_ROOT` to point at it, so a developer install needs no private
-   repository and no GitHub account. Its one commit names the script's anchor, so
-   "materialised at" in `onex delegate`'s output is the same commit on every Mac set up
-   from the same script.
+The user configuration directory holds `config.yaml`, plugin preferences, and
+`setup.json`, the versioned setup choices and component observations. A saved
+observation is a recovery checkpoint: verify reads the actual component again.
+The package also carries the standalone runtime defaults used before a workspace
+has been selected. No source checkout is needed to resolve the installed CLI.
 
-If none of the three exists, `onex delegate` refuses before dispatching. The message names
-`ONEX_WORKSPACE_CONFIG_ROOT` and phase 2 of this script: re-run the script so phase 2 writes
-the config, rather than pointing the variable somewhere else.
+`lab-onboarding.sh` is now a thin compatibility entry point to `onex setup`.
+With an existing ONEX installation it invokes the CLI directly. If it is absent,
+the script requires `--install-package` with the user's explicit package choice;
+it never silently installs uv, Python, Homebrew, Docker, or a model service.
 
-CI holds this order to the developer install. The `Onboarding Verify` workflow runs this
-script every day, and on every pull request that changes it, on a fresh macOS runner with an
-empty home directory, no GitHub credential and no private sibling checkout. It fails when
-the run does not reach a delegation, or when the run's log shows a runtime-config refusal.
+`--no-containers` and `--containers` map to setup path selections;
+`--local-url` and `--compat-url` map to `--url`;
+`--local-model` and `--ollama-model` map to `--model`;
+`--restart` maps to repair. `--set-aside` currently refuses while preserving
+existing files; canonical backup and restore integration is still required.
 
----
-
-## When it is done
-
-You have a working setup when the run exits 0 and phase 6 reports every check passing.
-Confirm it yourself, in a new terminal (or after `exec zsh`): the run writes `OMNIBASE_PATH`,
-`ONEX_WORKSPACE_CONFIG_ROOT` and your `PATH` to your shell profile, and a terminal opened
-before the run has none of them.
-
-```bash
-onex delegate "Reply with exactly one word: hello"
-```
-
-That prints the path to a `receipt.json`. The receipt names the model that answered and
-the route it took. A delegation with `status: success` and a receipt naming your own
-provider is the whole point of the setup.
-
-**Exit codes**
-
-| | |
-|---|---|
-| 0 | Every selected phase passed |
-| 1 | A phase failed — the message names the step and what to run next |
-| 2 | Bad usage |
-| 3 | This Mac is below the minimum; nothing was installed |
-| 4 | You chose "Quit setup" before anything was installed |
-
----
-
-## Opening the dashboard
-
-The local dashboard is a separate command, not part of the setup run:
-
-```bash
-onex dashboard
-```
-
-It binds `127.0.0.1` only, mints a fresh token each time it starts, and **prints its
-URL as its first line of output**. There is no fixed address and no fixed port — open
-the URL it prints. Overview and Runs are pages on that server.
-
-The URL is printed before the server is listening, so if the page does not load
-immediately, give it a moment and reload. It is ready once it answers; the local
-checks poll `/projections` until it returns 200.
-
-Leave the command running while you use the page. Stopping it stops the dashboard.
-
-Runs and Overview only have something to show once you have run delegations on this
-machine, so do the setup first.
-
----
-
-## A Mac that ran an earlier setup
-
-An earlier install leaves things behind that quietly take over: an `onex` alias or function
-in your shell profile, variables such as `OMNI_HOME`, `ONEX_STATE_DIR` or
-`ONEX_LAB_TENANT_STATE_DIR`, a published `onex` installed as a uv or pipx tool, a
-local-model routes file under `~/.omninode/delegation`, or clones with local changes.
-
-Before installing anything, preflight runs `onex` the way a new terminal of yours would and
-lists what it found in one table. Each row marked ✗ would interfere; rows marked · are
-noted and handled by the run itself (for example, a clean clone that is behind is brought up
-to date in phase 2). If anything is marked ✗, you are asked once:
-
-- **Set them aside.** Profile lines are commented out (the whole file is copied first), files
-  and clones are moved beside where they were, and published installs are uninstalled with
-  the command to reinstall them. Nothing is deleted. Every item and how to put it back is
-  listed in `~/.omninode/onboarding/set-aside.<time>.txt`.
-- **Stop.** Nothing is installed or changed.
-
-A run with no terminal to ask on stops at preflight in this case, unless you pass
-`--set-aside`.
-
-The run itself never inherits those variables, on a first run or a resumed one. Open a new
-terminal when it finishes: the one you started it from still has the old settings loaded.
-
-## Running it again
-
-Re-running is safe and expected. Completed phases are verified and skipped, and a failed
-phase restarts from its own beginning rather than from the top. This holds for a freshly
-downloaded copy of the script too, because the record of completed phases lives under
-`~/.omninode/onboarding`. Preflight always runs first; on a resumed run it says which phase
-the run picks up at, reuses your earlier answers (your models, your stored keys and the
-Docker answer) and asks only whether to continue. Nothing already installed is moved to a
-different version, unless the script you run names a newer anchor than the one you set up
-with; then the run moves you to it, as the next section describes.
-
-To force every phase to run again:
-
-```bash
-bash lab-onboarding.sh --restart
-```
-
----
-
-## Moving everyone to a new pin
-
-A new pin is how a fix reaches people who have already onboarded. It has two halves: a
-maintainer chooses and publishes a newer anchor, and each participant runs the newer script
-once.
-
-### Choosing the anchor (maintainer)
-
-1. Pick one omnibase_infra commit on `dev` whose CI is green, and that carries
-   `.github/sibling-pins.yaml` naming the sibling commits CI proved with it. Read its checks
-   with `gh api repos/OmniNode-ai/omnibase_infra/commits/<sha>/check-runs`, and prefer a commit
-   whose post-merge lab rebuild passed.
-2. Open one omniclaude pull request that changes only `INFRA_ANCHOR` in
-   `plugins/onex/skills/_bin/lab-onboarding.sh` to that commit's full 40-character sha.
-3. Before it merges, walk it on a clean macOS VM (Tart): onboard with the script this guide
-   currently pins (the old anchor), then run the pull request's script on the same VM (the
-   new anchor). After the second run, `onex models list` shows the same models in the same
-   order, `onex delegate "Reply with exactly one word: hello"` succeeds without asking for a
-   key, and every clone's `git rev-parse HEAD` is the new anchor's commit.
-
-### Publishing it (maintainer)
-
-4. Once the pull request merges, take its merge commit on omniclaude and the script's digest
-   there:
-
-   ```bash
-   curl -fsSL https://raw.githubusercontent.com/OmniNode-ai/omniclaude/<merge commit>/plugins/onex/skills/_bin/lab-onboarding.sh | shasum -a 256
-   ```
-
-5. Open a second pull request that moves the [Run it](#run-it) block above to that commit and
-   digest, the same way every earlier refreeze did. The guide then pins the new script.
-6. A person sends the participant email through Mailchimp, from the template below, once the
-   second pull request has merged. Nothing sends it automatically.
-
-### What a participant's re-run does
-
-The participant downloads the new script with the three lines in the email and runs it with
-`bash lab-onboarding.sh`, with no `--restart`. On a Mac set up at an older anchor:
-
-- **Phase 2** moves every clone to the new anchor's commits. A clone holding uncommitted work
-  stops the run before anything moves, and the run prints the command that sets the clone
-  aside; nothing is lost.
-- **Phase 3** rebuilds the onex environment from the new clones and tests the models you
-  already set up. Your keys and their model order live in
-  `~/.omninode/delegation/delegation.sqlite`, outside the workspace, and are not asked for or
-  rewritten.
-- **Phase 4**, when you run the Docker stack, rebuilds it from the new clones with
-  `make up-local`. That recreates the containers and keeps their volumes, so the runs the
-  dashboard shows are still there. A stack already built at the new anchor is left as it is.
-
-### The participant email (template)
-
-```text
-Subject: OmniNode: a new onboarding pin (omnibase_infra <first 12 of the anchor>)
-
-We have published a new pin of the OmniNode developer setup. It installs omnibase_infra at
-<anchor sha>, which brings <one line on what it fixes>.
-
-On the Mac you already set up, run these three lines in Terminal:
-
-    curl -fsSL -o lab-onboarding.sh \
-      https://raw.githubusercontent.com/OmniNode-ai/omniclaude/<merge commit>/plugins/onex/skills/_bin/lab-onboarding.sh
-    echo "<sha256>  lab-onboarding.sh" | shasum -a 256 -c -
-    bash lab-onboarding.sh
-
-The second line must print lab-onboarding.sh: OK; if it prints FAILED, stop and reply
-to this email. The run keeps your keys, your model order and your dashboard history, and
-moves your clones and local stack to the new pin. It takes about as long as a resumed run,
-plus a stack rebuild if you use Docker.
-
-One thing worth knowing, whether you set up today or change your models later.
-If none of the models you choose can finish a task, free or paid, the task goes back to
-Claude Code and Claude does it as usual. That task shows no savings, and any attempts your
-models made are still billed by their provider.
-```
-
----
-
-## Options
-
-| Option | Effect |
-|---|---|
-| `--preflight-only` | Run phase 0, print the verdict, exit |
-| `--containers` / `--no-containers` | Answer the Docker question in advance |
-| `--provider NAME` | `gemini`, `openrouter`, `openai`, `ollama` or `local`, or several, comma-separated |
-| `--ollama-model NAME` | The model Ollama downloads, instead of asking; with no terminal, the one sized to this Mac |
-| `--local-url URL` | With `local`: the model server's base URL, such as `http://127.0.0.1:1234` |
-| `--local-model NAME` | With `local`: the model that server runs, as it names it |
-| `--workspace DIR` | Where the clones go; defaults to `$OMNIBASE_PATH`, else `~/Code/omnibase`. `OMNI_HOME` is never read |
-| `--set-aside` | Answer yes in advance to setting aside what an earlier setup left |
-| `--restart` | Forget completed phases and your earlier answers, and run every phase again |
-| `-h`, `--help` | The full option list |
-
----
-
-## If something fails
-
-The failure message names the failed step and the command to run to see the error. Nothing
-is retried silently: every step that touches the network is attempted at least three times,
-5 to 10 seconds apart, before it is reported as a failure.
-
-If you are running this as a walk (OMN-20220 or OMN-20221), do not work around a failure
-and do not ask a builder for a command that is not on this page — record both on the walk
-ticket. A command you needed that is not documented here is the finding, not a detour.
-
----
-
-## Compatibility
-
-The script runs under macOS's stock `/bin/bash` 3.2 as well as a modern bash, and on both
-Apple silicon and Intel. It also runs in a macOS 14+ VM with 4 vCPU, 8 GB RAM and 50 GB disk
-(the stock Tart macOS image as pulled, which has 17 GB free; do not resize it, because
-the disk cannot be grown past the image from inside the guest), where the Docker stack is
-not offered. The install of the local-model path uses about 5 GB of that, so 17 GB free
-clears the 10 GB minimum with room to spare.
-
----
-
-## Tell us what broke
-
-If setup, the plugin or a delegation fails, or does not do what you expected, open an
-[MVP feedback report](https://github.com/OmniNode-ai/omniclaude/issues/new?template=mvp-feedback.yml)
-(the form is `.github/ISSUE_TEMPLATE/mvp-feedback.yml`). It asks where it broke, then for the exact
-command you ran and the error or output you got. If a delegation ran, add the receipt's
-correlation id and the output of `onex doctor`; if install failed before `onex` or a receipt
-existed, leave those two empty.
+The historical pinned provisioning script is not the package-based preview.
+Use a reviewed release artifact or the checked-out preview bootstrap with an
+explicit local wheel; do not assume an old public script checksum describes it.

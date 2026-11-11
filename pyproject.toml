@@ -125,6 +125,9 @@ claude = "omniclaude.runtime.plugin:PluginClaude"
 [project.entry-points."onex.node_package"]
 omniclaude = "omniclaude.nodes"
 
+[project.entry-points."onex.claude"]
+customer_assets = "omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.handler_onboarding_assets:customer_assets"
+
 [project.entry-points."onex.nodes"]
 node_agent_inbox_effect = "omniclaude.nodes.node_agent_inbox_effect"
 node_agent_routing_compute = "omniclaude.nodes.node_agent_routing_compute"
@@ -341,6 +344,14 @@ omnimarket = "clone"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/omniclaude"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"plugins/.claude-plugin/marketplace.json" = "omniclaude/resources/customer/plugins/.claude-plugin/marketplace.json"
+"plugins/onex-delegate" = "omniclaude/resources/customer/plugins/onex-delegate"
+"plugins/onex/hooks" = "omniclaude/resources/customer/plugins/onex/hooks"
+"plugins/onex/lib" = "omniclaude/resources/customer/plugins/onex/lib"
+"scripts/install-delegation.sh" = "omniclaude/resources/customer/scripts/install-delegation.sh"
+"pyproject.toml" = "omniclaude/resources/customer/pyproject.toml"
 
 [tool.ruff]
 target-version = "py312"
