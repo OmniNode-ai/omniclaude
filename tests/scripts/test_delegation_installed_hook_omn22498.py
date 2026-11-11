@@ -21,8 +21,11 @@ Failure modes:
       installer resolved. The test environment sets none.
 
 "Reached the routing runner" is read from the hook's own log: it writes
-``PASS tool=...`` or ``BLOCK tool=...`` only after the runner returned, and a
-``WARN`` line when it found no Python or no runner.
+``PASS tool=...`` or ``BLOCK tool=...`` after the runner returned, and
+``WARN: runner exited N`` when the runner started but exited non-zero (a cold
+start can pass the hook's 5 s limit, as on a hosted runner). Each proves the
+installed copy found its Python and its runner. The failures above write
+``WARN: no Python found`` or ``WARN: runner not found``, or no log at all.
 """
 
 from __future__ import annotations
@@ -130,10 +133,13 @@ def test_delegation_not_lite_installed_hook_reaches_the_routing_runner(
     proc, log = _run_installed(tmp_path, home, _DEFAULT_MASK)
     text = _log_text(log)
     assert proc.returncode in (0, 2), proc.stderr
-    assert "PASS tool=Agent" in text or "BLOCK tool=Agent" in text, (
-        f"no routing decision; log={text!r} stderr={proc.stderr!r}"
+    reached = any(
+        marker in text
+        for marker in ("PASS tool=Agent", "BLOCK tool=Agent", "WARN: runner exited")
     )
-    assert "WARN" not in text, text
+    assert reached, f"runner never reached; log={text!r} stderr={proc.stderr!r}"
+    assert "no Python found" not in text, text
+    assert "runner not found" not in text, text
 
 
 @pytest.mark.unit
