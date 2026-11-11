@@ -26,10 +26,16 @@ _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/error-guard.sh" 2>/dev/null || true
 
+# A customer install (OMN-22498): scripts/install-delegation.sh --apply writes
+# ~/.omninode/delegation/hooks-delegation.json, and only that installer
+# registers this hook outside the plugin tree. Its presence is the customer's
+# opt-in, so the repo guard and the lite default below, which keep the plugin
+# quiet in other people's repos, do not silence a hook the customer installed
+# on purpose. The hook bit still decides.
 _OMNICLAUDE_CALLER_CWD="${CLAUDE_PROJECT_DIR:-$PWD}"
 # shellcheck source=../lib/repo_guard.sh
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/repo_guard.sh" 2>/dev/null || true
-if declare -F is_omninode_repo >/dev/null 2>&1; then
+if [[ ! -f "${HOME}/.omninode/delegation/hooks-delegation.json" ]] && declare -F is_omninode_repo >/dev/null 2>&1; then
     CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$_OMNICLAUDE_CALLER_CWD}" \
         is_omninode_repo || {
         _OMNICLAUDE_PASSTHROUGH=$(cat)
@@ -38,7 +44,15 @@ if declare -F is_omninode_repo >/dev/null 2>&1; then
         exit 0
     }
 fi
-if ! onex_hook_gate PRE_TOOL_USE_DELEGATION; then
+# The one switch (OMN-22498): `onex hooks disable POST_SKILL_DELEGATION_ENFORCER`
+# turns Claude Code delegation off. The bit (11, 0x800) is BORROWED, as Jake
+# ruled on OMN-22498 (2026-11-09): EnumHookBit in omnibase_core has every
+# default ordinal allocated, the same reason pre_tool_use_agent_model_guard.sh
+# borrows PRE_TOOL_AGENT_DISPATCH_GATE. Bit 11 already governs the delegation
+# family (post-skill-delegation-enforcer.sh). The old name here,
+# PRE_TOOL_USE_DELEGATION, is not a hook bit, and onex_hook_gate passes an
+# unknown name, so nothing could switch this hook off.
+if ! onex_hook_gate POST_SKILL_DELEGATION_ENFORCER; then
     cat
     exit 0
 fi
@@ -46,18 +60,14 @@ fi
 cd "$HOME" 2>/dev/null || cd /tmp || true
 
 # Kill switch
-if [[ "${OMNICLAUDE_HOOKS_DISABLED:-0}" == "1" ]]; then
-    cat
-    exit 0
-fi
-if [[ "${PRE_TOOL_DELEGATION_DISABLED:-0}" == "1" ]]; then
+if [[ "${OMNICLAUDE_HOOKS_DISABLED:-0}" == "1" || "${PRE_TOOL_DELEGATION_DISABLED:-0}" == "1" ]]; then
     cat
     exit 0
 fi
 
-# Lite mode guard [OMN-5398]
+# Lite mode guard [OMN-5398]; a customer install is not silenced by it (OMN-22498).
 _MODE_SH="${SCRIPT_DIR}/../../lib/mode.sh"
-if [[ -f "$_MODE_SH" ]]; then
+if [[ ! -f "${HOME}/.omninode/delegation/hooks-delegation.json" && -f "$_MODE_SH" ]]; then
     source "$_MODE_SH"
     if [[ "$(omniclaude_mode)" == "lite" ]]; then
         cat
@@ -88,7 +98,7 @@ if [[ "$TOOL_NAME" != "Agent" && "$TOOL_NAME" != "Task" ]]; then
     exit 0
 fi
 
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 HOOKS_LIB="${PLUGIN_ROOT}/hooks/lib"
 RUNNER="${HOOKS_LIB}/delegation_hook_runner.py"
 
@@ -139,6 +149,9 @@ if [[ "$DELEGATION_RESULT" == DELEGATED:* ]]; then
     echo "[$TIMESTAMP] [$_OMNICLAUDE_HOOK_NAME] BLOCK tool=${TOOL_NAME} agent=${AGENT_NAME} result=${DELEGATION_RESULT}" >> "$LOG_FILE" 2>/dev/null || true
     printf '%s\n' "$TOOL_INFO"
     echo "DELEGATION RESULT: ${DELEGATION_RESULT}" >&2
+    # error-guard.sh's EXIT trap turns any non-zero exit into 0, which would let
+    # Claude Code run the agent natively after delegating it (OMN-22498).
+    trap - EXIT 2>/dev/null || true
     exit 2
 fi
 
