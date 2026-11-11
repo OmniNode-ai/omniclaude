@@ -268,7 +268,7 @@ override-dependencies = [
     # pin was one release behind on the day it landed. Not a mistake in that
     # bump: sibling-lock-refresh.yml cannot move an immutable rev, so this pin
     # decays on every omnimarket release until OMN-13902 / OMN-18594 land.
-    "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@dev-20261110062803-fa7ed0a42941",
+    "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@dev-20261111060216-1d1a616216db",
 ]
 
 [tool.uv.sources]
@@ -297,11 +297,11 @@ override-dependencies = [
 # nightly sibling-pin train moves it from here. The version range in [project]
 # stays for external installs. OMN-13873's PyPI rule still holds for every
 # other form: check_dep_provenance.py accepts only this tag-only dev-tag shape.
-omnibase-core = { git = "https://github.com/OmniNode-ai/omnibase_core.git", tag = "dev-20261109232713-49e69fc7d3a4" }
+omnibase-core = { git = "https://github.com/OmniNode-ai/omnibase_core.git", tag = "dev-20261110125852-e6bc5e13e9e7" }
 # OMN-20910: pin the Claude API voter merge; it retains the lab roster reader,
 # the larger retry budget and the torch-free default install.
 # OMN-21900: a first-party source names a dev-merge tag, never a sha (first_party_ref validator).
-omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", tag = "dev-20261110060610-ab183e273c3e" }
+omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", tag = "dev-20261110212506-82e13cda1de3" }
 # OMN-16979: pin an approved dispatch commit; never substitute a PyPI source,
 # because the dispatch-drift guard verifies direct VCS provenance.
 # OMN-18622 recorded that `sibling-lock-refresh.yml` could never move this
@@ -325,7 +325,7 @@ omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence
 # So do not hand-bump this line. If it is stale, run `sibling-lock-refresh.yml`
 # on workflow_dispatch and review the bot PR.
 # OMN-21900: a first-party source names a dev-merge tag, never a sha (first_party_ref validator).
-omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", tag = "dev-20261110062803-fa7ed0a42941" }
+omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", tag = "dev-20261111060216-1d1a616216db" }
 
 # OMN-18752: which surface decides the commit a git-sourced sibling must carry.
 # `clone` is claimed only where something enforces it. omnimarket's in-process
