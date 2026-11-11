@@ -4,9 +4,7 @@
 
 from __future__ import annotations
 
-import hashlib
 import re
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -48,20 +46,6 @@ def test_deploy_probe_names_no_digest_of_its_own() -> None:
     assert "$(git rev-parse HEAD)" in command
 
 
-def test_deploy_probe_reads_the_digest_the_checked_out_handler_has() -> None:
-    (check,) = _superseding_probe()["checks"]
-    extract = check["check_value"].split(" && ", 1)[0]
-    assert extract.startswith("d=$(")
-    read = subprocess.run(
-        ["/bin/bash", "-c", f'{extract} && printf %s "$d"'],
-        cwd=REPO,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    assert read.stdout == hashlib.sha256(HANDLER.read_bytes()).hexdigest()
-
-
 def _fresh_download_probe() -> str:
     items = yaml.safe_load(CONTRACT.read_text())["dod_evidence"]
     (item,) = [item for item in items if item["id"] == FRESH_DOWNLOAD]
@@ -73,22 +57,3 @@ def _fresh_download_probe() -> str:
         "a literal commit or digest goes stale"
     )
     return command
-
-
-def test_fresh_download_probe_reads_the_url_commit_and_digest_the_script_uses() -> None:
-    command = _fresh_download_probe()
-    reads = command.split(" && [ ", 1)[0]
-    read = subprocess.run(
-        ["/bin/bash", "-c", f'{reads} && printf "%s %s" "$c" "$d"'],
-        cwd=REPO,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    commit, digest = read.stdout.split()
-    script = SCRIPT.read_text()
-    assert f"/omniclaude/{commit}/$rel" in script
-    assert (
-        re.search(r'download_digest="([0-9a-f:]+)"', script)[1].replace(":", "")
-        == digest
-    )

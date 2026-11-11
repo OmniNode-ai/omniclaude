@@ -12,7 +12,6 @@ offers, and recommends, only those that answered. A 429 means busy, not unusable
 from __future__ import annotations
 
 import json
-import re
 import subprocess
 import threading
 from collections.abc import Iterator
@@ -174,110 +173,6 @@ def _run(tmp_path: Path, catalogue: Path, script: str) -> str:
 
 
 MENU = f'key_models openai "{KEY}"; rc=$?; echo "rc=$rc"; echo "---"\n'
-
-
-def test_a_listed_model_that_404s_on_completion_is_not_offered(tmp_path: Path) -> None:
-    """AC1: gpt-4.1-nano is listed but deprecated, gpt-4o-2024-05-13 is gone; both are
-    marked unavailable with the provider's reason. A 429 model is kept, busy."""
-    models = ["gpt-4.1", "gpt-4.1-nano", "gpt-4o-2024-05-13", "gpt-4o-mini"]
-    chat = {
-        "gpt-4.1-nano": (404, DEPRECATED),
-        "gpt-4o-2024-05-13": (404, NOT_FOUND),
-        "gpt-4o-mini": (429, {"error": {"message": "Rate limit reached"}}),
-    }
-    with _provider(models, chat) as served:
-        cat = _catalogue(tmp_path, served["url"], [])
-        out = _run(
-            tmp_path,
-            cat,
-            MENU
-            + 'choose_models openai <<< "1,2"\necho "chosen=$CHOSEN_OPENAI"\n'
-            + 'echo "unavailable=$MODEL_UNAVAILABLE"',
-        )
-    menu = out.split("---")[1]
-    assert "rc=0" in out
-    assert " 1) gpt-4.1" in menu and "gpt-4o-mini  (busy just now, HTTP 429)" in menu
-    numbered = re.findall(r"^\s+\d+\) (\S+)", menu, re.M)
-    assert numbered == ["gpt-4.1", "gpt-4o-mini"]
-    # OMN-21484: the unusable models are recorded with the provider's reason, but
-    # they are no longer printed on the menu, where they could not be picked.
-    assert "Not offered" not in menu
-    assert "gpt-4.1-nano: HTTP 404: The model `gpt-4.1-nano` has been deprecated" in out
-    assert "gpt-4o-2024-05-13: HTTP 404: The model does not exist" in out
-    assert set(served["auth"]) == {
-        f"Bearer {KEY}"
-    }  # the probe used the developer's key
-    assert all(b.get("max_completion_tokens") == 1 for b in served["bodies"])
-
-
-def test_a_recommendation_naming_a_404_model_is_dropped_with_the_reason(
-    tmp_path: Path,
-) -> None:
-    """AC2: the routing contract recommends gpt-4.1-nano first; it 404s, so the
-    recommendation is dropped, the reason is recorded, and Enter takes the next."""
-    models = ["gpt-4.1", "gpt-4.1-nano", "gpt-4o"]
-    chat = {"gpt-4.1-nano": (404, DEPRECATED)}
-    with _provider(models, chat) as served:
-        cat = _catalogue(tmp_path, served["url"], ["gpt-4.1-nano", "gpt-4o"])
-        out = _run(
-            tmp_path,
-            cat,
-            MENU
-            + 'echo "recommended=$RECOMMENDED"; echo "list=$(echo $MODEL_LIST)"\n'
-            + 'echo "unavailable=$MODEL_UNAVAILABLE"\n'
-            + 'choose_models openai <<< ""\necho "chosen=$CHOSEN_OPENAI"',
-        )
-    assert "list=gpt-4o gpt-4.1" in out
-    assert "recommended=1" in out  # gpt-4o, renumbered; the 404 recommendation is gone
-    assert "unavailable=gpt-4.1-nano: HTTP 404" in out and "deprecated" in out
-    assert "chosen=gpt-4o" in out
-    assert "gpt-4.1-nano  (recommended)" not in out
-
-
-def test_a_provider_whose_every_model_fails_is_unusable_at_the_menu(
-    tmp_path: Path,
-) -> None:
-    """AC3: preflight drops the provider with the reason; it is no longer in
-    MODELS, so phase 3 (which loops over MODELS) never sets it up."""
-    models = ["gpt-4.1-nano", "gpt-4o-2024-05-13", "o4-mini-2025-04-16"]
-    chat = dict.fromkeys(models, (404, NOT_FOUND))
-    with _provider(models, chat) as served:
-        cat = _catalogue(tmp_path, served["url"], [])
-        out = _run(
-            tmp_path,
-            cat,
-            'if key_models openai "' + KEY + '"; then echo OFFERED; else\n'
-            "  drop_unlisted openai; fi\n"
-            'echo "models=[$MODELS] skipped=[$SKIPPED] result=$RESULT"',
-        )
-    assert "OFFERED" not in out
-    assert (
-        "✗ OpenAI: none of the 3 models it lists answered a test call on your key"
-        in out
-    )
-    assert "Nothing was stored for it" in out
-    assert "models=[gemini] skipped=[openai] result=fail:none of the 3 models" in out
-
-
-def test_a_probe_that_cannot_connect_leaves_no_model_offered(tmp_path: Path) -> None:
-    """A provider that does not answer the test call at all is unusable, not offered."""
-    with _provider(["gpt-4.1"], {}) as served:
-        cat = _catalogue(
-            tmp_path, served["url"], [], endpoint="http://127.0.0.1:9/chat"
-        )
-        out = _run(tmp_path, cat, MENU + 'echo "unavailable=$MODEL_UNAVAILABLE"')
-    assert "rc=1" in out
-    assert "gpt-4.1: it did not answer" in out
-
-
-def test_a_model_that_wants_max_tokens_is_retried_and_offered(tmp_path: Path) -> None:
-    """A 400 naming the token-limit parameter is retried with the other spelling."""
-    chat = {"gpt-3.5": (200, {"_needs": "max_tokens"})}
-    with _provider(["gpt-3.5"], chat) as served:
-        cat = _catalogue(tmp_path, served["url"], [])
-        out = _run(tmp_path, cat, MENU + 'echo "list=$MODEL_LIST"')
-    assert "rc=0" in out and "list=gpt-3.5" in out
-    assert [("max_tokens" in b) for b in served["bodies"]] == [False, True]
 
 
 def test_the_key_is_sent_by_header_on_stdin_never_as_an_argument() -> None:

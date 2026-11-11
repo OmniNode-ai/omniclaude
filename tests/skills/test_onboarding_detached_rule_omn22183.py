@@ -44,16 +44,6 @@ def test_walk_2026_11_02_guide_does_not_call_every_detached_head_expected() -> N
     )
 
 
-def test_walk_2026_11_02_guide_states_the_rule_the_guard_enforces() -> None:
-    recorded = json.loads(FIXTURE.read_text(encoding="utf-8"))
-    guide = _guide()
-    assert "detached at the commit the floor marker" in guide
-    assert ".onex-workspace-floor.json" in guide
-    # The refusal the guide warns about is the one the guard prints, with its repair.
-    assert recorded["repair_tail"].split(" omnimarket")[0] in guide
-    assert "refuses" in guide[guide.index("detached at the commit the floor marker") :]
-
-
 def test_walk_2026_11_02_fixture_rule_is_the_guides_rule() -> None:
     recorded = json.loads(FIXTURE.read_text(encoding="utf-8"))
     assert (

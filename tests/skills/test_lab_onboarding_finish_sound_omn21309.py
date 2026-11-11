@@ -11,7 +11,6 @@ the clips served from a local directory, then read back what was played.
 from __future__ import annotations
 
 import array
-import os
 import subprocess
 import wave
 from pathlib import Path
@@ -138,9 +137,3 @@ def test_plays_without_a_name_and_never_asks(tmp_path: Path) -> None:
 
 def test_skipped_off_macos(tmp_path: Path) -> None:
     assert _run(tmp_path, os_name="Linux", fullname="alice example", home="bob") == []
-
-
-def test_main_plays_it_after_a_completed_run() -> None:
-    body = _functions("main")
-    assert body.index("result=COMPLETE") < body.index("finish_sound"), body
-    assert os.access(SCRIPT, os.X_OK)

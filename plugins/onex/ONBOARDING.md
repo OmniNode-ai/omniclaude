@@ -119,3 +119,14 @@ existing files; canonical backup and restore integration is still required.
 The historical pinned provisioning script is not the package-based preview.
 Use a reviewed release artifact or the checked-out preview bootstrap with an
 explicit local wheel; do not assume an old public script checksum describes it.
+
+---
+
+## Tell us what broke
+
+If setup, the plugin or a delegation fails, or does not do what you expected, open an
+[MVP feedback report](https://github.com/OmniNode-ai/omniclaude/issues/new?template=mvp-feedback.yml)
+(the form is `.github/ISSUE_TEMPLATE/mvp-feedback.yml`). It asks where it broke, then for the exact
+command you ran and the error or output you got. If a delegation ran, add the receipt's
+correlation id and the output of `onex doctor`; if install failed before `onex` or a receipt
+existed, leave those two empty.

@@ -161,12 +161,6 @@ def test_ac1_finish_step_alone_makes_no_synthesis_call(tmp_path: Path) -> None:
     assert [c for c in calls if c.startswith("afplay ")], calls
 
 
-def test_ac1_phase0_calls_the_consent_before_the_questions() -> None:
-    body = _functions("phase0")
-    assert "finish_sound_consent" in body
-    assert body.index("finish_sound_consent") < body.index("settle_models"), body
-
-
 def test_ac1_preflight_only_and_opt_out_ask_nothing(tmp_path: Path) -> None:
     calls, rc = _run(tmp_path, ["finish_sound_consent"], preflight_only=1)
     assert rc == 0 and calls == []

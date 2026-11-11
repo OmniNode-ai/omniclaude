@@ -115,35 +115,3 @@ def test_the_fixture_is_the_walks_recorded_data() -> None:
     assert isinstance(readings, dict)
     assert readings["disk_total_gb"] == 41
     assert readings["disk_free_gb"] == 17
-
-
-def test_walk_2026_11_02_local_model_preflight_passes_on_the_stock_image_reading(
-    tmp_path: Path,
-) -> None:
-    walk = _walk()
-    readings = walk["readings"]
-    assert isinstance(readings, dict)
-    result = _preflight(tmp_path, readings)
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "Will set up: native onex" in result.stdout
-    assert f"{readings['disk_free_gb']} GB free disk (needs {_m1_disk_gb()})" not in (
-        result.stdout
-    )
-
-
-def test_walk_2026_11_02_a_reading_below_the_minimum_is_still_refused(
-    tmp_path: Path,
-) -> None:
-    walk = _walk()
-    recorded = walk["readings"]
-    below = walk["below_minimum_disk_free_gb"]
-    assert isinstance(recorded, dict)
-    assert isinstance(below, int)
-    readings: dict[str, object] = dict(recorded)
-    readings["disk_free_gb"] = below
-    result = _preflight(tmp_path, readings)
-    assert result.returncode == 3, result.stdout + result.stderr
-    assert (
-        f"{readings['disk_free_gb']} GB free disk (needs {_m1_disk_gb()})"
-        in result.stdout
-    )

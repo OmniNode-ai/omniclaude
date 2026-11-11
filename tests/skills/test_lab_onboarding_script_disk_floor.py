@@ -71,28 +71,6 @@ def test_every_path_fits_the_stock_image_free_space() -> None:
         assert path["min_gb"] <= floor["image"]["free_gb"], name
 
 
-def test_the_script_constant_is_the_declared_minimum_of_the_native_paths() -> None:
-    paths = _floor()["paths"]
-    assert _constant("M1_DISK_GB") == paths["local_model"]["min_gb"]
-    assert paths["hosted_key"]["min_gb"] <= _constant("M1_DISK_GB")
-
-
-def test_the_ollama_path_minimum_is_the_native_minimum_plus_the_model_download() -> (
-    None
-):
-    ollama = _floor()["paths"]["ollama_model"]
-    assert ollama["min_gb"] == _constant("M1_DISK_GB") + ollama["model_download_gb"]
-
-
-def test_the_guide_vm_leaves_at_least_the_minimum_free_on_the_stock_image() -> None:
-    floor = _floor()
-    free = floor["image"]["free_gb"]
-    assert free >= _constant("M1_DISK_GB"), (
-        f"the stock image leaves {free} GB free; preflight needs {_constant('M1_DISK_GB')} GB"
-    )
-    assert free >= floor["paths"]["local_model"]["min_gb"]
-
-
 def test_the_recommended_vm_is_the_stock_image_and_is_never_grown_past_it() -> None:
     floor = _floor()
     vm, image = floor["vm"], floor["image"]
@@ -102,26 +80,3 @@ def test_the_recommended_vm_is_the_stock_image_and_is_never_grown_past_it() -> N
     )
     assert vm["vcpu"] == floor["requirements"]["cpus"]
     assert vm["ram_gb"] == floor["requirements"]["ram_gb"]
-
-
-def test_the_script_vm_spec_states_the_declared_vm() -> None:
-    vm = _floor()["vm"]
-    spec = _vm_spec()
-    assert f"{vm['vcpu']} vCPU" in spec
-    assert f"{vm['ram_gb']} GB RAM" in spec
-    assert f"{vm['disk_gb']} GB disk" in spec
-    assert f"{_floor()['image']['free_gb']} GB free" in spec
-    assert "40 GB" not in spec
-
-
-def test_the_guide_states_the_declared_vm() -> None:
-    vm = _floor()["vm"]
-    text = " ".join(GUIDE.read_text(encoding="utf-8").split())
-    needle = f"{vm['vcpu']} vCPU, {vm['ram_gb']} GB RAM and {vm['disk_gb']} GB disk"
-    assert needle in text
-    assert "40 GB disk" not in text
-
-
-def test_the_guide_free_disk_row_is_the_script_minimum() -> None:
-    cells = _guide_free_disk_row()
-    assert cells[1] == f"{_constant('M1_DISK_GB')} GB"

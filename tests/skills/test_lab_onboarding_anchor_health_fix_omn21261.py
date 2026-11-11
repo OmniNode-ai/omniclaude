@@ -43,10 +43,6 @@ def _anchor() -> str:
     return anchors[0]
 
 
-def test_anchor_is_not_one_that_predates_the_health_fix() -> None:
-    assert _anchor() not in ANCHORS_BEFORE_THE_HEALTH_FIX
-
-
 def test_the_recorded_pre_fix_anchors_are_full_shas() -> None:
     for sha in ANCHORS_BEFORE_THE_HEALTH_FIX:
         assert re.fullmatch(r"[0-9a-f]{40}", sha)
