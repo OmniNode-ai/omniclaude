@@ -21,6 +21,11 @@ requirements:
     acceptance:
       - id: "AC1"
         statement: "AC1: one named hook bit turns Claude Code delegation on and off through onex hooks enable and onex hooks disable, and with the bit off the Agent|Task delegation hook passes the tool call through unchanged -- falsifier: uv run pytest tests -q -k delegation_switch in omniclaude, with the bit on and off, failing at dev because no such bit exists"
+  - id: req-omn22498-install-once
+    statement: The installer adds the delegation hook set once and leaves other tools' settings.json rows alone.
+    acceptance:
+      - id: "AC2"
+        statement: "AC2: the onboarding path installs the delegation hook set once, idempotently, so a second run leaves settings.json byte-identical -- falsifier: uv run pytest tests -q -k delegation_hook_install over a scratch HOME, run twice, failing on any diff or a missing PreToolUse Agent|Task entry"
   - id: req-omn22498-customer-install-not-lite
     statement: A customer who installed the delegation hooks is not silenced by the lite default.
     acceptance:
@@ -48,6 +53,15 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/unit/hooks/scripts/test_delegation_switch_omn22498.py -q --no-cov -k delegation_switch"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn22498-ac2-delegation-hook-install
+    description: "Two install-delegation.sh --apply runs over a scratch HOME whose settings.json holds the OMN-23413 gateway groups, an unrelated user hook and an earlier installer's hook-scripts/ entry: the second run leaves settings.json byte-identical, exactly one legacy delegation PreToolUse Agent|Task entry remains and it is not the old hook-scripts/ copy, both gateway groups and the user hook are unchanged. A positive control proves the gateway detector sees a dropped group. Fails at the merge base, where the old hook-scripts/ entry is what the installer writes."
+    source: manual
+    binds_ac:
+      - "AC2"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_delegation_hook_install_omn22498.py -q --no-cov -k delegation_hook_install"
         cwd: "${OMNI_HOME}/omniclaude"
   - id: dod-omn22498-ac3-delegation-not-lite
     description: "In lite mode, in a project that is not an OmniNode repo, an installed customer's Agent call reaches the router and cost accounting runs; a plugin user who never installed delegation keeps the lite no-op; the bit still switches it off. Fails at the merge base, where the lite default and the repo guard exit 0 before any routing decision."
