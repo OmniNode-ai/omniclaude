@@ -44,7 +44,7 @@ INSTALL_PLUGIN_ROOT="${INSTALL_ROOT}/plugin/plugins/onex"
 INSTALL_SCRIPTS_DIR="${INSTALL_PLUGIN_ROOT}/hooks/scripts"
 ROLLBACK_MANIFEST="${INSTALL_ROOT}/rollback-manifest.json"
 
-CLAUDE_SETTINGS="${HOME}/.claude/settings.json"
+CLAUDE_SETTINGS="${CLAUDE_CONFIG_DIR:-${HOME}/.claude}/settings.json"
 CLAUDE_SETTINGS_BACKUP_DIR="${INSTALL_ROOT}/backups"
 
 SOURCE_HOOK_CONFIG="${REPO_ROOT}/plugins/onex/hooks/hooks-delegation.v1.json"
@@ -238,11 +238,6 @@ check_source_files() {
 
 ensure_install_dir() {
   log_step "ensure install dirs (${INSTALL_ROOT})"
-  if [[ -d "${INSTALL_ROOT}" ]]; then
-    log_info "exists: ${INSTALL_ROOT}"
-  else
-    run_or_dry mkdir -p "${INSTALL_ROOT}"
-  fi
   run_or_dry mkdir -p "${INSTALL_SCRIPTS_DIR}" "${CLAUDE_SETTINGS_BACKUP_DIR}"
 }
 
@@ -360,9 +355,7 @@ import sys
 
 import yaml
 
-source_path = pathlib.Path(sys.argv[1])
-overlay_path = pathlib.Path(sys.argv[2])
-legacy_path = pathlib.Path(sys.argv[3])
+source_path, overlay_path, legacy_path = map(pathlib.Path, sys.argv[1:4])
 endpoint_url = sys.argv[4]
 
 
@@ -391,8 +384,7 @@ for container in (legacy, existing_overlay):
         if backend_id:
             # Endpoint overlays also carry model bindings and backend-specific
             # settings. Reinstallation must not discard those saved fields.
-            preserved = dict(backend)
-            preserved["backend_id"] = str(backend_id)
+            preserved = {**backend, "backend_id": str(backend_id)}
             if existing_endpoint:
                 preserved["endpoint_url"] = existing_endpoint
             backends_by_id[str(backend_id)] = preserved
@@ -408,7 +400,7 @@ if endpoint_url:
             )
             preserved["endpoint_url"] = endpoint_url
 
-overlay = {"backends": list(backends_by_id.values())}
+overlay = {**legacy, **existing_overlay, "backends": list(backends_by_id.values())}
 overlay_path.parent.mkdir(parents=True, exist_ok=True)
 overlay_path.write_text(yaml.dump(overlay, default_flow_style=False, sort_keys=False))
 print(f"wrote {len(overlay['backends'])} endpoint overlay entries to {overlay_path}")
@@ -727,6 +719,14 @@ main() {
   check_claude_cli
   resolve_python
   check_source_files
+  "${PYTHON_BIN}" - "${ROLLBACK_MANIFEST}" "${CLAUDE_SETTINGS}" <<'PY'
+import json, pathlib, sys
+manifest, settings = map(pathlib.Path, sys.argv[1:])
+if manifest.exists():
+    prior = json.loads(manifest.read_text()).get("claude_settings")
+    if not prior or pathlib.Path(prior).resolve() != settings.resolve():
+        raise SystemExit("Delegation belongs to another Claude profile; uninstall that profile before changing it.")
+PY
 
   ensure_install_dir
   install_python_package
