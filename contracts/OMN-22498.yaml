@@ -54,6 +54,15 @@ dod_evidence:
       - check_type: test_passes
         check_value: "uv run pytest tests/unit/hooks/scripts/test_delegation_switch_omn22498.py -q --no-cov -k delegation_switch"
         cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn22498-ac1-saved-switch
+    description: "onex hooks disable saves the mask in ~/.omnibase/.env and Claude Code runs the installed hook with no ONEX_HOOKS_MASK in its environment: with a saved bit-11-off mask the installed hook passes the call through and never reaches the router; with a saved all-on mask it does. Fails at the merge base, where hook-gate.sh read only the environment, so the saved switch was ignored."
+    source: manual
+    binds_ac:
+      - "AC1"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_delegation_installed_hook_omn22498.py -q --no-cov -k delegation_switch_saved"
+        cwd: "${OMNI_HOME}/omniclaude"
   - id: dod-omn22498-ac2-delegation-hook-install
     description: "Two install-delegation.sh --apply runs over a scratch HOME whose settings.json holds the OMN-23413 gateway groups, an unrelated user hook and an earlier installer's hook-scripts/ entry: the second run leaves settings.json byte-identical, exactly one legacy delegation PreToolUse Agent|Task entry remains and it is not the old hook-scripts/ copy, both gateway groups and the user hook are unchanged. A positive control proves the gateway detector sees a dropped group. Fails at the merge base, where the old hook-scripts/ entry is what the installer writes."
     source: manual
