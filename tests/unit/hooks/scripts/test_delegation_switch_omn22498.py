@@ -39,6 +39,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -139,7 +140,20 @@ def _customer_env(
     (project / "README.md").write_text("a customer's own project\n")
     env = _base_env(tmp_path, mask=mask, home=home)
     env["CLAUDE_PROJECT_DIR"] = str(project)
+    env["PATH"] = _customer_path(tmp_path)
     return env, project
+
+
+def _customer_path(tmp_path: Path) -> str:
+    """A customer's PATH: system dirs plus jq, and no python3 that imports a
+    dev-workspace omnibase_core, which would make mode.sh resolve to full and
+    leave the lite default unexercised (dod-closeout-sweep, 2026-11-11)."""
+    bin_dir = tmp_path / "customer-bin"
+    bin_dir.mkdir()
+    jq = shutil.which("jq")
+    assert jq, "jq is required by the delegation hook"
+    (bin_dir / "jq").symlink_to(jq)
+    return f"{bin_dir}{os.pathsep}/usr/bin{os.pathsep}/bin"
 
 
 def _runner_called(tmp_path: Path) -> bool:
