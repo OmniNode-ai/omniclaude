@@ -1,0 +1,64 @@
+---
+schema_version: 1.0.0
+ticket_id: OMN-23413
+title: 'omniclaude part of the unified ONEX CLI: packaged customer assets, and the legacy hook standing
+  down while the gateway is on'
+summary: 'Customer plugin and hook assets resolve from the installed package, the delegation installer
+  preserves the selected Claude profile and gateway rows, and the legacy bit-11 delegation runner stands
+  down while onex claude enable owns the session. The existing onboarding script is unchanged; replacing
+  it with a thin bootstrap is a later switch-over step.
+
+  '
+is_seam_ticket: true
+interface_change: true
+interfaces_touched:
+- public_api
+requirements:
+- id: req-omn23413-ac6-customer-assets
+  statement: Installed customer hooks carry their dependency closure and preserve user settings.
+  acceptance:
+  - id: AC6
+    statement: 'AC6 (omniclaude part): customer plugin and hook assets resolve from the installed package,
+      the delegation installer keeps the selected Claude profile and gateway rows -- falsifier: uv run
+      pytest tests/skills/test_customer_asset_resolution.py tests/skills/test_customer_plugin_wheel.py
+      tests/scripts/test_delegation_profile_ownership.py tests/scripts/test_install_gateway_dispatch.py'
+- id: req-omn23413-ac11-one-switch
+  statement: The legacy delegation hook does not route a request the gateway already owns.
+  acceptance:
+  - id: AC11
+    statement: 'AC11 (omniclaude part): with the gateway journal phase enabled the legacy runner answers
+      not_delegatable:gateway, and with it disabled or absent it routes as before -- falsifier: uv run
+      pytest tests/hooks/test_delegation_runner_gateway_omn23413.py'
+evidence_requirements:
+- kind: tests
+  description: The customer-asset, installer and runner stand-down tests pass
+  command: uv run pytest tests/hooks/test_delegation_runner_gateway_omn23413.py tests/skills/test_customer_asset_resolution.py
+    -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+- id: dod-omn23413-ac6-customer-assets
+  description: Customer assets resolve from the installed package; the installer preserves the selected
+    Claude profile and the gateway rows. The test files do not exist at the merge base.
+  source: manual
+  binds_ac:
+  - AC6
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/skills/test_customer_asset_resolution.py tests/skills/test_customer_plugin_wheel.py
+      tests/scripts/test_delegation_profile_ownership.py tests/scripts/test_install_gateway_dispatch.py
+      -q --no-cov
+    cwd: ${OMNI_HOME}/omniclaude
+- id: dod-omn23413-ac11-runner-stands-down
+  description: With ~/.onex/claude_gateway.json phase enabled, or unreadable, the legacy runner answers
+    not_delegatable:gateway; disabled or absent, it routes as before. The test file does not exist at
+    the merge base.
+  source: manual
+  binds_ac:
+  - AC11
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/hooks/test_delegation_runner_gateway_omn23413.py -q --no-cov
+    cwd: ${OMNI_HOME}/omniclaude

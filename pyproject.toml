@@ -125,6 +125,9 @@ claude = "omniclaude.runtime.plugin:PluginClaude"
 [project.entry-points."onex.node_package"]
 omniclaude = "omniclaude.nodes"
 
+[project.entry-points."onex.claude"]
+customer_assets = "omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.handler_onboarding_assets:customer_assets"
+
 [project.entry-points."onex.nodes"]
 node_agent_inbox_effect = "omniclaude.nodes.node_agent_inbox_effect"
 node_agent_routing_compute = "omniclaude.nodes.node_agent_routing_compute"
@@ -268,7 +271,7 @@ override-dependencies = [
     # pin was one release behind on the day it landed. Not a mistake in that
     # bump: sibling-lock-refresh.yml cannot move an immutable rev, so this pin
     # decays on every omnimarket release until OMN-13902 / OMN-18594 land.
-    "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@dev-20261110062803-fa7ed0a42941",
+    "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@dev-20261112062638-179aa1280722",
 ]
 
 [tool.uv.sources]
@@ -297,11 +300,11 @@ override-dependencies = [
 # nightly sibling-pin train moves it from here. The version range in [project]
 # stays for external installs. OMN-13873's PyPI rule still holds for every
 # other form: check_dep_provenance.py accepts only this tag-only dev-tag shape.
-omnibase-core = { git = "https://github.com/OmniNode-ai/omnibase_core.git", tag = "dev-20261109232713-49e69fc7d3a4" }
+omnibase-core = { git = "https://github.com/OmniNode-ai/omnibase_core.git", tag = "dev-20261111170138-1d6eb0d47901" }
 # OMN-20910: pin the Claude API voter merge; it retains the lab roster reader,
 # the larger retry budget and the torch-free default install.
 # OMN-21900: a first-party source names a dev-merge tag, never a sha (first_party_ref validator).
-omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", tag = "dev-20261110060610-ab183e273c3e" }
+omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", tag = "dev-20261111074124-e3133252f1dd" }
 # OMN-16979: pin an approved dispatch commit; never substitute a PyPI source,
 # because the dispatch-drift guard verifies direct VCS provenance.
 # OMN-18622 recorded that `sibling-lock-refresh.yml` could never move this
@@ -325,7 +328,7 @@ omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence
 # So do not hand-bump this line. If it is stale, run `sibling-lock-refresh.yml`
 # on workflow_dispatch and review the bot PR.
 # OMN-21900: a first-party source names a dev-merge tag, never a sha (first_party_ref validator).
-omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", tag = "dev-20261110062803-fa7ed0a42941" }
+omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", tag = "dev-20261112062638-179aa1280722" }
 
 # OMN-18752: which surface decides the commit a git-sourced sibling must carry.
 # `clone` is claimed only where something enforces it. omnimarket's in-process
@@ -341,6 +344,14 @@ omnimarket = "clone"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/omniclaude"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"plugins/.claude-plugin/marketplace.json" = "omniclaude/resources/customer/plugins/.claude-plugin/marketplace.json"
+"plugins/onex-delegate" = "omniclaude/resources/customer/plugins/onex-delegate"
+"plugins/onex/hooks" = "omniclaude/resources/customer/plugins/onex/hooks"
+"plugins/onex/lib" = "omniclaude/resources/customer/plugins/onex/lib"
+"scripts/install-delegation.sh" = "omniclaude/resources/customer/scripts/install-delegation.sh"
+"pyproject.toml" = "omniclaude/resources/customer/pyproject.toml"
 
 [tool.ruff]
 target-version = "py312"

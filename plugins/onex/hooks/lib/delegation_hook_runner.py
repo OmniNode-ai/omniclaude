@@ -39,10 +39,7 @@ _HERE = Path(__file__).parent
 _PLUGIN_ROOT = _HERE.parent.parent  # hooks/lib -> hooks -> plugins/onex
 _REPO_ROOT = _PLUGIN_ROOT.parent.parent  # plugins/onex -> omniclaude root
 
-for _candidate in [
-    _REPO_ROOT / "src",
-    _REPO_ROOT,
-]:
+for _candidate in [_REPO_ROOT / "src", _REPO_ROOT]:
     if _candidate.exists() and str(_candidate) not in sys.path:
         sys.path.insert(0, str(_candidate))
 
@@ -78,11 +75,7 @@ def _import_telemetry():  # type: ignore[return]
 
 
 def _build_telemetry_json(
-    task_type: str,
-    model: str,
-    latency_ms: int,
-    correlation_id: str,
-    session_id: str,
+    task_type: str, model: str, latency_ms: int, correlation_id: str, session_id: str
 ) -> str:
     """Build NON-AUTHORITATIVE telemetry JSON for a delegatable classification.
 
@@ -107,8 +100,24 @@ def _build_telemetry_json(
         return ""
 
 
+_GATEWAY_JOURNAL = ".onex/claude_gateway.json"  # written by `onex claude enable`
+
+
+def _gateway_owns_session() -> bool:
+    """OMN-23413: the ONEX gateway already routes this session; unreadable counts as on."""
+    try:
+        return '"phase":"enabled"' in (Path.home() / _GATEWAY_JOURNAL).read_text()
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True
+
+
 def main() -> int:
     t0 = time.monotonic()
+    if _gateway_owns_session():
+        print("not_delegatable:gateway")
+        return 0
 
     raw = sys.stdin.read()
     try:
@@ -117,11 +126,9 @@ def main() -> int:
         payload = {}
 
     # Extract correlation_id and session_id forwarded from the shell hook
-    correlation_id = ""
-    session_id = ""
-    if isinstance(payload, dict):
-        correlation_id = str(payload.get("correlation_id", ""))
-        session_id = str(payload.get("session_id", ""))
+    fields = payload if isinstance(payload, dict) else {}
+    correlation_id = str(fields.get("correlation_id", ""))
+    session_id = str(fields.get("session_id", ""))
     # Fallback to env vars set by the shell hook wrapper
     if not correlation_id:
         correlation_id = os.environ.get("HOOK_CORRELATION_ID", "")
@@ -129,8 +136,8 @@ def main() -> int:
         try:
             from .session_id import resolve_session_id  # noqa: PLC0415
         except ImportError:
-            from plugins.onex.hooks.lib.session_id import (  # noqa: PLC0415
-                resolve_session_id,
+            from plugins.onex.hooks.lib.session_id import (
+                resolve_session_id,  # noqa: PLC0415
             )
         session_id = resolve_session_id(default="")
 
@@ -138,10 +145,9 @@ def main() -> int:
     tool_input = (
         payload.get("tool_input", payload) if isinstance(payload, dict) else payload
     )
-    if isinstance(tool_input, dict):
-        tool_text = json.dumps(tool_input)
-    else:
-        tool_text = str(tool_input)
+    tool_text = (
+        json.dumps(tool_input) if isinstance(tool_input, dict) else str(tool_input)
+    )
 
     # --- Sensitivity gate ---
     gate = _import_gate()
@@ -168,11 +174,7 @@ def main() -> int:
                 # Shell caller reads only the first line; this line is for
                 # emit_via_daemon consumption.
                 telemetry_json = _build_telemetry_json(
-                    task_type=task_type,
-                    model=model,
-                    latency_ms=latency_ms,
-                    correlation_id=correlation_id,
-                    session_id=session_id,
+                    task_type, model, latency_ms, correlation_id, session_id
                 )
                 if telemetry_json:
                     print(telemetry_json)
