@@ -36,6 +36,11 @@ requirements:
     acceptance:
       - id: "AC4"
         statement: "AC4: the prompt classifier stub is either wired to a real decision or removed from the installed hook set, and the hook set registers no script that only exits 0 -- falsifier: uv run pytest tests -q -k delegation_hook_set_no_stub reading hooks-delegation.v1.json and each script it names"
+  - id: req-omn22498-lab-agent-call
+    statement: On a lab host, a real Claude Code Agent call is refused by the installed hook with its routing decision logged when bit 11 is on, and runs natively when it is off.
+    acceptance:
+      - id: "AC5"
+        statement: "AC5: on a lab host, with the hooks installed by install-delegation.sh --apply, one real Agent call through Claude Code with bit 11 on is refused by the hook with its routing decision logged (\"DELEGATED: <task> routed to <model>\" in pre-tool-delegation.log), and with bit 11 off the same call runs natively and the hook logs no routing decision -- falsifier: the hook log lines and the Claude Code output for the two runs, recorded on the ticket. A delegation receipt from a real routed run is OMN-23413's gateway's job, not this hook's."
 evidence_requirements:
   - kind: tests
     description: "The delegation switch, customer-install and hook-set tests pass"
@@ -55,13 +60,13 @@ dod_evidence:
         check_value: "uv run pytest tests/unit/hooks/scripts/test_delegation_switch_omn22498.py -q --no-cov -k delegation_switch"
         cwd: "${OMNI_HOME}/omniclaude"
   - id: dod-omn22498-ac1-saved-switch
-    description: "onex hooks disable saves the mask in ~/.omnibase/.env and Claude Code runs the installed hook with no ONEX_HOOKS_MASK in its environment: with a saved bit-11-off mask the installed hook passes the call through and never reaches the router; with a saved all-on mask it does. Fails at the merge base, where hook-gate.sh read only the environment, so the saved switch was ignored."
+    description: "Both halves through the real CLI: install-delegation.sh --apply into a scratch HOME, then the onex console script runs `onex hooks disable post_skill_delegation_enforcer`, and the installed hook, run as Claude Code runs it with no ONEX_HOOKS_MASK in its environment, exits 0, echoes the Agent call byte-identical and never reaches the router; then `onex hooks enable post_skill_delegation_enforcer`, and the same hook reaches the router. Fails with #3257's hook-gate.sh change reverted (the hook ignores the saved switch, so the disable half routes) and with the installed runner replaced by one that exits 0 without routing (the enable half never reaches it)."
     source: manual
     binds_ac:
       - "AC1"
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/scripts/test_delegation_installed_hook_omn22498.py -q --no-cov -k delegation_switch_saved"
+        check_value: "uv run pytest tests/scripts/test_delegation_installed_hook_omn22498.py -q --no-cov -k delegation_switch_onex_hooks_cli"
         cwd: "${OMNI_HOME}/omniclaude"
   - id: dod-omn22498-ac2-delegation-hook-install
     description: "Two install-delegation.sh --apply runs over a scratch HOME whose settings.json holds the OMN-23413 gateway groups, an unrelated user hook and an earlier installer's hook-scripts/ entry: the second run leaves settings.json byte-identical, exactly one legacy delegation PreToolUse Agent|Task entry remains and it is not the old hook-scripts/ copy, both gateway groups and the user hook are unchanged. A positive control proves the gateway detector sees a dropped group. Fails at the merge base, where the old hook-scripts/ entry is what the installer writes."
@@ -82,7 +87,7 @@ dod_evidence:
         check_value: "uv run pytest tests/unit/hooks/scripts/test_delegation_switch_omn22498.py -q --no-cov -k delegation_not_lite"
         cwd: "${OMNI_HOME}/omniclaude"
   - id: dod-omn22498-ac3-installed-hook-routes
-    description: "install-delegation.sh --apply into a scratch HOME, then the installed PreToolUse command from settings.json run with /bin/bash, no CLAUDE_PLUGIN_ROOT and no PLUGIN_PYTHON_BIN, from a project that is not an OmniNode repo: with bit 11 on the hook reaches the routing runner; with it off the call passes through unchanged. Fails at the merge base, where the installer copies five scripts without error-guard.sh, the hook-bit table, mode.sh, repo_guard.sh or the runner, so the installed hook reports onex_hook_gate: command not found and never routes."
+    description: "install-delegation.sh --apply into a scratch HOME, then the installed PreToolUse command from settings.json run with /bin/bash, no CLAUDE_PLUGIN_ROOT and no PLUGIN_PYTHON_BIN, from a project that is not an OmniNode repo, with a customer PATH (a scratch bin holding only jq, then /usr/bin and /bin, so no python3 that imports a dev-workspace omnibase_core): a control asserts the installed mode.sh resolves to lite in that environment, and the routing test asserts it again first; with bit 11 on the hook reaches the routing runner; with it off the call passes through unchanged. On a host where mode.sh resolves to full the tests fail rather than pass without exercising the lite default. Fails at the merge base, where the installer copies five scripts without error-guard.sh, the hook-bit table, mode.sh, repo_guard.sh or the runner, so the installed hook reports onex_hook_gate: command not found and never routes."
     source: manual
     binds_ac:
       - "AC3"
@@ -98,4 +103,13 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/unit/hooks/scripts/test_delegation_switch_omn22498.py -q --no-cov -k delegation_hook_set_no_stub"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn22498-ac5-lab-agent-call
+    description: "AC5 is a lab run, made 2026-11-11 02:51-02:53Z on the lab host and recorded on the ticket at 02:54Z with its host, folder and manifest: hooks installed by scripts/install-delegation.sh from omniclaude#3255 head f8eab4fe94e54344dae2950b93fedbf6006269df into a scratch HOME, Claude Code 2.1.322 from a project that is not an OmniNode repo. With ONEX_HOOKS_MASK 0xfffffffffffffff the hook logged 'BLOCK tool=Agent agent=general-purpose result=DELEGATED: implement routed to local-coder' and Claude Code received the refusal as the Agent tool result; with 0xffffffffffff7ff the Agent call ran natively and returned its haiku with no hook log line. MANIFEST.sha256 lists run-on/out.jsonl ff62232e4f0c0d61, run-off/out.jsonl 17c19a1fd16057f9 and pre-tool-delegation.log 05c6c1e9c8791052. As with OMN-22145 AC3, the check pins what that lab evidence depends on in the tree: the hook's BLOCK log line and the runner's DELEGATED decision line, so a change that drops either invalidates the recorded run."
+    source: manual
+    binds_ac:
+      - "AC5"
+    checks:
+      - check_type: command
+        check_value: "grep -qF 'BLOCK tool=${TOOL_NAME} agent=${AGENT_NAME} result=${DELEGATION_RESULT}' plugins/onex/hooks/scripts/pre_tool_use_delegation.sh && grep -qF 'print(f\"DELEGATED: {task_type} routed to {model}\")' plugins/onex/hooks/lib/delegation_hook_runner.py"
         cwd: "${OMNI_HOME}/omniclaude"

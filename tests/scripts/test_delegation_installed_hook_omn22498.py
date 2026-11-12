@@ -21,6 +21,13 @@ Failure modes:
   F4. No Python is found: Claude Code runs a settings.json hook with no
       PLUGIN_PYTHON_BIN, so the command itself must carry the interpreter the
       installer resolved. The test environment sets none.
+  F6. The scenario is not the customer's: a python3 on the caller's PATH that
+      imports a dev-workspace omnibase_core makes mode.sh resolve to full, so
+      the lite default is never exercised (dod-closeout-sweep, 2026-11-11). The
+      hook runs with a customer PATH, and a control asserts that mode.sh
+      resolves to lite in that same environment.
+  F7. The real `onex hooks disable` / `onex hooks enable` do not reach the
+      installed hook: the switch is saved somewhere the hook never reads.
 
 "Reached the routing runner" is read from the hook's own log: it writes
 ``PASS tool=...`` or ``BLOCK tool=...`` after the runner returned, and
@@ -34,6 +41,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -93,21 +101,67 @@ def _installed_pre_tool_command(home: Path) -> str:
     return commands[0]
 
 
+def _customer_path(tmp_path: Path) -> str:
+    """A customer's PATH (F6): system dirs plus jq, and no dev-workspace python3.
+
+    The hook needs jq; the installed command carries its own interpreter (F4).
+    """
+    bin_dir = tmp_path / "customer-bin"
+    if not bin_dir.exists():
+        bin_dir.mkdir()
+        jq = shutil.which("jq")
+        assert jq, "jq is required by the delegation hook"
+        (bin_dir / "jq").symlink_to(jq)
+    return f"{bin_dir}{os.pathsep}/usr/bin{os.pathsep}/bin"
+
+
+def _customer_env(tmp_path: Path, home: Path) -> tuple[dict[str, str], Path]:
+    """The environment Claude Code gives a customer's hook, and the project dir."""
+    project = tmp_path / "customer-project"
+    project.mkdir(exist_ok=True)
+    (project / "README.md").write_text("a customer's own project\n")
+    env = {
+        "HOME": str(home),
+        "PATH": _customer_path(tmp_path),
+        "TMPDIR": str(tmp_path),
+        "ONEX_STATE_DIR": str(tmp_path / "state"),
+        "CLAUDE_PROJECT_DIR": str(project),
+    }
+    return env, project
+
+
+def _installed_mode(tmp_path: Path, home: Path) -> str:
+    """What the installed mode.sh resolves to in the customer environment."""
+    env, project = _customer_env(tmp_path, home)
+    mode_sh = (
+        home
+        / ".omninode"
+        / "delegation"
+        / "plugin"
+        / "plugins"
+        / "onex"
+        / "lib"
+        / "mode.sh"
+    )
+    assert mode_sh.is_file(), f"installer did not copy mode.sh to {mode_sh}"
+    proc = subprocess.run(
+        ["/bin/bash", "-c", f'source "{mode_sh}"; omniclaude_mode'],
+        capture_output=True,
+        text=True,
+        cwd=str(project),
+        env=env,
+        check=True,
+        timeout=60,
+    )
+    return proc.stdout.strip()
+
+
 def _run_installed(
     tmp_path: Path, home: Path, mask: int | None
 ) -> tuple[subprocess.CompletedProcess[str], Path]:
     """Run the installed hook; mask None leaves ONEX_HOOKS_MASK out of its env."""
-    project = tmp_path / "customer-project"
-    project.mkdir(exist_ok=True)
-    (project / "README.md").write_text("a customer's own project\n")
-    state = tmp_path / "state"
-    env = {
-        "HOME": str(home),
-        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
-        "TMPDIR": str(tmp_path),
-        "ONEX_STATE_DIR": str(state),
-        "CLAUDE_PROJECT_DIR": str(project),
-    }
+    env, project = _customer_env(tmp_path, home)
+    state = Path(env["ONEX_STATE_DIR"])
     if mask is not None:
         env["ONEX_HOOKS_MASK"] = hex(mask)
     command = _installed_pre_tool_command(home)
@@ -129,11 +183,23 @@ def _log_text(log: Path) -> str:
 
 
 @pytest.mark.unit
+def test_delegation_not_lite_mode_resolves_lite_in_customer_env(
+    tmp_path: Path,
+) -> None:
+    """F6 control: the customer scenario really is lite mode, so a routed call
+    below proves the lite default does not silence an installed hook."""
+    home = _install(tmp_path)
+    assert _installed_mode(tmp_path, home) == "lite"
+
+
+@pytest.mark.unit
 def test_delegation_not_lite_installed_hook_reaches_the_routing_runner(
     tmp_path: Path,
 ) -> None:
-    """F1, F2, F4: the installed copy, run as Claude Code runs it, routes the call."""
+    """F1, F2, F4, F6: in lite mode, the installed copy, run as Claude Code
+    runs it, routes the call."""
     home = _install(tmp_path)
+    assert _installed_mode(tmp_path, home) == "lite", "scenario must be lite mode"
     proc, log = _run_installed(tmp_path, home, _DEFAULT_MASK)
     text = _log_text(log)
     assert proc.returncode in (0, 2), proc.stderr
@@ -193,3 +259,51 @@ def test_delegation_switch_saved_enable_still_routes(tmp_path: Path) -> None:
     _save_mask(home, _DEFAULT_MASK)
     _proc, log = _run_installed(tmp_path, home, None)
     assert _reached_runner(_log_text(log)), _log_text(log)
+
+
+def _onex_hooks(tmp_path: Path, home: Path, verb: str) -> None:
+    """Run the real `onex hooks <verb> post_skill_delegation_enforcer` as the
+    customer would, saving the switch under the scratch HOME."""
+    onex = Path(sys.executable).parent / "onex"
+    assert onex.is_file(), f"onex CLI not installed beside {sys.executable}"
+    env = {
+        "HOME": str(home),
+        "PATH": _customer_path(tmp_path),
+        "TMPDIR": str(tmp_path),
+    }
+    proc = subprocess.run(
+        [str(onex), "hooks", verb, "post_skill_delegation_enforcer"],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+        timeout=120,
+    )
+    assert proc.returncode == 0, f"onex hooks {verb}: {proc.stdout}{proc.stderr}"
+
+
+@pytest.mark.unit
+def test_delegation_switch_onex_hooks_cli_round_trip(tmp_path: Path) -> None:
+    """F7, AC1 both halves: `onex hooks disable` turns the installed hook off
+    (call passed through unchanged, router never reached), then `onex hooks
+    enable` turns it back on (router reached). Claude Code passes no
+    ONEX_HOOKS_MASK, so only the switch the CLI saved can decide."""
+    home = _install(tmp_path)
+
+    _onex_hooks(tmp_path, home, "disable")
+    proc, log = _run_installed(tmp_path, home, None)
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.strip() == _AGENT_CALL
+    off_log = _log_text(log)
+    assert "PASS tool=" not in off_log and "BLOCK tool=" not in off_log, off_log
+    assert not _reached_runner(off_log), off_log
+
+    _onex_hooks(tmp_path, home, "enable")
+    _proc, log = _run_installed(tmp_path, home, None)
+    on_log = _log_text(log)
+    # On means a routing decision, not just a runner call: a runner that
+    # returns nothing makes the hook log "PASS tool=Agent result=" and must
+    # fail here. "WARN: runner exited" is the hosted cold-start case the
+    # other tests accept (the runner started past the hook's 5 s limit).
+    routed = "BLOCK tool=Agent" in on_log and "result=DELEGATED:" in on_log
+    assert routed or "WARN: runner exited" in on_log, on_log
