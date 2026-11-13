@@ -30,9 +30,20 @@ import json
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
+from omnimarket.nodes.node_hook_delegate_effect import container
+from omnimarket.nodes.node_hook_delegate_effect.models import (
+    EnumDelegateCliState,
+    ModelDelegateCliRun,
+)
+
+if TYPE_CHECKING:
+    from omnimarket.nodes.node_hook_delegate_effect.handlers.handler_hook_delegate import (
+        HandlerHookDelegate,
+    )
 
 _MODULE_PATH = (
     Path(__file__).parent.parent.parent
@@ -67,14 +78,35 @@ class _AlwaysDelegates:
         )
 
 
+def _handler() -> HandlerHookDelegate:
+    """The real handler, with an `onex delegate` that answers at once."""
+    answer = json.dumps(
+        {
+            "run_id": "run-0001",
+            "result": {"response": "answer", "model_name": "local-coder"},
+        }
+    )
+
+    class _Cli:
+        def run(self, args: list[str], timeout_seconds: float) -> ModelDelegateCliRun:
+            return ModelDelegateCliRun(
+                state=EnumDelegateCliState.EXITED, exit_code=0, stdout=answer
+            )
+
+    return container.build_handler(_Cli())
+
+
 def _first_line(home: Path, monkeypatch: pytest.MonkeyPatch) -> str:
     monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("ONEX_HOOK_DELEGATE_TIMEOUT_S", "240")  # as the .sh sets it
     runner = _load_runner()
     out = io.StringIO()
     with (
         patch.object(runner, "_import_gate", return_value=None),
         patch.object(runner, "_import_classifier", return_value=_AlwaysDelegates()),
         patch.object(runner, "_build_telemetry_json", return_value=""),
+        # Since OMN-23413 the runner delegates for real; no model is called here.
+        patch.object(container, "build_handler", return_value=_handler()),
         patch.object(sys, "stdin", io.StringIO(_AGENT_CALL)),
         patch.object(sys, "stdout", out),
     ):
@@ -104,7 +136,7 @@ def test_delegation_gateway_enabled_legacy_runner_does_not_route(
 ) -> None:
     """F1."""
     _journal(tmp_path, "enabled")
-    assert _first_line(tmp_path, monkeypatch) == "not_delegatable:gateway"
+    assert _first_line(tmp_path, monkeypatch) == "not_delegatable:gateway_owns_session"
 
 
 @pytest.mark.unit
@@ -130,4 +162,4 @@ def test_delegation_gateway_unreadable_journal_never_routes(
 ) -> None:
     """F4: a journal that cannot be read is treated as the gateway owning the session."""
     (tmp_path / ".onex" / "claude_gateway.json").mkdir(parents=True)
-    assert _first_line(tmp_path, monkeypatch) == "not_delegatable:gateway"
+    assert _first_line(tmp_path, monkeypatch) == "not_delegatable:gateway_owns_session"

@@ -504,13 +504,12 @@ else:
     settings = {}
 
 existing = settings.setdefault("hooks", {})
-# Drop entries an earlier version of this installer wrote (under the install
-# root but not in the current set, e.g. the old hook-scripts/ copies that
-# could not run). Every other hook, including other tools' rows such as the
-# OMN-23413 gateway groups, stays exactly where it is (OMN-22498).
-new_cmds = {h.get("command") for gs in delegation_hooks.values() for g in gs for h in g.get("hooks", [])}
+# Drop every entry this installer wrote (under the install root), then add
+# the current set below, so a re-install also updates an entry's fields such
+# as its timeout (OMN-23413). Every other hook, including other tools' rows
+# such as the OMN-23413 gateway groups, stays exactly where it is (OMN-22498).
 for event in list(existing):
-    groups = [{**g, "hooks": [h for h in g.get("hooks", []) if f"{sys.argv[3]}/" not in (h.get("command") or "") or h.get("command") in new_cmds]} for g in existing[event]]
+    groups = [{**g, "hooks": [h for h in g.get("hooks", []) if f"{sys.argv[3]}/" not in (h.get("command") or "")]} for g in existing[event]]
     existing[event] = [g for g in groups if g["hooks"]]
     if not existing[event]: existing.pop(event)
 # Merge per-event arrays without duplicating commands already present.

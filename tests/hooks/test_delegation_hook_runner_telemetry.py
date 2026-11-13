@@ -24,6 +24,14 @@ from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from omnimarket.nodes.node_hook_delegate_effect import container as delegate_container
+from omnimarket.nodes.node_hook_delegate_effect.handlers.handler_hook_delegate import (
+    HandlerHookDelegate,
+)
+from omnimarket.nodes.node_hook_delegate_effect.models import (
+    EnumHookDelegateOutcome,
+    ModelHookDelegateResult,
+)
 
 _RUNNER_PATH = (
     Path(__file__).parent.parent.parent
@@ -70,6 +78,26 @@ def _load_telemetry() -> ModuleType:
 
 
 _runner = _load_runner()
+
+#: What the stand-in `onex delegate` answers. Since OMN-23413 the runner
+#: delegates a delegatable task for real and prints the answer after the
+#: telemetry line; these tests cover the telemetry, so no model is called.
+_ANSWER = "the delegated answer"
+
+
+@pytest.fixture(autouse=True)
+def _delegate_answers(monkeypatch: pytest.MonkeyPatch) -> object:
+    monkeypatch.setenv("ONEX_HOOK_DELEGATE_TIMEOUT_S", "240")  # as the .sh sets it
+    with patch.object(
+        HandlerHookDelegate,
+        "handle",
+        return_value=ModelHookDelegateResult(
+            outcome=EnumHookDelegateOutcome.ANSWERED, answer=_ANSWER, run_id="run-0001"
+        ),
+    ):
+        yield
+
+
 _telemetry_mod = _load_telemetry()
 
 
@@ -131,8 +159,9 @@ def test_delegatable_emits_two_lines() -> None:
             lines, code = _run_main(_tool_json("explain this module"))
 
     assert code == 0
-    assert len(lines) == 2
+    assert len(lines) == 3  # DELEGATED, telemetry, the answer
     assert lines[0].startswith("DELEGATED:")
+    assert lines[2] == _ANSWER
 
 
 @pytest.mark.unit
@@ -266,7 +295,7 @@ def test_not_delegatable_emits_one_line_only() -> None:
             lines, code = _run_main(_tool_json("git commit and push"))
 
     assert code == 0
-    assert lines == ["not_delegatable"]
+    assert lines == ["not_delegatable:classifier"]  # OMN-23413: the reason is named
 
 
 @pytest.mark.unit
@@ -297,8 +326,8 @@ def test_telemetry_build_failure_does_not_crash() -> None:
                 lines, code = _run_main(_tool_json("explain this"))
 
     assert code == 0
-    # Only the DELEGATED: line — no telemetry line when module unavailable
-    assert len(lines) == 1
+    # The DELEGATED: line and the answer — no telemetry line when module unavailable
+    assert lines == [lines[0], _ANSWER]
     assert lines[0].startswith("DELEGATED:")
 
 
@@ -318,5 +347,28 @@ def test_telemetry_exception_during_build_does_not_crash() -> None:
                 lines, code = _run_main(_tool_json("explain this"))
 
     assert code == 0
-    assert len(lines) == 1
+    assert lines == [lines[0], _ANSWER]
     assert lines[0].startswith("DELEGATED:")
+
+
+@pytest.mark.unit
+def test_the_shells_limit_reaches_the_request() -> None:
+    """The .sh sets ONEX_HOOK_DELEGATE_TIMEOUT_S; the node request carries it.
+
+    Drafted by onex delegate run e0925821 (OMN-23413); its string patch targets
+    and its is_delegatable stub were corrected here.
+    """
+    classifier = MagicMock()
+    classifier.is_delegatable.return_value = _delegatable_score()
+    handler = MagicMock()
+    handler.handle.return_value = ModelHookDelegateResult(
+        outcome=EnumHookDelegateOutcome.ANSWERED, answer=_ANSWER
+    )
+    with (
+        patch.object(_runner, "_import_gate", return_value=None),
+        patch.object(_runner, "_import_classifier", return_value=classifier),
+        patch.object(delegate_container, "build_handler", return_value=handler),
+    ):
+        _run_main(_tool_json("explain"), {"ONEX_HOOK_DELEGATE_TIMEOUT_S": "90"})
+    handler.handle.assert_called_once()
+    assert handler.handle.call_args[0][0].timeout_seconds == 90.0

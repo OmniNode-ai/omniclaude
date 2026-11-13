@@ -22,6 +22,13 @@ from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from omnimarket.nodes.node_hook_delegate_effect.handlers.handler_hook_delegate import (
+    HandlerHookDelegate,
+)
+from omnimarket.nodes.node_hook_delegate_effect.models import (
+    EnumHookDelegateOutcome,
+    ModelHookDelegateResult,
+)
 
 # ---------------------------------------------------------------------------
 # Locate the module under test (hooks/lib, not in the installed src package)
@@ -48,6 +55,21 @@ def _load_runner() -> ModuleType:
 
 
 _runner = _load_runner()
+
+
+@pytest.fixture(autouse=True)
+def _no_model_call(monkeypatch: pytest.MonkeyPatch) -> object:
+    monkeypatch.setenv("ONEX_HOOK_DELEGATE_TIMEOUT_S", "240")  # as the .sh sets it
+    """Since OMN-23413 a delegatable task is delegated for real with onex delegate;
+    these tests cover the gate and classifier, so no model is called."""
+    with patch.object(
+        HandlerHookDelegate,
+        "handle",
+        return_value=ModelHookDelegateResult(
+            outcome=EnumHookDelegateOutcome.ANSWERED, answer="answer", run_id="run-0001"
+        ),
+    ):
+        yield
 
 
 def _run_main(stdin_data: str) -> tuple[str, int]:
@@ -123,14 +145,14 @@ def test_tool_call_prompt_not_delegated() -> None:
 def test_empty_stdin_returns_not_delegatable() -> None:
     out, code = _run_main("")
     assert code == 0
-    assert out == "not_delegatable"
+    assert out.startswith("not_delegatable:")
 
 
 @pytest.mark.unit
 def test_invalid_json_returns_not_delegatable() -> None:
     out, code = _run_main("{not valid json!!}")
     assert code == 0
-    assert out == "not_delegatable"
+    assert out.startswith("not_delegatable:")
 
 
 @pytest.mark.unit
@@ -142,7 +164,7 @@ def test_non_object_json_returns_not_delegatable() -> None:
         out, code = _run_main("[]")
 
     assert code == 0
-    assert out == "not_delegatable"
+    assert out == "not_delegatable:no_classifier"
 
 
 # ---------------------------------------------------------------------------
@@ -170,7 +192,7 @@ def test_fail_open_when_classifier_unavailable() -> None:
     ):
         out, code = _run_main(payload)
     assert code == 0
-    assert out == "not_delegatable"
+    assert out == "not_delegatable:no_classifier"
 
 
 @pytest.mark.unit
@@ -232,7 +254,9 @@ def test_classifier_exception_returns_not_delegatable() -> None:
     ):
         out, code = _run_main(payload)
     assert code == 0
-    assert out == "not_delegatable"
+    # OMN-23413: the reason is named, never the error's text (it may hold the task)
+    assert out == "not_delegatable:error:RuntimeError"
+    assert "exploded" not in out
 
 
 @pytest.mark.unit
