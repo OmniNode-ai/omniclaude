@@ -42,9 +42,9 @@ def _index(steps: list[dict[str, Any]], needle: str) -> int:
     return hits[0]
 
 
-def test_nightly_schedule_and_manual_dispatch_with_dry_run() -> None:
+def test_manual_dispatch_with_dry_run_and_no_schedule() -> None:
     triggers = _load()[True]  # PyYAML reads the bare `on:` key as True
-    assert len(triggers["schedule"]) == 1
+    assert "schedule" not in triggers
     inputs = triggers["workflow_dispatch"]["inputs"]
     assert inputs["dry_run"]["type"] == "boolean"
     assert inputs["dry_run"]["default"] is False
