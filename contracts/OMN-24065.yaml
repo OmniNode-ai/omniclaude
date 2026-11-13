@@ -46,8 +46,8 @@ dod_evidence:
     binds_ac:
       - "AC1"
     checks:
-      - check_type: command
-        check_value: "grep -q 'id: no-id-from-stamp' .pre-commit-config.yaml"
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_pre_commit_no_id_from_stamp_omn24065.py -q --no-cov -k no_id_from_stamp"
         cwd: "${OMNI_HOME}/omniclaude"
   - id: dod-omn24065-ac2-consumers
     description: "AC2 is met repository by repository, each in its own pull request; this repository's own entry is the hook listed in its config. Read in each consumer's pull request."
@@ -55,8 +55,8 @@ dod_evidence:
     binds_ac:
       - "AC2"
     checks:
-      - check_type: command
-        check_value: "grep -q 'id: no-id-from-stamp' .pre-commit-config.yaml"
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_pre_commit_no_id_from_stamp_omn24065.py -q --no-cov -k no_id_from_stamp"
         cwd: "${OMNI_HOME}/omniclaude"
   - id: dod-omn24065-ac3-integrated
     description: "AC3 is a reading of the consumer's CI run on the merged head and of the running image revision; not yet read. The check pins the hook the reading depends on."
@@ -64,6 +64,6 @@ dod_evidence:
     binds_ac:
       - "AC3"
     checks:
-      - check_type: command
-        check_value: "grep -q 'id: no-id-from-stamp' .pre-commit-config.yaml"
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_pre_commit_no_id_from_stamp_omn24065.py -q --no-cov -k no_id_from_stamp"
         cwd: "${OMNI_HOME}/omniclaude"
