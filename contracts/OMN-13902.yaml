@@ -92,7 +92,7 @@ dod_evidence:
     description: Validates forward-only git refresh behavior including descendant acceptance, non-descendant refusal, and rev rewriting.
     checks:
       - check_type: command
-        check_value: grep -Eq "omnimarket @ git[+]https://github[.]com/OmniNode-ai/omnimarket[.]git@dev-20261106062827-a4798bc9d618" pyproject.toml && grep -Eq "omnimarket[.]git[?]tag=dev-20261106062827-a4798bc9d618#" uv.lock
+        check_value: grep -Eq "omnimarket @ git[+]https://github[.]com/OmniNode-ai/omnimarket[.]git@dev-[0-9]{14}-[0-9a-f]{12}" pyproject.toml && grep -Eq "omnimarket[.]git[?]tag=dev-[0-9]{14}-[0-9a-f]{12}#" uv.lock
       - check_type: test_passes
         check_value: uv run pytest tests/test_sibling_pin_alignment_omn13902.py -q --no-cov -k refreshed_git_parser
   - id: dod-omniclaude-sibling-lock-resolution
