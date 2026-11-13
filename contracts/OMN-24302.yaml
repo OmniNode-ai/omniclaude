@@ -2,7 +2,7 @@ schema_version: "1.0.0"
 ticket_id: OMN-24302
 title: Regenerate omniclaude's event registry so content.captured publishes through the redaction step
 summary: >-
-  omnimarket's emit registry (omnimarket#5990, OMN-24082) routes content.captured through redact_capture. omniclaude's generated EVENT_REGISTRY still projected passthrough (transform=None) for it, so the hook emit drainer kept publishing those records unchanged. The registry entry is re-projected from omnimarket's current topics.yaml through scripts/validation/generate_event_registry.py, whose own --check is the control. The tests that pinned the old passthrough are updated, and one seam test holds the registry rule to a planted credential.
+  omnimarket's emit registry (omnimarket#5990, OMN-24082) routes content.captured through redact_capture. omniclaude's generated EVENT_REGISTRY still projected passthrough (transform=None) for it, so the hook emit drainer kept publishing those records unchanged. The registry entry is re-projected from omnimarket's current topics.yaml through scripts/validation/generate_event_registry.py, whose own --check is the control. The tests that pinned the old passthrough are updated, and one seam test holds the registry rule to a planted credential. Registry Consistency reads omnimarket at the revision uv.lock pins, so the change carries the omnimarket pin advance made by sibling-lock-refresh.yml (workflow_dispatch on this branch), and the hook emit drainer reads the same pinned package.
 is_seam_ticket: true
 interface_change: true
 interfaces_touched:
