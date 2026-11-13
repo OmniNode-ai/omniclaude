@@ -65,4 +65,3 @@ dod_evidence:
       - check_type: command
         check_value: "grep -qF 'ONEX_REGISTRY_OWNERS' plugins/onex/hooks/lib/canonical_clone_sync.py"
         cwd: "${OMNI_HOME}/omniclaude"
----
