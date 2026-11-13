@@ -772,7 +772,7 @@ def test_the_worktrees_directory_is_never_enumerated_as_a_clone(
     assert "omni_worktrees" not in names
 
 
-def test_an_unreadable_clone_is_skipped_and_the_readable_ones_are_still_enumerated(
+def test_registry_clones_skip_an_unreadable_clone_and_still_enumerate_the_readable_ones(
     workspace: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
