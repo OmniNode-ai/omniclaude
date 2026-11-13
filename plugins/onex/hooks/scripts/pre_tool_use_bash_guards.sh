@@ -148,7 +148,7 @@ _obg_node_check() {
     [[ $rc -eq 0 ]] && return 0
     if [[ $rc -eq 2 ]]; then
         printf '%s\n' "$out"
-        reason="$(printf '%s\n' "$out" | jq -r '.reason // empty' 2>/dev/null || true)"
+        reason="$(printf '%s\n' "$out" | tail -n 1 | jq -r '.reason // empty' 2>/dev/null || true)"
         [[ -n "$reason" ]] && printf '%s\n' "$reason" >&2
         case "$1:$reason" in
             *dev_runtime*) class="dev-runtime-mutation" ;;
