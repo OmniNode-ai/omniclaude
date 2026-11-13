@@ -37,10 +37,7 @@ git dir is taken too whenever it can be opened, for engine copies that predate
 this one. A refresh waits for a live holder up to a hard bound (600s, or
 ``--timeout``) and fails loud past it, naming the holder and the time it
 actually waited; a lock it cannot open is reported as that, never as "held".
-OMN-17427, 2026-10-07: 17 of 22 lab-fill lanes stopped on "another
-canonical-clone sync held ... for 120s" when no sync held anything: the lock
-was the legacy file, which the sandbox made read-only, and the message
-printed the wait budget, not a wait.
+OMN-17427: lanes read a read-only legacy lock as "held for 120s" (the budget).
 
 Lab clones can fetch from a LAN source whose remote-tracking refs are kept
 current by this engine. ``onex.repo`` supplies the repository's ``owner/name``
@@ -53,11 +50,8 @@ Why this exists
 ---------------
 The operator ruled on 2026-09-25 that lanes query the canonical clones instead
 of spending GitHub API reads, which only works while the clones are current.
-The only automatic sync on the Mac at the time was the OMN-17190 PostToolUse
-tick, which delegates to ``onex-host-reconcile`` (formerly ``reconcile-host.sh``).
-That run couples the clone pull to the venv reconcile: on 2026-09-25 one run sat inside the venv step from
-13:25Z, every tick after it declined, and no clone moved for over an hour. This
-engine is git only, so nothing it waits on can hold a clone back.
+The OMN-17190 tick coupled the clone pull to the venv reconcile, and on 2026-09-25
+one stuck run held every clone back for over an hour. This engine is git only.
 
 What a clone must be before it moves
 ------------------------------------
@@ -87,11 +81,8 @@ Which branch a clone follows
 ----------------------------
 The remote's default branch. RULING 2026-10-04T10:11:35Z (item 6): canonical
 clones track their dev branch, never a stale or restored state. ``pull-all.sh``
-leaves every clone whose origin has a ``dev`` branch on ``dev`` and the rest on
-``main`` (OMN-16502), and the OMN-17190 reconciler reconciles ``dev``. On the
-release-synced repositories PRs land on ``dev`` and ``main`` only moves at a
-release, so ``dev`` is where merged code appears first and is the right branch
-to query.
+leaves a clone whose origin has a ``dev`` branch on ``dev`` and the rest on ``main``
+(OMN-16502); on release-synced repositories PRs land on ``dev`` first.
 
 A clean clone checked out on a tracking branch that is NOT the remote default
 (``refs/remotes/<remote>/HEAD``, the derivation ``converge-canonical-clone.sh``
@@ -108,23 +99,20 @@ the door ``pull-all.sh`` already uses; the move is read back, and a guard
 refusal that leaves the target tree checked out under the old HEAD (OMN-18358)
 is a FAILED result, never a quiet one. A switched clone is logged ADVANCED with
 ``branch`` the default and ``switched_from`` the branch it left. The default is
-refreshed from the remote before it is acted on: ``git remote set-head <remote>
---auto`` (git transport, no GitHub API) runs on every sync, one ``ls-remote``-sized
-round trip beside the fetch, and the symref is re-read afterwards, so a stale
-symref never moves a clone. The refresh runs with
-``ONEX_CANONICAL_CONVERGE=1`` too, since it moves a symref. A refresh that fails
-never switches: the engine follows the checked-out branch and puts the failure
-in the result's reason. ``refresh`` never moves a checked-out branch.
+refreshed before it is acted on: ``git remote set-head <remote> --auto`` (git
+transport, no GitHub API, run with ``ONEX_CANONICAL_CONVERGE=1`` since it moves a
+symref) runs on every sync and the symref is re-read, so a stale symref never moves
+a clone. A refresh that fails never switches: the engine follows the checked-out
+branch and puts the failure in the result's reason. ``refresh`` never moves one.
 
 Hook scripts must parse before a clone serves them (OMN-20961)
 --------------------------------------------------------------
 The omniclaude canonical clone IS the hook deploy on the Mac: Claude Code runs
 its hook scripts from that tree on every tool call, under macOS ``/bin/bash``
-3.2. On 2026-10-11 the timer run fast-forwarded it at 08:59:37Z to a commit
-whose ``pre_tool_use_bash_guards.sh`` parsed under the Linux bash 5 of CI and
-not under bash 3.2, and every Bash call on the Mac was refused for about two
-hours. Nothing read the parse back. Two checks now do, on any clone that
-carries ``plugins/onex/hooks/scripts`` or ``plugins/onex/hooks/lib`` and on a
+3.2. On 2026-10-11 a fast-forward served a ``pre_tool_use_bash_guards.sh`` that
+parsed under the bash 5 of CI and not under 3.2, and every Bash call on the Mac
+was refused for about two hours. Two checks now read the parse back, on any clone
+that carries ``plugins/onex/hooks/scripts`` or ``plugins/onex/hooks/lib`` and on a
 host with ``/bin/bash``:
 
 * before the fast-forward (and before a return to the default branch), every
@@ -200,6 +188,7 @@ MAX_WORKERS = 8
 # the timer run (exit 3). The env var lowers it for the lab step.
 REFUSAL_BOUND_SECONDS = 3600
 REFUSAL_BOUND_ENV = "ONEX_CLONE_REFUSAL_BOUND_S"
+REGISTRY_OWNERS_ENV = "ONEX_REGISTRY_OWNERS"
 REFUSAL_RECORD_WAIT_SECONDS = 30
 EXIT_REFUSAL_BOUND = 3
 
@@ -1895,16 +1884,30 @@ def refresh_clone(
     return results
 
 
+def registry_owners(env: Mapping[str, str]) -> set[str]:
+    """Registry owners: ONEX_REGISTRY_OWNERS, else OMNI_HOME's own; empty means any."""
+    home = env.get("OMNI_HOME")
+    named = env.get(REGISTRY_OWNERS_ENV) or (home and clone_slug(Path(home))) or ""
+    return {o.strip().split("/")[0].casefold() for o in named.split(":") if o.strip()}
+
+
+def _registered(clone: Path, owners: set[str]) -> bool:
+    return (
+        not owners or (clone_slug(clone) or "").partition("/")[0].casefold() in owners
+    )
+
+
 def sibling_clones(env: Mapping[str, str]) -> list[Path]:
     """Canonical clones beside the registry root, not in it: each direct child of
-    ``$OMNI_HOME/..`` and the absolute path in each ``*_INTERNAL_HOME`` variable.
-    A linked worktree (``.git`` a file) is not one; no repository is named."""
+    ``$OMNI_HOME/..`` owned by a registry owner (another owner's folder is no registry
+    clone, OMN-22431) and each ``*_INTERNAL_HOME`` path. A linked worktree is not one."""
     beside = Path(env["OMNI_HOME"]).parent if env.get("OMNI_HOME") else None
-    # A home directory is never listed (OMN-17427): that layout declares its clone
-    # through *_INTERNAL_HOME, which is data.
+    # A home directory is never listed (OMN-17427): *_INTERNAL_HOME declares its clone.
     if beside and beside.resolve() == Path(env.get("HOME") or Path.home()).resolve():
         beside = None
+    owners = registry_owners(env)
     found = [c for c in discover_clones([beside]) if c != beside] if beside else []
+    found = [c for c in found if _registered(c, owners)]
     homes = (Path(v) for k, v in sorted(env.items()) if k.endswith("_INTERNAL_HOME"))
     return found + [c for c in homes if c.is_absolute() and _is_dir(c / ".git", c)]
 

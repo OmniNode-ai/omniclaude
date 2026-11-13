@@ -1634,3 +1634,72 @@ def test_refusal_age_resets(
     reg.advance("svc", path="a.txt", text="three\n")
     refusal_clock.now += 601
     assert _timer_run() == 0
+
+
+def test_an_unregistered_folder_beside_the_registry_never_raises_the_refusal_bound(
+    reg: Registry,
+    monkeypatch: pytest.MonkeyPatch,
+    refusal_clock: _Clock,
+) -> None:
+    reg.make("svc")
+    stray = reg.make("stray", owner="Other", root=reg.tmp)
+    (stray / "b.txt").write_text("uncommitted\n")
+    reg.advance("stray", owner="Other")
+    env = reg.env(**{ccs.REFUSAL_BOUND_ENV: "600", ccs.REGISTRY_OWNERS_ENV: "Acme"})
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+
+    assert _timer_run() == 0
+    refusal_clock.now += 601
+    assert _timer_run() == 0
+
+    assert stray not in ccs.all_clones(env)
+    assert not any(row.get("path") == str(stray) for row in reg.log())
+
+
+def test_a_registered_clone_still_raises_the_refusal_bound(
+    reg: Registry,
+    monkeypatch: pytest.MonkeyPatch,
+    refusal_clock: _Clock,
+) -> None:
+    clone = reg.make("svc")
+    (clone / "b.txt").write_text("uncommitted\n")
+    reg.advance("svc")
+    env = reg.env(**{ccs.REFUSAL_BOUND_ENV: "600", ccs.REGISTRY_OWNERS_ENV: "Acme"})
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+
+    assert _timer_run() == 0
+    refusal_clock.now += 601
+    assert _timer_run() == ccs.EXIT_REFUSAL_BOUND
+
+
+def test_registry_owner_is_the_owner_of_the_registry_root_clone_when_none_is_declared(
+    reg: Registry,
+) -> None:
+    home_clone = reg.make("omni-home", root=reg.tmp)
+    assert ccs.registry_owners(reg.env(OMNI_HOME=str(home_clone))) == {"acme"}
+    assert ccs.registry_owners(reg.env()) == set()
+    assert ccs.registry_owners(
+        reg.env(**{ccs.REGISTRY_OWNERS_ENV: " Acme : Beta "})
+    ) == {
+        "acme",
+        "beta",
+    }
+
+
+def test_declared_internal_home_is_kept_whatever_its_owner(
+    reg: Registry,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stray = reg.make("stray", owner="Other", root=reg.tmp)
+    env = reg.env(
+        **{
+            ccs.REGISTRY_OWNERS_ENV: "Acme",
+            "OMNIBASE_INTERNAL_HOME": str(stray),
+        }
+    )
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+
+    assert stray in ccs.all_clones(env)
