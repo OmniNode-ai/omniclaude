@@ -1396,11 +1396,12 @@ def _registry_clones(root: Path) -> list[Path]:
     seen: set[Path] = set()
 
     def _add(candidate: Path) -> None:
-        if not (candidate / ".git").is_dir():
-            return
         try:
+            if not (candidate / ".git").is_dir():
+                return
             key = candidate.resolve()
         except OSError:
+            # An unreadable folder (PermissionError) is skipped, not fatal (OMN-24035).
             return
         if key in seen:
             return
