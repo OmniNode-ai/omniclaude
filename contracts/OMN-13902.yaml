@@ -60,6 +60,11 @@ requirements:
     acceptance:
       - id: AC10
         statement: 'AC10: decide_row builds ModelErrorNormalizerFacts through build_normalizer_facts and the refusal row request carries them, so a refusal is recorded rather than refused by the row node. -- falsifier: uv run pytest tests/hooks/test_refusal_recorder_state_omn20265.py -q --no-cov'
+  - id: req-guard-reads-last-output-line
+    statement: The shared-tree git guard and the Bash guards entrypoint read only the last line of the guard core output before parsing it with jq.
+    acceptance:
+      - id: AC11
+        statement: 'AC11: A guard core that prints a stderr line before its JSON payload still yields the block reason, not the unreadable-payload fallback. -- falsifier: grep -q "tail -n 1" plugins/onex/hooks/scripts/pre_tool_use_shared_tree_git_guard.sh && uv run pytest tests/hooks/test_shared_tree_git_guard.py -q --no-cov'
 evidence_requirements:
   - kind: tests
     command: grep -Eq "omnimarket @ git[+]https://github[.]com/OmniNode-ai/omnimarket[.]git@dev-[0-9]{14}-[0-9a-f]{12}" pyproject.toml && uv run python scripts/check_public_skill_hygiene.py && uv run pytest tests/test_git_source_pins.py tests/test_sibling_pin_alignment_omn13902.py -q --no-cov
@@ -179,3 +184,13 @@ dod_evidence:
     checks:
       - check_type: command
         check_value: uv run pytest tests/hooks/test_refusal_recorder_state_omn20265.py -q --no-cov
+  - id: dod-omniclaude-guard-last-line-parse
+    source: manual
+    binds_ac:
+      - AC11
+    description: Both guard scripts read the last line of the core output before jq parsing, and the shared-tree git guard tests pass. The grep fails against the merge base, which piped the whole output to jq.
+    checks:
+      - check_type: command
+        check_value: grep -q "tail -n 1" plugins/onex/hooks/scripts/pre_tool_use_shared_tree_git_guard.sh && grep -q "tail -n 1" plugins/onex/hooks/scripts/pre_tool_use_bash_guards.sh
+      - check_type: test_passes
+        check_value: uv run pytest tests/hooks/test_shared_tree_git_guard.py -q --no-cov
