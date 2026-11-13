@@ -450,6 +450,9 @@ repos:
       # node_local_paths_check_compute to the goldens. The wrapper's exclude is kept.
       - id: check-local-paths
         exclude: '\.secrets\.baseline$|^docs/.*|^tests/fixtures/.*|^tests/.*/fixtures/.*'
+      # OMN-24065: core's id-from-seconds-stamp validator (omnibase_core 2293), run here by hook id.
+      # No baseline file and no allowlist: it passes over the whole tree at this revision.
+      - id: no-id-from-stamp
 
   # Fast Python formatting and linting (staged files only)
   # Order: format -> fix -> check (matches CI behavior)
