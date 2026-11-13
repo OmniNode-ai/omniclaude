@@ -768,24 +768,21 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
     # =========================================================================
     # OMN-19551 (topic and contract owned by omnimarket, OMN-19550): full
     # session content -- the complete prompt, tool input, tool result and
-    # assistant reply -- one item or one chunk per record. OMN-19513: the
-    # producer journals it raw (operator RULING 2026-10-15T04:24:42Z: no
-    # redaction); the pinned omnimarket emit registry declares passthrough on
-    # the publish side, and Registry Consistency refuses any other projection.
-    # Raw publish is the ruled policy, not a dropped control: production's
-    # option is payload encryption at the producer (``payload_encryption`` in
-    # contract_hook_claude_capture.yaml, handler_hook_payload_encryption.py).
-    # Both producers call hook_content_capture.payload_sealer before journalling:
-    # only explicit enabled:false permits plaintext, invalid settings refuse
-    # capture, and enabled:true requires a usable secret-store key. Passthrough
-    # preserves the sealed envelope; redaction would corrupt its ciphertext.
+    # assistant reply -- one item or one chunk per record. The publish transform
+    # is projected from omnimarket's emit registry, which routes this topic
+    # through redact_capture (OMN-24082): credential-shaped spans are replaced in
+    # place with a marker naming the pattern and every other character is kept.
+    # The producer still journals the content raw (OMN-19513); the replacement
+    # happens at publish. Payload encryption at the producer
+    # (``payload_encryption`` in contract_hook_claude_capture.yaml,
+    # handler_hook_payload_encryption.py) stays a contract setting, off by default.
     "content.captured": EventRegistration(
         event_type="content.captured",
         fan_out=[
             FanOutRule(
                 topic_base=TopicBase.CONTENT_CAPTURED,
-                transform=None,
-                description="Raw full session content (OMN-19550, OMN-19513)",
+                transform=redact_capture,
+                description="Full session content with credential-shaped spans replaced (OMN-19550, OMN-24062)",
             ),
         ],
         partition_key_field="session_id",
