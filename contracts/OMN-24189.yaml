@@ -1,0 +1,50 @@
+schema_version: "1.0.0"
+ticket_id: OMN-24189
+title: omniclaude opens a pin refresh only when asked, never on a nightly schedule
+summary: >-
+  RULING 2026-11-09T21:54:25Z (lane=orchestrator-31d9, OMN-23386). A downstream repository moves its pin on a sibling only when it needs something new from it. sibling-lock-refresh.yml loses its daily schedule trigger and keeps workflow_dispatch, so the nightly sibling-pin train and lock refresh open a bump pull request only when a change asks for one.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn24189-no-scheduled-pin-refresh
+    statement: The sibling lock refresh runs only by workflow_dispatch; no schedule or other automatic trigger starts it.
+    acceptance:
+      - id: AC1
+        statement: "AC1: the sibling lock refresh workflow has no schedule or other automatic trigger and only workflow_dispatch remains -- falsifier: uv run pytest tests/ci/test_sibling_lock_refresh_dispatch_only_omn23386.py -q --no-cov -k dispatch_only fails at the merge base where the cron line exists"
+      - id: AC2
+        statement: "AC2: the scheduled run opens nothing after the change merges -- falsifier: the workflow's run list for the schedule event shows a run on the next 06:17 UTC tick after the merge"
+      - id: AC3
+        statement: "AC3: the integrated read: the running repository's workflow file on dev carries no schedule key and no sibling lock refresh pull request opens by schedule -- falsifier: a bot pull request on the refresh branch appears opened by a schedule event after the merge"
+evidence_requirements:
+  - kind: tests
+    description: The workflow shape tests pass at the head and the dispatch-only test fails at the merge base.
+    command: uv run pytest tests/ci/test_sibling_lock_refresh_dispatch_only_omn23386.py tests/workflows/test_sibling_pin_train_omn19998.py -q --no-cov -p no:randomly
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn24189-ac1-dispatch-only
+    description: sibling-lock-refresh.yml triggers only on workflow_dispatch. At the merge base it also carries the daily schedule trigger, so this test is red there.
+    source: manual
+    binds_ac:
+      - AC1
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/ci/test_sibling_lock_refresh_dispatch_only_omn23386.py -q --no-cov -k dispatch_only
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn24189-ac2-schedule-opens-nothing
+    description: After merge the workflow-run list for Sibling lock refresh shows no schedule-event run. Read on the default branch; not runnable on a hosted runner, so it is bound to no criterion.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: test -f .github/workflows/sibling-lock-refresh.yml
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-deploy
+    description: The workflow file parses and its trigger shape is asserted by the tests above; this hosted-runner check needs no deployed services and no deploy is triggered.
+    source: manual
+    checks:
+      - check_type: command
+        check_value: uv run pytest tests/ci/test_sibling_lock_refresh_dispatch_only_omn23386.py tests/workflows/test_sibling_pin_train_omn19998.py -q --no-cov -p no:randomly
+        cwd: ${OMNI_HOME}/omniclaude
