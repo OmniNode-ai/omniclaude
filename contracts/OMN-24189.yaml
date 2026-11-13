@@ -35,11 +35,22 @@ dod_evidence:
         check_value: uv run pytest tests/ci/test_sibling_lock_refresh_dispatch_only_omn23386.py -q --no-cov -k dispatch_only
         cwd: ${OMNI_HOME}/omniclaude
   - id: dod-omn24189-ac2-schedule-opens-nothing
-    description: After merge the workflow-run list for Sibling lock refresh shows no schedule-event run. Read on the default branch; not runnable on a hosted runner, so it is bound to no criterion.
+    description: The workflow text carries no cron literal, so no schedule event can start a run that opens a refresh pull request. The runtime read of the schedule-event run list after merge is the lab observation, named in the pull request.
     source: manual
+    binds_ac:
+      - AC2
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/ci/test_sibling_lock_refresh_dispatch_only_omn23386.py -q --no-cov -k cron_literal_is_gone
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn24189-ac3-no-schedule-key-on-dev
+    description: The workflow file carries no schedule key, read as text. The integrated read of the schedule-event run list on the default branch after merge is made by the lane and named in the pull request.
+    source: manual
+    binds_ac:
+      - AC3
     checks:
       - check_type: command
-        check_value: test -f .github/workflows/sibling-lock-refresh.yml
+        check_value: "! grep -E '^[[:space:]]*schedule:' .github/workflows/sibling-lock-refresh.yml"
         cwd: ${OMNI_HOME}/omniclaude
   - id: dod-deploy
     description: The workflow file parses and its trigger shape is asserted by the tests above; this hosted-runner check needs no deployed services and no deploy is triggered.
