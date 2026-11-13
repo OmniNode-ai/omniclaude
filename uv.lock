@@ -10,10 +10,10 @@ resolution-markers = [
 
 [manifest]
 overrides = [
-    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=dev-20261111170138-1d6eb0d47901" },
+    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=dev-20261112204619-1289441e5608" },
     { name = "omnibase-infra", specifier = ">=0.38.29,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
-    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?tag=dev-20261112062638-179aa1280722" },
+    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?tag=dev-20261113184758-038de5032ef7" },
 ]
 
 [[package]]
@@ -1682,8 +1682,8 @@ wheels = [
 
 [[package]]
 name = "omnibase-core"
-version = "0.47.76"
-source = { git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=dev-20261111170138-1d6eb0d47901#1d6eb0d47901a399c29bb885298f62696b91183b" }
+version = "0.47.73.dev8+g1289441e"
+source = { git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=dev-20261112204619-1289441e5608#1289441e5608b0c20a693d74b8f1d26dfdcfc95d" }
 dependencies = [
     { name = "blake3" },
     { name = "click" },
@@ -1781,7 +1781,7 @@ wheels = [
 [[package]]
 name = "omnimarket"
 version = "0.4.321"
-source = { git = "https://github.com/OmniNode-ai/omnimarket.git?tag=dev-20261112062638-179aa1280722#179aa12807225952ed8b9086c7b919cab189981c" }
+source = { git = "https://github.com/OmniNode-ai/omnimarket.git?tag=dev-20261113184758-038de5032ef7#038de5032ef7d8faaa88deebf053c8022aab195e" }
 dependencies = [
     { name = "aiokafka" },
     { name = "anthropic" },
@@ -1907,12 +1907,12 @@ requires-dist = [
     { name = "discord-py", marker = "extra == 'discord'", specifier = ">=2.3.0,<3.0.0" },
     { name = "discord-py", marker = "extra == 'full'", specifier = ">=2.3.0,<3.0.0" },
     { name = "httpx", specifier = ">=0.27.0" },
-    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=dev-20261111170138-1d6eb0d47901" },
+    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=dev-20261112204619-1289441e5608" },
     { name = "omnibase-infra", specifier = ">=0.38.29,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
-    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?tag=dev-20261112062638-179aa1280722" },
-    { name = "omninode-intelligence", marker = "extra == 'full'", git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=dev-20261111074124-e3133252f1dd" },
-    { name = "omninode-intelligence", marker = "extra == 'intelligence'", git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=dev-20261111074124-e3133252f1dd" },
+    { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?tag=dev-20261113184758-038de5032ef7" },
+    { name = "omninode-intelligence", marker = "extra == 'full'", git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=dev-20261113051717-358abb51bcd2" },
+    { name = "omninode-intelligence", marker = "extra == 'intelligence'", git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=dev-20261113051717-358abb51bcd2" },
     { name = "opentelemetry-api", marker = "extra == 'full'", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-api", marker = "extra == 'otel'", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-api", marker = "extra == 'skills'", specifier = ">=1.23.0,<2.0.0" },
@@ -1959,7 +1959,7 @@ dev = [
 [[package]]
 name = "omninode-intelligence"
 version = "0.25.4"
-source = { git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=dev-20261111074124-e3133252f1dd#e3133252f1ddebc389b2233eeabd76a7bae51ba2" }
+source = { git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=dev-20261113051717-358abb51bcd2#358abb51bcd2a449ea78cea952bbda132dd33a42" }
 dependencies = [
     { name = "confluent-kafka" },
     { name = "httpx" },
@@ -1978,8 +1978,8 @@ dependencies = [
 
 [[package]]
 name = "omninode-memory"
-version = "0.18.12"
-source = { git = "https://github.com/OmniNode-ai/omnimemory.git?tag=dev-20261108074331-82c1680fad8a#82c1680fad8a31627e4b17036faeeefebda26482" }
+version = "0.18.14"
+source = { git = "https://github.com/OmniNode-ai/omnimemory.git?tag=dev-20261112102309-92b9c1a20bef#92b9c1a20bef7bbd32a4e0ba557d116d5c9fbb2d" }
 dependencies = [
     { name = "aiohttp" },
     { name = "alembic" },
