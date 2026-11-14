@@ -22,7 +22,7 @@ import pytest
 import yaml
 
 from omniclaude.runtime.wiring_dispatchers import load_skill_contracts
-from scripts.generate_skill_node import is_bootstrap_skill
+from scripts.generate_skill_node import needs_no_local_node
 
 # ---------------------------------------------------------------------------
 # Canonical skill list — PRIMARY source of truth for test_coverage audit
@@ -123,10 +123,30 @@ def _get_node_skills() -> set[str]:
     return result
 
 
+def _get_market_backed_skills() -> dict[str, str]:
+    """Shims whose ``backing_node:`` is an omnimarket node, by slug (OMN-21627).
+
+    The node-home ratchet (OMN-20702) builds a bootstrap skill's replacing node
+    in omnimarket, so the shim that replaces the bootstrap has no node here.
+    """
+    skills_dir = Path("plugins/onex/skills")
+    result: dict[str, str] = {}
+    for d in skills_dir.iterdir():
+        skill_md = d / "SKILL.md"
+        if not d.is_dir() or d.name.startswith("_") or not skill_md.exists():
+            continue
+        node = _frontmatter(skill_md.read_text(encoding="utf-8")).get("backing_node")
+        if isinstance(node, str) and node.startswith("node_"):
+            result[_normalize(d.name)] = node
+    return result
+
+
 @pytest.mark.unit
 def test_all_skills_have_nodes() -> None:
     missing = _skills_missing_nodes(
-        _get_skills(), _get_node_skills(), set(_get_bootstrap_skills())
+        _get_skills(),
+        _get_node_skills(),
+        set(_get_bootstrap_skills()) | set(_get_market_backed_skills()),
     )
     assert not missing, (
         f"{len(missing)} skill(s) missing a node:\n"
@@ -190,9 +210,11 @@ def test_generator_and_coverage_agree_on_which_skills_are_bootstrap() -> None:
     by_generator = {
         _normalize(d.name)
         for d in skills_dir.iterdir()
-        if d.is_dir() and not d.name.startswith("_") and is_bootstrap_skill(d)
+        if d.is_dir() and not d.name.startswith("_") and needs_no_local_node(d)
     }
-    assert by_generator == set(_get_bootstrap_skills())
+    assert by_generator == set(_get_bootstrap_skills()) | set(
+        _get_market_backed_skills()
+    )
 
 
 @pytest.mark.unit
@@ -269,3 +291,42 @@ def test_canonical_skills_in_sync() -> None:
         + "\n".join(f"  - {s}" for s in sorted(missing_from_fs))
         + "\n\nEither the skill was deleted or the canonical list has a stale entry."
     )
+
+
+@pytest.mark.unit
+def test_market_backed_shims_are_dispatch_entries_naming_their_node() -> None:
+    """A shim with no local node names the same omnimarket node in the manifest."""
+    manifest = yaml.safe_load(Path("plugins/distribution_manifest.yaml").read_text())
+    entries = {
+        _normalize(str(c["id"])): c
+        for c in manifest["components"]
+        if c.get("kind") == "skill"
+    }
+    problems: list[str] = []
+    for slug, node in sorted(_get_market_backed_skills().items()):
+        entry = entries.get(slug, {})
+        if entry.get("surface_class") != "dispatch":
+            problems.append(f"{slug}: manifest surface_class must be dispatch")
+        if node not in (entry.get("backing_nodes") or []):
+            problems.append(f"{slug}: manifest backing_nodes must name {node}")
+        if slug in _get_bootstrap_skills():
+            problems.append(f"{slug}: a shim with a backing node is not a bootstrap")
+    assert not problems, "\n".join(problems)
+
+
+@pytest.mark.unit
+def test_generator_skips_only_a_frontmatter_bootstrap_or_node_backing(
+    tmp_path: Path,
+) -> None:
+    """Positive control: only a frontmatter marker exempts a skill from a local node."""
+    cases = {
+        "bootstrap": ("---\nbootstrap: true\n---\n# x\n", True),
+        "shim": ("---\nbacking_node: node_x_orchestrator\n---\n# x\n", True),
+        "in-body": ("---\ndescription: d\n---\nbacking_node: node_x\n", False),
+        "not-a-node": ("---\nbacking_node: something\n---\n# x\n", False),
+        "plain": ("---\ndescription: d\n---\n# x\n", False),
+    }
+    for name, (text, expected) in cases.items():
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "SKILL.md").write_text(text, encoding="utf-8")
+        assert needs_no_local_node(tmp_path / name) is expected, name

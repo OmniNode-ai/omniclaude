@@ -17,6 +17,11 @@ requirements:
     acceptance:
       - id: AC1
         statement: "AC1: omniclaude plugins/onex/skills/lean_contract_seams/SKILL.md exists with bootstrap: true, a Replaced-by line, the six steps (list nodes and crossings and models, write models and contracts, scaffold, wire and boot on both overlays, prove connected, only then fill), no script beside it and no ssh -- falsifier: uv run pytest over the omniclaude onex plugin skill tests that read the lean_* skills"
+  - id: req-omn21627-shim
+    statement: lean_contract_seams becomes the dispatch shim of node_contract_seams_orchestrator once the node lands in omnimarket.
+    acceptance:
+      - id: AC2
+        statement: "AC2: plugins/onex/skills/lean_contract_seams/SKILL.md declares backing_node: node_contract_seams_orchestrator and no bootstrap key, starts the node only through onex run-node, names the request fields and the end states connected, refused and failed; the manifest assigns it as a dispatch skill backed by that node; the skill-node coverage test counts a shim whose backing node lives in omnimarket as covered and refuses one whose manifest entry disagrees -- falsifier: uv run pytest tests/skills/test_lean_contract_seams_omn21627.py tests/unit/nodes/test_skill_node_coverage.py"
 evidence_requirements:
   - kind: tests
     description: "The skill shape test, its planted refusal and the skill-to-node coverage test pass"
@@ -40,3 +45,11 @@ dod_evidence:
       - check_type: test_passes
         check_value: "bash scripts/check-skill-monorepo-refs.sh"
         cwd: "."
+  - id: dod-omn21627-ac2-shim
+    description: "The shim names the node, starts it with onex run-node, and is a dispatch entry backed by it; planted copies that run another node or run the node module directly are refused; the coverage test counts the omnimarket-backed shim and its positive control reads only a frontmatter node name."
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_lean_contract_seams_omn21627.py tests/unit/nodes/test_skill_node_coverage.py tests/unit/scripts/test_auto_generate_skill_nodes.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
