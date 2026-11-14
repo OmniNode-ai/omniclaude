@@ -22,7 +22,7 @@ requirements:
           -- falsifier: uv run pytest plugins/onex/hooks/tests -q -k create_route_refused'
       - id: AC2
         statement: 'AC2: the hook''s route rows equal the core rows read from the installed omnibase_core
-          -- falsifier: uv run pytest tests -q -k hook_route_rows_match_core'
+          -- falsifier: uv run pytest tests/hooks/test_ticket_route_rows_match_core.py -q -k hook_route_rows_match_core'
       - id: AC3
         statement: 'AC3: an MCP save_issue update whose description changes a standard ticket''s contract
           block, or its title, is refused contract_block_edit naming onex ticket sync, whatever the switch
@@ -59,7 +59,7 @@ dod_evidence:
       - AC2
     checks:
       - check_type: test_passes
-        check_value: uv run pytest tests -q -k hook_route_rows_match_core
+        check_value: uv run pytest tests/hooks/test_ticket_route_rows_match_core.py -q -k hook_route_rows_match_core
         cwd: .
   - id: dod-omn23769-ac3
     description: A full description or a patch that changes the contract block, or a new title on a ticket
