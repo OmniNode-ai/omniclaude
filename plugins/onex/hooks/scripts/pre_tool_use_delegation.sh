@@ -130,10 +130,12 @@ if [[ ! -f "$RUNNER" ]]; then
     exit 0
 fi
 
-# Run the delegation runner with tool input on stdin; 5s timeout
+# Run the delegation runner with tool input on stdin; 5s timeout. perl's alarm,
+# not `timeout`: macOS ships no `timeout` (GNU coreutils), and a missing one made
+# every call exit 127 and pass through unrouted (OMN-23413). perl is on every Mac.
 set +e
 DELEGATION_RESULT=$(printf '%s\n' "$TOOL_INFO" | \
-    timeout 5 env -u PYTHONPATH "$PYTHON_CMD" "$RUNNER" 2>>"$LOG_FILE")
+    perl -e 'alarm 5; exec @ARGV or exit 127' env -u PYTHONPATH "$PYTHON_CMD" "$RUNNER" 2>>"$LOG_FILE")
 RUNNER_EXIT=$?
 set -e
 
