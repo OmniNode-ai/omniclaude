@@ -33,3 +33,6 @@ dod_evidence:
     check_value: sh -c 'grep -Fq node_plan_first_slice_compute plugins/onex/skills/plan_review_set/SKILL.md && grep -Fq no_first_slice_section plugins/onex/skills/plan_review_set/SKILL.md && ! grep -Fq
       "until a round returns no finding you agree with" plugins/onex/skills/plan_review_set/SKILL.md'
     cwd: .
+  - check_type: test_passes
+    check_value: uv run pytest tests/skills/test_plan_review_set_first_slice_omn24449.py -q --no-cov
+    cwd: .
