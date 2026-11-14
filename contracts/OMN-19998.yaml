@@ -64,6 +64,8 @@ requirements:
     statement: "A public repository's job never reaches a lab runner through a reusable workflow of omniclaude: the fleet route is taken only by a private caller, and the runner label gate runs GitHub-hosted."
   - id: req-omn19998-repo-evidence-check-timeout
     statement: "The repo-evidence caller passes check-timeout-seconds, so a bound check that runs past the verifier's own 30 s is not skipped CHECK_BUDGET_EXCEEDED and repo-evidence / dod-verify does not read red with no failing test."
+  - id: req-omn19998-dev-head-monitor-core-git-source
+    statement: "The dev-head monitor step installs a package the lock sources from git at its locked commit, and a registry package at its locked version, so a lock that moves omnibase-core to a dev build absent from the index leaves 'Record red dev heads' green."
 evidence_requirements:
   - kind: tests
     description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
@@ -459,6 +461,15 @@ dod_evidence:
       cwd: ${OMNI_HOME}/omniclaude
     - check_type: command
       check_value: grep -nE 'check-timeout-seconds:[[:space:]]+"300"' .github/workflows/call-repo-evidence-gate.yml
+      cwd: ${OMNI_HOME}/omniclaude
+    binds_ac:
+    - AC1
+  - id: dod-omn19998-dev-head-monitor-core-git-source
+    description: The monitor step's resolver prints a git-sourced package as a pinned git requirement and a registry package as name==version, and the lock this repository carries resolves core to a git requirement. The merge base prints omnibase-core==0.47.76, so two of the four tests fail there.
+    source: manual
+    checks:
+    - check_type: test_passes
+      check_value: env -u PYTHONPATH uv run --frozen pytest tests/ci/test_dev_head_monitor_core_source_omn19998.py -q --no-cov
       cwd: ${OMNI_HOME}/omniclaude
     binds_ac:
     - AC1
