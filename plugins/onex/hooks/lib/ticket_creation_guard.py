@@ -320,6 +320,7 @@ what, rather than on the board the ticket is about to land on.
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
 import importlib.util
 import json
@@ -327,8 +328,6 @@ import os
 import re
 import sys
 import unicodedata
-import urllib.error
-import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -619,6 +618,8 @@ class Policy:
     #: Rule 15 (OMN-17427). The defect vocabulary and the ``Diagnosis:`` citation
     #: forms, read by ``handler_defect_diagnosis`` and validated at load time.
     defect_diagnosis: Any
+    #: The route rows (OMN-23769), mirroring the core ticket-creation contract.
+    route_rows: Any
     #: The declared binding grammar (OMN-18414). Carried on the policy so the
     #: decision core stays a pure function of what it is handed, and so a
     #: malformed declaration refuses at load time -- with everything else --
@@ -949,6 +950,9 @@ def load_policy(path: Path | None = None, grammar_path: Path | None = None) -> P
         labelled_criterion_exempt_binding_forms=frozenset(exempt_forms),
         defect_diagnosis=_handler("handler_defect_diagnosis").load_policy(
             raw.get("defect_diagnosis"), source, PolicyError
+        ),
+        route_rows=_handler("handler_ticket_route_gate").load_rows(
+            raw.get("route_rows"), source, PolicyError
         ),
     )
 
@@ -1364,8 +1368,9 @@ def _handler(name: str) -> Any:
     package = importlib.util.find_spec("omniclaude")
     roots = [Path(__file__).resolve().parents[4] / "src/omniclaude"]
     roots += map(Path, (package and package.submodule_search_locations) or ())
-    rel = Path("handlers") / f"{name}.py"
-    path = next((r / rel for r in roots if (r / rel).is_file()), roots[0] / rel)
+    homes = ("handlers", "nodes/node_linear_effect/handlers")  # OMN-23769: route gate
+    paths = [r / h / f"{name}.py" for r in roots for h in homes]
+    path = next((p for p in paths if p.is_file()), paths[0])
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
         raise ImportError(f"handler not loadable: {path}")
@@ -1759,11 +1764,20 @@ def check_save_issue(
     body_lookup: BodyLookup | None = None,
     ruling_lookup: RulingLookup | None = None,
     ledger_lines: Any = None,
+    route: str | None = None,
+    route_switch: str | None = None,
+    title_lookup: BodyLookup | None = None,
 ) -> list[Finding]:
     """Return every failing admission rule for one ``save_issue`` call.
 
     An empty list admits the call. A CREATE is judged by rules 1-7; an UPDATE is
     judged by rule 9 alone, and only when it touches the description.
+
+    ``route`` (``"raw"`` by hand, ``"node"`` the ticket node) and ``route_switch``
+    (the overlay's switch) serve the OMN-23769 route rows: a raw create is refused
+    with the switch at ``refuse``; an update that changes a standard ticket's
+    contract block or title is refused unless the node makes it, whatever the
+    switch. ``title_lookup`` reads the current title.
 
     ``body_lookup`` is rule 9's only window onto anything outside the payload,
     and it is an argument rather than an import so this function stays a pure
@@ -1794,8 +1808,18 @@ def check_save_issue(
             touches_body = (
                 "patch" in tool_input or tool_input.get("description") is not None
             )
+            edits = _handler("handler_ticket_route_gate").route_update_findings(
+                policy.route_rows,
+                tool_input,
+                route,
+                body_lookup,
+                title_lookup,
+                Finding,
+                apply_description_patch,
+                PatchUnapplicable,
+            )
             if not touches_body:
-                return []
+                return edits
             raw_body = tool_input.get("description")
             if "patch" not in tool_input and not isinstance(raw_body, str):
                 return [
@@ -1810,7 +1834,7 @@ def check_save_issue(
                         fix="pass the description as markdown text",
                     )
                 ]
-            return _criterion_text_findings(
+            return edits + _criterion_text_findings(
                 str(tool_input["id"]), tool_input, body_lookup, ruling_lookup
             )
         return [
@@ -1992,7 +2016,9 @@ def check_save_issue(
             )
         )
 
-    return findings
+    return findings + _handler("handler_ticket_route_gate").create_findings(
+        policy.route_rows, route, route_switch, Finding
+    )
 
 
 def render_block_reason(
@@ -2009,32 +2035,9 @@ def render_block_reason(
     measurement that justifies rules 1-7 and would be simply untrue on an
     update, which is refused for an unrelated reason.
     """
-    if update:
-        lines = [
-            f"BLOCKED: this Linear issue UPDATE rewrites an acceptance "
-            f"criterion ({CRITERION_TICKET}).",
-            "",
-            (
-                "Measured 2026-09-15: 27 of 144 live ac_binding pins were stale "
-                "across three tickets, every one of them because a lane wrote "
-                "bookkeeping -- a comment-id citation, a MET verdict -- into a "
-                "criterion's own line. A contract pins that line by hash, so the "
-                "annotation reverts every binding on it to unproven."
-            ),
-            "",
-        ]
-    else:
-        lines = [
-            f"BLOCKED: this Linear issue CREATE is not bound to a commitment "
-            f"({TICKET}).",
-            "",
-            (
-                "Measured 2026-08-22..2026-09-04: 1553 tickets created in 14 days "
-                "against ~35/day closed; 779 never left Backlog and 398 were never "
-                "touched again. This guard refuses the creates that produce that."
-            ),
-            "",
-        ]
+    lines = _handler("handler_ticket_route_gate").preamble(
+        findings, update, TICKET, CRITERION_TICKET
+    )
     for finding in findings:
         lines.append(f"  * [{finding.code}] {finding.field}: {finding.reason}")
         lines.append(f"      fix: {finding.fix}")
@@ -2058,28 +2061,13 @@ def render_block_reason(
 def _resolve_api_key() -> str:
     """The tracker read credential, from the environment or the ONEX env file.
 
-    The environment first. A PreToolUse hook inherits the session environment,
-    which on a dispatched lane often does not carry it, so the same
-    ``~/.omnibase/.env`` fallback ``scripts/worktree_auto_prune.py`` uses is read
-    second. Returns ``""`` when neither carries one, which switches rule 9 off
-    for this machine -- see :func:`_criterion_text_findings`.
-
-    The value is never written anywhere: not to stdout, not to stderr, not to
-    the refusal text.
+    Returns ``""`` when neither carries one, which switches rule 9 off for this
+    machine -- see :func:`_criterion_text_findings`. The value is never written
+    anywhere: not to stdout, not to stderr, not to the refusal text.
     """
-    key = os.environ.get("LINEAR_API_KEY", "").strip()
-    if key:
-        return key
-    env_file = Path.home() / ".omnibase" / ".env"
-    try:
-        lines = env_file.read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return ""
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("LINEAR_API_KEY="):
-            return stripped.partition("=")[2].strip().strip("'\"")
-    return ""
+    return _handler("handler_ticket_route_gate").resolve_api_key(
+        os.environ, Path.home()
+    )
 
 
 _BODY_QUERY: Final[str] = "query($id:String!){issue(id:$id){description}}"
@@ -2088,50 +2076,47 @@ _BODY_QUERY: Final[str] = "query($id:String!){issue(id:$id){description}}"
 def _fetch_issue_body(issue_ref: str, api_key: str) -> str | None:
     """One issue's current description, or ``None`` when it cannot be read.
 
-    Every failure collapses to ``None`` on purpose: a transport error, a
-    non-200, a GraphQL error body, an unknown issue and an unparseable response
-    are all "the tracker did not tell us", and the caller refuses on that
-    uniformly. An issue
-    that exists with a genuinely empty description returns ``""``, which is a
-    body and not an unknown.
+    Every failure collapses to ``None`` on purpose (see
+    ``handler_ticket_route_gate.fetch_issue_field``): the caller refuses on
+    "the tracker did not tell us". An issue with a genuinely empty description
+    returns ``""``, which is a body and not an unknown.
     """
-    request = urllib.request.Request(  # noqa: S310
+    return _handler("handler_ticket_route_gate").fetch_issue_field(
         _LINEAR_API_URL,
-        data=json.dumps(
-            {"query": _BODY_QUERY, "variables": {"id": issue_ref}}
-        ).encode(),
-        headers={"Authorization": api_key, "Content-Type": "application/json"},
-        method="POST",
+        _LOOKUP_TIMEOUT_S,
+        issue_ref,
+        api_key,
+        _BODY_QUERY,
+        "description",
     )
-    try:
-        with urllib.request.urlopen(  # noqa: S310
-            request, timeout=_LOOKUP_TIMEOUT_S
-        ) as response:
-            if response.status != 200:
-                return None
-            raw = response.read()
-    except (urllib.error.URLError, OSError):
-        return None
-    try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError:
-        return None
-    if payload.get("errors"):
-        return None
-    issue = (payload.get("data") or {}).get("issue")
-    if not isinstance(issue, dict):
-        return None
-    description = issue.get("description")
-    if description is None:
-        return ""
-    return description if isinstance(description, str) else None
+
+
+_TITLE_QUERY: Final[str] = "query($id:String!){issue(id:$id){title}}"
 
 
 def _body_network_lookup(api_key: str) -> BodyLookup:
     """Bind rule 9's body seam to the live tracker."""
 
+    @functools.lru_cache(maxsize=8)
     def lookup(issue_ref: str) -> str | None:
         return _fetch_issue_body(issue_ref, api_key)
+
+    return lookup
+
+
+def _title_network_lookup(api_key: str) -> BodyLookup:
+    """Bind the route rows' title seam to the live tracker."""
+
+    @functools.lru_cache(maxsize=8)
+    def lookup(issue_ref: str) -> str | None:
+        return _handler("handler_ticket_route_gate").fetch_issue_field(
+            _LINEAR_API_URL,
+            _LOOKUP_TIMEOUT_S,
+            issue_ref,
+            api_key,
+            _TITLE_QUERY,
+            "title",
+        )
 
     return lookup
 
@@ -2210,6 +2195,11 @@ def main(argv: list[str] | None = None) -> int:
             ledger_lines=_handler("handler_defect_diagnosis").ledger_line_lookup(
                 ledger.ledger_path()
             ),
+            route="node" if args.node else "raw",
+            route_switch=_handler("handler_ticket_route_gate").read_switch(
+                os.environ, Path.home()
+            ),
+            title_lookup=_title_network_lookup(api_key) if api_key else None,
         )
     )
     admission = None
@@ -2237,6 +2227,8 @@ def main(argv: list[str] | None = None) -> int:
         reason_code = (
             "issue-update-" + findings[0].code.replace("_", "-")
             if is_update
+            else "issue-create-raw-route-refused"
+            if findings[0].code == "create_route"
             else "issue-create-not-bound-to-a-commitment"
         )
         return _block(
