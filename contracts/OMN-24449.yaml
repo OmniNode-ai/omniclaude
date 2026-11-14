@@ -1,0 +1,38 @@
+schema_version: 1.0.0
+ticket_id: OMN-24449
+title: Plan review stops full-plan Codex rounds after the blocking findings are fixed and reviews the first slice, then each later rung
+summary: The plan review set skill gains a section before round 1 (the plan must name a First slice section and a Later rungs section, and the first-slice check runs before any reviewer is sent the plan)
+  and its repeat-rounds paragraph now stops full-plan rounds once no blocking finding is left, then reviews the first slice alone until a Codex round returns clean, then each later rung. The check is the
+  node node_plan_first_slice_compute, in its own pull request in omnimarket.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+- id: req-omn24449-first-slice-rule
+  statement: The plan review set skill stops full-plan rounds after the blocking findings are fixed and reviews the first slice, then each later rung.
+  acceptance:
+  - id: AC1
+    statement: 'AC1: a resolved, wired mechanism enforces RULING 2026-11-14T15:20:15Z lane=orchestrator-31d9, linked to it by a CORRECTION row carrying mechanism=<repo path> -- falsifier: `python3 plugins/omni/skills/queue-status/scripts/ruling_mechanisms.py`
+      no longer lists 2026-11-14T15:20:15Z as unmechanized'
+evidence_requirements:
+- kind: tests
+  description: 'The skill text greps: the check node and a verdict name are present, and the old two-round sentence is gone.'
+  command: sh -c 'grep -Fq node_plan_first_slice_compute plugins/onex/skills/plan_review_set/SKILL.md'
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+- id: dod-omn24449-ac1-review-set-text
+  description: The plan review set skill names the first-slice check node and its verdicts before round 1, and no longer says to repeat rounds until a round returns no finding you agree with.
+  source: manual
+  binds_ac:
+  - AC1
+  checks:
+  - check_type: command
+    check_value: sh -c 'grep -Fq node_plan_first_slice_compute plugins/onex/skills/plan_review_set/SKILL.md && grep -Fq no_first_slice_section plugins/onex/skills/plan_review_set/SKILL.md && ! grep -Fq
+      "until a round returns no finding you agree with" plugins/onex/skills/plan_review_set/SKILL.md'
+    cwd: .
+  - check_type: test_passes
+    check_value: uv run pytest tests/skills/test_plan_review_set_first_slice_omn24449.py -q --no-cov
+    cwd: .
