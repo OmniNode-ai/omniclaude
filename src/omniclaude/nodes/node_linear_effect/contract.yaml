@@ -73,6 +73,13 @@ capabilities:
       handler_done_receipt_policy owns contract parsing, current-revision hashes,
       criterion bindings and fail-closed hook execution for the plugin entrypoint.
 
+  - name: linear.ticketing.route_gate
+    description: >
+      handler_ticket_route_gate owns the create_route and contract_block_edit
+      rows the Mac ticket-creation hook applies (OMN-23769): a raw create is
+      refused with the route switch at refuse, and a hand edit of a standard
+      ticket's contract block or title is refused whatever the switch.
+
   - name: linear.ticketing.closeout_instruction_audit
     description: >
       handler_done_closeout_instructions audits skill and workflow roots for
@@ -184,6 +191,10 @@ handler_routing:
         module: omniclaude.nodes.node_linear_effect.handlers.handler_local_pr_state
         name: HandlerLocalPrState
       output_events: [ModelLocalPrStateResult]
+    - operation: ticket_route_gate
+      handler:
+        module: omniclaude.nodes.node_linear_effect.handlers.handler_ticket_route_gate
+        name: route_update_findings
     - operation: ticket_done_receipt_policy
       handler:
         module: omniclaude.nodes.node_linear_effect.handlers.handler_done_receipt_policy

@@ -160,6 +160,9 @@ def test_policy_is_read_from_config_not_hardcoded(tmp_path: Path) -> None:
                 "defect_diagnosis": json.loads(
                     _POLICY_JSON.read_text(encoding="utf-8")
                 )["defect_diagnosis"],
+                "route_rows": json.loads(_POLICY_JSON.read_text(encoding="utf-8"))[
+                    "route_rows"
+                ],
             }
         ),
         encoding="utf-8",
