@@ -488,5 +488,27 @@
   "lane_intake": {
     "label": "lane-created",
     "stamp_prefix": "created-by-lane:"
+  },
+  "route_rows": {
+    "create_route": {
+      "node_route": "node",
+      "raw_route": "raw",
+      "allow_value": "allow",
+      "refuse_value": "refuse",
+      "switch_default": "allow",
+      "node_command": "onex ticket create --draft",
+      "message": "this create was built by hand, not by the ticket node, and the route switch is at '{switch}'",
+      "fix": "create the ticket through the ticket node: {command} <draft file>"
+    },
+    "contract_block_edit": {
+      "block_pattern": "(?ms)^[ \\t]*(?P<fence>`{3,}|~{3,})[ \\t]*yaml[ \\t]+onex-ticket-contract[ \\t]*\\n(?P<body>.*?)^[ \\t]*(?P=fence)[ \\t]*$",
+      "sync_command": "onex ticket sync",
+      "message": "this update changes the contract block of the ticket by hand ({before} block(s) before, {after} after)",
+      "fix": "change the contract file and run {command}, which writes the ticket and the file together"
+    },
+    "title_edit": {
+      "message": "this update changes the title of a standard ticket (one whose description carries a contract block) by hand",
+      "fix": "change the contract file and run {command}, which writes the ticket and the file together"
+    }
   }
 }
