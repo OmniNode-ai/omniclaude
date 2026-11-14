@@ -1,0 +1,56 @@
+schema_version: 1.0.0
+ticket_id: OMN-24504
+title: The refusal recorder sends its row over the bus
+summary: The hook refusal recorder's writer process is started without ONEX_LEDGER_WRITE_VIA and ONEX_LEDGER_RECORD_WRITER, so a refusal row recorded from inside the ledger serve is published on the bus and carries a via cell, instead of being appended to the file directly.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn24504-recorder-bus
+    statement: The recorder never appends directly to the ledger file.
+    acceptance:
+      - id: AC1
+        statement: 'AC1: the recorder''s writer process is started without the direct-write markers, so the row is published over the bus -- falsifier: pytest tests/hooks/test_refusal_recorder_writer_env.py -q -k "drops or bus_environment"'
+      - id: AC2
+        statement: 'AC2: a writer that cannot start still returns None and raises nothing (error chain) -- falsifier: pytest tests/hooks/test_refusal_recorder_writer_env.py -q -k error_chain'
+      - id: AC3
+        statement: 'AC3: integrated: on the ledger host with this branch running, a friction-guard refusal produces a row that carries a via cell -- falsifier: count rows with guard=friction_guard.py and no via= over a UTC day after the install, read as zero'
+evidence_requirements:
+  - kind: tests
+    description: The recorder tests pass at the head.
+    command: uv run pytest tests/hooks/test_refusal_recorder_writer_env.py -q
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+  - id: dod-omn24504-ac1
+    description: The writer environment has neither direct-write marker; with the function replaced by a copy of the environment the bus-environment test fails (failing control).
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC1
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/hooks/test_refusal_recorder_writer_env.py -q -k "drops or bus_environment"
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn24504-ac2
+    description: A writer that raises OSError returns None.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC2
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/hooks/test_refusal_recorder_writer_env.py -q -k error_chain
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn24504-ac3
+    description: The existing recorder suites still pass with the change; the integrated reading on the ledger host is recorded in the pull request comment.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC3
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/hooks/test_refusal_recorder_delivery_omn20883.py tests/hooks/test_refusal_recorder_state_omn20265.py -q
+        cwd: ${OMNI_HOME}/omniclaude
