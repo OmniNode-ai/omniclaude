@@ -52,5 +52,5 @@ dod_evidence:
       - AC3
     checks:
       - check_type: test_passes
-        check_value: uv run pytest tests/hooks/test_refusal_recorder_delivery_omn20883.py tests/hooks/test_refusal_recorder_state_omn20265.py -q
+        check_value: uv run pytest tests/hooks/test_refusal_recorder_writer_env.py tests/hooks/test_refusal_recorder_delivery_omn20883.py tests/hooks/test_refusal_recorder_state_omn20265.py -q
         cwd: ${OMNI_HOME}/omniclaude
