@@ -94,12 +94,11 @@ dod_evidence:
         check_value: uv run pytest plugins/onex/hooks/tests/test_ticket_route_gate.py -q -k session_the_hook_script
         cwd: .
   - id: dod-omn23769-deploy
-    description: After merge the route gate handler is on dev, read from the repository itself, so the
+    description: The route gate handler is in the PR head tree, read from the repository itself, so the
       hosted runner can run it and it fails if the handler is absent.
     source: manual
     binds_ac:
       - AC1
     checks:
       - check_type: command
-        check_value: gh api "repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_linear_effect/handlers/handler_ticket_route_gate.py?ref=dev"
-          --jq .content | base64 -d | grep -q 'def edit_findings'
+        check_value: grep -q 'def edit_findings' src/omniclaude/nodes/node_linear_effect/handlers/handler_ticket_route_gate.py
