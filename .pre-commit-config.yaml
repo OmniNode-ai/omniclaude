@@ -41,7 +41,7 @@ repos:
   # is stated in that file. CI twin: the first-party-ref job in .github/workflows/ci.yml,
   # which runs these hooks at this rev instead of repeating it (the validator allows one home per tag literal).
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: dev-20261111183916-a85cb916d4c1
+    rev: dev-20261113013358-a09066caf945
     hooks:
       - id: check-internal-sibling-pins
         args: [--baseline, .onex/baselines/first_party_ref.yaml]
@@ -425,7 +425,7 @@ repos:
   # markers too, with the same spelling. CI runs these same hook ids with
   # `pre-commit run <id> --all-files` (ci.yml, the arch-* jobs).
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: dev-20261111183916-a85cb916d4c1
+    rev: dev-20261113013358-a09066caf945
     hooks:
       - id: check-no-utcnow
         files: ^src/.*\.py$

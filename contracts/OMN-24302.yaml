@@ -1,0 +1,63 @@
+schema_version: "1.0.0"
+ticket_id: OMN-24302
+title: Regenerate omniclaude's event registry so content.captured publishes through the redaction step
+summary: >-
+  omnimarket's emit registry (omnimarket#5990, OMN-24082) routes content.captured through redact_capture. omniclaude's generated EVENT_REGISTRY still projected passthrough (transform=None) for it, so the hook emit drainer kept publishing those records unchanged. The registry entry is re-projected from omnimarket's current topics.yaml through scripts/validation/generate_event_registry.py, whose own --check is the control. The tests that pinned the old passthrough are updated, and one seam test holds the registry rule to a planted credential. Registry Consistency reads omnimarket at the revision uv.lock pins, so the change carries the omnimarket pin advance made by sibling-lock-refresh.yml (workflow_dispatch on this branch), and the hook emit drainer reads the same pinned package.
+is_seam_ticket: true
+interface_change: true
+interfaces_touched:
+  - topics
+  - events
+requirements:
+  - id: req-omn24302-registry-projects-redaction
+    statement: The generated EVENT_REGISTRY entry for content.captured carries the redact_capture publish transform that omnimarket's emit registry declares.
+    acceptance:
+      - id: AC1
+        statement: "AC1: omniclaude's generated event registry carries redact_capture for content.captured, as omnimarket's emit registry on its dev branch declares -- falsifier: uv run python scripts/validation/generate_event_registry.py --daemon-registry <omnimarket checkout>/src/omnimarket/nodes/node_emit_daemon/registries/topics.yaml --check exits 1 at the merge base and 0 at the head"
+      - id: AC2
+        statement: "AC2: the registry rule publishes a content.captured record with a planted credential replaced while hook.event stays raw -- falsifier: uv run pytest tests/hooks/test_sibling_refresh_capture_metadata_omn13902.py -q --no-cov -k planted_credential fails at the merge base"
+      - id: AC3
+        statement: "AC3: integrated: the hook emit drainer on the lab host that runs it publishes a content.captured record with the redaction transform applied, read from the drainer's published record -- falsifier: the record read on that host after the install still carries a credential-shaped span or redaction_state is absent"
+evidence_requirements:
+  - kind: tests
+    description: The registry generator check passes at the head, and the registry-pinned tests pass; at the merge base the generator check exits 1 and the planted-credential test fails.
+    command: uv run pytest tests/hooks/test_sibling_refresh_capture_metadata_omn13902.py tests/unit/hooks/test_hook_claude_capture_omn19513.py tests/unit/hooks/test_hook_payload_encryption_omn19513.py tests/hooks/test_event_registry.py tests/hooks/test_generate_event_registry.py -q --no-cov -k "not missed_budget and not returns_at_once"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn24302-ac1-generator-check
+    description: The generator's own check passes against omnimarket's emit registry; at the merge base it reports content.captured generated redact_capture against committed None and exits 1.
+    source: manual
+    binds_ac:
+      - AC1
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/hooks/test_generate_event_registry.py tests/hooks/test_registry_consistency.py -q --no-cov
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn24302-ac2-planted-credential
+    description: The rule the registry holds for content.captured replaces a planted credential-shaped span and keeps the rest of the record; hook.event is the raw control.
+    source: manual
+    binds_ac:
+      - AC2
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/hooks/test_sibling_refresh_capture_metadata_omn13902.py -q --no-cov -k planted_credential
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn24302-ac3-drainer-host
+    description: The drainer on the lab host runs from the branch install and one published content.captured record is read; the host, revision and record shape are named in the pull request.
+    source: manual
+    binds_ac:
+      - AC3
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/hooks/test_sibling_refresh_capture_metadata_omn13902.py -q --no-cov -k refreshed_capture_fan_out
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-deploy
+    description: The registry is a Python literal read by the hook emit drainer on the host; the test files above assert its shape and no deployed service is needed on the hosted runner.
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/hooks/test_sibling_refresh_capture_metadata_omn13902.py tests/hooks/test_generate_event_registry.py -q --no-cov
+        cwd: ${OMNI_HOME}/omniclaude
