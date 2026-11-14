@@ -146,32 +146,12 @@ fi
 # interpreters so behaviour matches every other hook, and refuses rather than
 # guessing when none exists.
 _resolve_python() {
-    if [[ -n "${PLUGIN_PYTHON_BIN:-}" && -x "${PLUGIN_PYTHON_BIN}" ]]; then
-        echo "${PLUGIN_PYTHON_BIN}"
-        return 0
-    fi
-    if [[ -n "${CLAUDE_PLUGIN_DATA:-}" && -x "${CLAUDE_PLUGIN_DATA}/.venv/bin/python3" ]]; then
-        echo "${CLAUDE_PLUGIN_DATA}/.venv/bin/python3"
-        return 0
-    fi
-    local repo_venv
-    repo_venv="$(cd "${PLUGIN_ROOT}/../.." 2>/dev/null && pwd)/.venv/bin/python3"
-    if [[ -x "$repo_venv" ]]; then
-        echo "$repo_venv"
-        return 0
-    fi
-    local brew_py
-    for brew_py in /opt/homebrew/bin/python3.13 /usr/local/bin/python3.13; do
-        if [[ -x "$brew_py" ]]; then
-            echo "$brew_py"
-            return 0
-        fi
+    local c
+    for c in "${PLUGIN_PYTHON_BIN:-}" "${CLAUDE_PLUGIN_DATA:-/nonexistent}/.venv/bin/python3" \
+        "$(cd "${PLUGIN_ROOT}/../.." 2>/dev/null && pwd)/.venv/bin/python3" /opt/homebrew/bin/python3.13 /usr/local/bin/python3.13; do
+        [[ -n "$c" && -x "$c" ]] && { echo "$c"; return 0; }
     done
-    if command -v python3 >/dev/null 2>&1; then
-        command -v python3
-        return 0
-    fi
-    return 1
+    command -v python3
 }
 
 if ! GUARD_PYTHON="$(_resolve_python)"; then
@@ -185,6 +165,22 @@ GUARD_RC=$?
 set -e
 
 if [[ $GUARD_RC -eq 0 ]]; then
+    # OMN-23307: the model is chosen; now the prompt. omnimarket's node_agent_prompt_gh_read_guard_effect
+    # refuses a prompt that tells a subagent to read GitHub through gh (92 of 101 gh-read refusals in
+    # the 24 hours to 2026-11-09T06:46Z). This shim only decides whether the dispatch can carry such a
+    # call (the payload, or the Workflow script file it names, mentions gh or the GitHub API) and
+    # relays the node's verdict; the node judges. A dispatch it cannot judge is refused, never assumed clean.
+    _gh_re='(api|uploads|raw|codeload)\.github(usercontent)?\.com|(^|\\n|[^A-Za-z0-9_./-])gh[[:space:]]+[a-z]'
+    _gh_file="$(printf '%s' "$TOOL_INFO" | jq -r '.tool_input.scriptPath // empty' 2>/dev/null || true)"
+    if [[ "$TOOL_INFO" =~ $_gh_re ]] || { [[ -r "$_gh_file" ]] && grep -qE "$_gh_re" "$_gh_file"; }; then
+        for py in "$GUARD_PYTHON" "${OMNI_HOME:-/nonexistent}/omnimarket/.venv/bin/python3"; do
+            [[ -x "$py" ]] || continue
+            GUARD_OUT=$(printf '%s' "$TOOL_INFO" | env -u PYTHONPATH "$py" -m omnimarket.nodes.node_agent_prompt_gh_read_guard_effect.runtime_agent_prompt_gh_read --mode "${OMNICLAUDE_MODE:-full}" 2>&1) && GUARD_RC=0 || GUARD_RC=$?
+            [[ $GUARD_RC -eq 0 || $GUARD_RC -eq 2 ]] && break
+        done
+        [[ $GUARD_RC -eq 2 ]] && _block "agent-prompt-gh-read" "$(printf '%s' "$GUARD_OUT" | jq -r '.reason // "BLOCKED: this dispatch tells a subagent to read GitHub through gh (OMN-23307)"' 2>/dev/null)"
+        [[ $GUARD_RC -eq 0 ]] || _block "agent-prompt-gh-read-check-could-not-judge" "BLOCKED: the OMN-23307 agent prompt gh-read check could not judge this ${TOOL_NAME} dispatch (exit ${GUARD_RC}: ${GUARD_OUT: -200}), so it is refused. To disable this guard deliberately: onex hooks disable PRE_TOOL_AGENT_DISPATCH_GATE"
+    fi
     _hook_status "PASS" "explicit background model on every agent call" "0" 2>/dev/null || true
     exit 0
 fi

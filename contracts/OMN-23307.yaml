@@ -1,0 +1,29 @@
+schema_version: "1.0.0"
+ticket_id: "OMN-23307"
+title: "The agent-prompt gh-read refusal runs as a node that pre_tool_use_agent_model_guard.sh calls"
+summary: "pre_tool_use_agent_model_guard.sh calls omnimarket's node_agent_prompt_gh_read_guard_effect for a dispatch whose payload or Workflow script file names gh or the GitHub API, relays its refusal, and refuses a dispatch the node cannot judge. The hook stays a thin shim; the decision lives in the node."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: "req-omn23307-agent-prompt-gh-read-hook"
+    statement: "The agent model guard hook calls the node that refuses an agent prompt telling a subagent to read GitHub through gh."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: a node refuses an agent prompt that calls gh or the GitHub API for a read the mirror serves and admits the same prompt using the mirror verb, and pre_tool_use_agent_model_guard.sh calls it -- falsifier: uv run pytest tests -q -k agent_prompt_gh_read, failing with the node call removed from the hook"
+evidence_requirements:
+  - kind: "tests"
+    description: "The hook calls the node, relays its refusal and its admission, skips a dispatch that names no gh, and refuses a dispatch the node cannot judge."
+    command: "uv run pytest tests/hooks/test_agent_prompt_gh_read_hook.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-omn23307-hook-calls-node"
+    description: "AC1 (hook side): the registered hook runs the node's process entry for a dispatch naming gh, relays exit 2 as a block and exit 0 as a pass -- proven by the named tests; the node's own refusals are proven by the omnimarket tests of the same name."
+    source: "manual"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/hooks/test_agent_prompt_gh_read_hook.py -q --no-cov -k agent_prompt_gh_read"
+    binds_ac: ["AC1"]
