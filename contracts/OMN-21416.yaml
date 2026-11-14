@@ -1,0 +1,45 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+---
+schema_version: "1.0.0"
+ticket_id: OMN-21416
+title: A delegation's usage calls reach a bus-fed lane on their own topic -- omniclaude's contract-declared
+  registrations
+summary: omniclaude declares omnimarket's delegation.usage_call and delegation.run_step in wire contracts
+  that the hook registry lookup and the event-registry generator check read through omnibase_core's loader,
+  instead of growing the hook-emitted EVENT_REGISTRY (OMN-21416 amendment 1, PR B).
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn21416-contract-declared-registrations
+    statement: The hook registry resolves the two contract-declared delegation events from their wire contracts,
+      the generator check matches a daemon registry carrying them only through those contracts, and no hook
+      emits them.
+    acceptance:
+      - id: AC7
+        statement: 'AC7: the generator check passes only through the contract-declared entries and fails
+          with either wire contract removed; the hook registry lookup resolves both with their declared topic,
+          partition key and required fields and drops an entry whose contract is removed; a scan of the hook
+          emission code finds neither event and finds a deliberately added emitter fixture -- falsifier:
+          uv run pytest tests/hooks/test_contract_event_registrations_omn21416.py -q --no-cov'
+evidence_requirements:
+  - kind: tests
+    description: The lookup, generator-check and hook-emitter tests over the packaged wire contracts and the
+      pinned omnimarket emit registry.
+    command: uv run pytest tests/hooks/test_contract_event_registrations_omn21416.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+  - id: dod-omn21416-contract-declared-registrations
+    description: Both contract-declared events resolve through the hook registry lookup and the generator
+      check, a removed or malformed contract drops or fails its entry, and no hook emits either event.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac: [AC7]
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/hooks/test_contract_event_registrations_omn21416.py -q --no-cov
+        cwd: ${OMNI_HOME}/omniclaude
