@@ -1320,10 +1320,6 @@ def test_effort_is_read_from_the_agent_options_object() -> None:
 # Lab-host work (OMN-24618)
 # ---------------------------------------------------------------------------
 
-_LAB_HANDLER_PY = (
-    _REPO_ROOT / "src" / "omniclaude" / "handlers" / "handler_lab_host_work.py"
-)
-
 
 @pytest.fixture
 def lab_table(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1431,23 +1427,223 @@ def test_lab_host_work_agent_tool_refused_and_admitted(lab_table: None) -> None:
     assert admitted == []
 
 
-def test_lab_host_work_aliases_load_from_ssh_config_and_pool_table(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def _ip(*octets: int) -> str:
+    return ".".join(str(o) for o in octets)
+
+
+@pytest.fixture
+def lab_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """No pool variable, no table variable, an empty ssh config: nothing is a lab host yet."""
+    for var in (
+        "LANDING_POOL_HOSTS",
+        "ONEX_LAB_RUN_HOSTS",
+        "ONEX_SKILL_OVERLAY_ROOTS",
+        "OMNI_HOME",
+    ):
+        monkeypatch.delenv(var, raising=False)
     (tmp_path / ".ssh").mkdir()
-    (tmp_path / ".ssh" / "config").write_text(
-        "Host alpha beta\nHost *\nHost github.com\n"
-    )
+    (tmp_path / ".ssh" / "config").write_text("Host *\n")
     monkeypatch.setenv("HOME", str(tmp_path))
+    return tmp_path
+
+
+_TABLE = """\
+hosts:
+  - name: h301
+    target: ops@tablehost
+    fallback_targets: [spare1, ops@spare2]
+    cap: 4
+  - name: h302
+    target: ops@other
+    available: false
+"""
+
+
+def test_lab_host_work_names_load_from_ssh_config_and_pool_rows(
+    lab_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (lab_env / ".ssh" / "config").write_text(
+        f"Host alpha beta\n  HostName {_ip(10, 9, 9, 9)}\nHost *\nHost github.com\n"
+    )
     monkeypatch.setenv(
         "LANDING_POOL_HOSTS", json.dumps([{"name": "h201", "target": "me@gamma"}])
     )
-    assert _GUARD._lab_aliases() == {
+    assert _GUARD._lab_hostnames() == {
         "alpha",
         "beta",
+        _ip(10, 9, 9, 9),
         "h201",
         "gamma",
     }
+
+
+def test_lab_host_work_table_names_seen_with_pool_variable_unset(
+    lab_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    table = lab_env / "lab_hosts.yaml"
+    table.write_text(_TABLE)
+    monkeypatch.setenv("ONEX_LAB_RUN_HOSTS", str(table))
+    for prompt in (
+        "ssh h301 uptime",
+        "ssh tablehost docker ps",
+        "docker ps on spare1",
+        "systemctl restart x on spare2",
+    ):
+        findings = _lab_check(prompt)
+        assert len(findings) == 1 and "no declared placement" in findings[0].reason
+
+
+def test_lab_host_work_table_from_overlay_store_snapshot(
+    lab_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The table is found the way the placement code finds it: the store reader's snapshot_root."""
+    root = lab_env / "overlays"
+    (root / "node_overlay_store_read_effect").mkdir(parents=True)
+    (root / "node_overlay_store_read_effect" / "overlay.yaml").write_text(
+        f"snapshot_root: {lab_env}/snap\n"
+    )
+    (lab_env / "snap" / "lab_hosts").mkdir(parents=True)
+    (lab_env / "snap" / "lab_hosts" / "overlay.yaml").write_text(_TABLE)
+    monkeypatch.setenv("ONEX_SKILL_OVERLAY_ROOTS", str(root))
+    assert len(_lab_check("ssh h301 uptime")) == 1
+
+
+def test_lab_host_work_ssh_config_alias_seen_with_pool_variable_unset(
+    lab_env: Path,
+) -> None:
+    lab_ip = _ip(10, 1, 2, 3)
+    (lab_env / ".ssh" / "config").write_text(f"Host labalias\n  HostName {lab_ip}\n")
+    assert len(_lab_check("ssh labalias uptime")) == 1
+    assert len(_lab_check(f"ssh {lab_ip} uptime")) == 1
+    # The /24 of a configured lab address is the lab subnet.
+    assert len(_lab_check(f"ssh root@{_ip(10, 1, 2, 77)} docker ps")) == 1
+    assert _lab_check(f"ssh {_ip(10, 1, 3, 3)} uptime") == []
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        f"ssh {_ip(192, 168, 86, 201)} docker ps",
+        f"ssh root@{_ip(192, 168, 1, 45)} uptime",
+        f"run docker ps against {_ip(192, 168, 9, 9)}",
+    ],
+)
+def test_lab_host_work_private_lan_address_refused_with_nothing_configured(
+    lab_env: Path, prompt: str
+) -> None:
+    findings = _lab_check(prompt)
+    assert len(findings) == 1 and "no declared placement" in findings[0].reason
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        f"ssh {_ip(10, 0, 0, 5)} uptime",
+        f"ssh {_ip(203, 0, 113, 5)} uptime",
+        f"release {_ip(192, 168, 86, 1)} notes mention a router",
+    ],
+)
+def test_lab_host_work_other_address_untouched(lab_env: Path, prompt: str) -> None:
+    assert _lab_check(prompt) == []
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "<reason>",
+        "TBD",
+        "todo",
+        "n/a",
+        "none",
+        "reason",
+        "needed",
+        "because",
+        "..",
+    ],
+)
+def test_lab_host_work_local_only_placeholder_reason_refused(
+    lab_table: None, reason: str
+) -> None:
+    assert len(_lab_check(f"LOCAL-ONLY: {reason}\\nssh h201 ls")) == 1
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "reading a mac-local file the lab cannot reach",
+        "the keychain only unlocks on the operator Mac",
+    ],
+)
+def test_lab_host_work_local_only_real_reason_allowed(
+    lab_table: None, reason: str
+) -> None:
+    assert _lab_check(f"LOCAL-ONLY: {reason}\\nssh h201 ls") == []
+
+
+def _lab_script(prompt_expr: str, setup: str = "", label: str = "r") -> list[Any]:
+    source = f"{setup}\nawait agent({prompt_expr}, {{ label: '{label}', model: 'sonnet' }})\n"
+    return list(_GUARD.check_workflow_script(source, ALLOWLIST, filename="case.js"))
+
+
+def test_lab_host_work_const_held_prompt_read_by_name(lab_table: None) -> None:
+    findings = _lab_script("PROMPT", "const PROMPT = 'ssh h201 docker ps'")
+    assert len(findings) == 1 and "no declared placement" in findings[0].reason
+    findings = _lab_script("PROMPT", "const PROMPT = `run\nssh h201 ls`;")
+    assert len(findings) == 1
+
+
+def test_lab_host_work_const_chain_template_and_concat_read(lab_table: None) -> None:
+    setup = "const CMD = 'ssh h201 docker ps'\nconst BODY = `do: ${CMD}`\n"
+    assert len(_lab_script("BODY", setup)) == 1
+    assert len(_lab_script("'prefix ' + CMD", setup)) == 1
+    assert len(_lab_script("`pre ${BODY}`", setup)) == 1
+
+
+def test_lab_host_work_function_built_prompt_read(lab_table: None) -> None:
+    setup = "function build(x) { return `ssh h201 uptime ${x}` }\n"
+    assert len(_lab_script("build(1)", setup)) == 1
+
+
+def test_lab_host_work_const_held_prompt_with_declaration_admitted(
+    lab_table: None,
+) -> None:
+    setup = "const PROMPT = 'PLACEMENT: remote-lane\\nssh h201 docker ps'"
+    assert _lab_script("PROMPT", setup) == []
+    assert (
+        _lab_script(
+            "PROMPT",
+            "const PROMPT = 'ssh h201 ls'",
+            label="LOCAL-ONLY: the keychain lives on this Mac",
+        )
+        == []
+    )
+
+
+def test_lab_host_work_const_held_clean_prompt_untouched(lab_table: None) -> None:
+    assert _lab_script("PROMPT", "const PROMPT = 'summarise the design note'") == []
+    assert _lab_script("`explain ${TOPIC}`", "const TOPIC = 'docker layers'") == []
+
+
+@pytest.mark.parametrize(
+    ("expr", "setup"),
+    [
+        ("args.prompt", ""),
+        ("PROMPT", "const PROMPT = args.prompt"),
+        ("pick(items)", ""),
+        ("`${x}`", "const x = readIt()"),
+    ],
+)
+def test_lab_host_work_unreadable_prompt_refused(
+    lab_table: None, expr: str, setup: str
+) -> None:
+    findings = _lab_script(expr, setup)
+    assert len(findings) == 1 and "cannot be read" in findings[0].reason
+
+
+def test_lab_host_work_unreadable_prompt_with_declaration_admitted(
+    lab_table: None,
+) -> None:
+    assert _lab_script("args.prompt", label="PLACEMENT: remote-lane") == []
 
 
 def test_lab_host_work_real_hook_refuses_then_admits(lab_table: None) -> None:
