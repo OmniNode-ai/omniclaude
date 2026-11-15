@@ -473,3 +473,15 @@ dod_evidence:
       cwd: ${OMNI_HOME}/omniclaude
     binds_ac:
     - AC1
+  - id: dod-omn19998-dispatch-claim-review-by-2026-12-15
+    description: "The hook inventory gate and its tests read the two dispatch-claim disabled_hooks rows with review_by 2026-12-15, so DISABLE_REVIEW_LAPSED no longer fires on 2026-11-15. The date check fails on the 2026-11-14 value."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_hook_inventory_dispatch_claim_review_by_omn19998.py -q --no-cov"
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_hook_inventory.py -q --no-cov"
+      - check_type: command
+        check_value: "grep -c 'review_by: \"2026-12-15\"' plugins/onex/hooks/contracts/hook_inventory.yaml"
+    binds_ac:
+      - "AC1"
