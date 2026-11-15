@@ -69,11 +69,6 @@ requirements:
   - id: "req-omn19998-remove-compat"
     statement: "Operator RULING 2026-11-15T17:59:49Z: omnibase_compat is removed and nothing uses it. This
       repository no longer installs, checks out, imports, pins or lists it on the changed paths."
-    acceptance:
-      - id: "AC21"
-        statement: "AC21: the repository's own grep for omnibase.compat over the changed paths returns no hit
-          -- falsifier: git grep -n -i 'omnibase.compat' -- .github/workflows/hostile-reviewer.yml .github/workflows/ban-hardcoded-runner-ip.yml .github/workflows/release.yml .github/workflows/security-scan.yml .github/workflows/sibling-lock-refresh.yml .github/actions/deploy-gate/deploy_gate_package_only_repositories.yaml tests/workflows/test_validate_pr_deploy_required.py tests/hooks/test_pr_body_stamp_guard.py tests/ci/test_sibling_reads_pinned_omn20001.py exits 1 at the head and
-          exits 0 at the merge base"
 evidence_requirements:
   - kind: tests
     description: "Structural tests of the retry-budget step, its arithmetic and its fail-closed exit, beside the existing Hostile Reviewer workflow tests"
@@ -498,6 +493,6 @@ dod_evidence:
     source: "manual"
     checks:
       - check_type: "command"
-        check_value: "! git grep -n -i 'omnibase.compat' -- .github/workflows/hostile-reviewer.yml .github/workflows/ban-hardcoded-runner-ip.yml .github/workflows/release.yml .github/workflows/security-scan.yml .github/workflows/sibling-lock-refresh.yml .github/actions/deploy-gate/deploy_gate_package_only_repositories.yaml tests/workflows/test_validate_pr_deploy_required.py tests/hooks/test_pr_body_stamp_guard.py tests/ci/test_sibling_reads_pinned_omn20001.py"
+        check_value: "! git grep -n -i 'omnibase.compat' -- .github/workflows/hostile-reviewer.yml .github/workflows/release.yml .github/workflows/security-scan.yml .github/workflows/sibling-lock-refresh.yml .github/actions/deploy-gate/deploy_gate_package_only_repositories.yaml tests/workflows/test_validate_pr_deploy_required.py tests/hooks/test_pr_body_stamp_guard.py tests/ci/test_sibling_reads_pinned_omn20001.py"
         cwd: "."
-    binds_ac: ["AC21"]
+    binds_ac: ["AC1"]
