@@ -6,113 +6,45 @@
 Why this exists
 ---------------
 On 2026-09-01 one session dispatched 41 workflow scripts whose ``agent()``
-calls omitted ``model:``. Every one of those agents inherited the parent
-session's model, which was Fable -- banned for background work by memory
-``feedback_fable_foreground_orchestration_only``. Measured over that session's
-script directory: 131 ``agent()`` call sites in 101 scripts, of which 38 carry
-no explicit model by the structural count this module performs (the forensics
-pass, counting by hand off a regex, reported 41 -- the discrepancy is itself an
-argument for structural parsing). Either way a 29 percent miss rate, invisible
-until a forensics pass hours later, after the work had already run on the
-banned model.
+calls omitted ``model:`` and inherited the banned parent model (CLAUDE.md,
+"Background-agent model guard", holds the measurements).
 
-The control that was supposed to stop this was a memory entry. It failed 41
-times, silently, in one session. The default is inherited and invisible: the
-omission is unobservable at author time and unobservable at run time. A control
-that only surfaces a violation after the fact is not a control.
+Workflow scripts live in **no repository** and the ``Agent`` tool inherits the
+parent's model when none is named (``subagent_type: "fork"`` always does), so
+the dispatch seam is the only place the choice is observable. This is the
+decision core of a ``PreToolUse`` hook that REFUSES the call.
 
-Two facts decide the shape of the fix:
+Deliberately NOT built: a wrapper that supplies ``sonnet`` when ``model`` is
+missing; a substituted default recreates the invisible choice. The author
+chooses per call or the call does not run.
 
-* Workflow scripts live under ``~/.claude/projects/<project>/workflows/scripts/``
-  and are in **no repository**, so a pre-commit hook or a repo CI validator
-  never sees them. The dispatch seam is the only place the choice is observable
-  before the cost is incurred.
-* The ``Agent`` tool has the same hole from the other side. A call with no
-  ``model`` inherits the parent's; ``subagent_type: "fork"`` *always* inherits
-  the parent's and has no way not to.
+Parsing is structural, never a line grep: a regex cannot tell an options object
+from a prompt that contains the text ``model:`` or follow a nested one.
+``_mask()`` walks the source once and blanks the *contents* of comments,
+quoted strings, template literals **and regular-expression literals**
+(preserving length and newlines, re-entering code mode inside ``${...}``).
+Every structural decision is made on the masked text; every *value* is read
+from the original text.
 
-So this module is the decision core of a ``PreToolUse`` hook that REFUSES the
-call, the same primitive as ``pre_tool_use_worktree_guard.sh`` refusing a
-``git worktree add`` outside the canonical root. It is not a linter and not a
-warning.
+Regex tokenisation is not a nicety (OMN-17499 follow-up): ``/^https?:\\/\\//``
+read as a line comment blanks its line. ``/`` is classified as a JavaScript
+lexer does, an ambiguous ``/`` after ``)``, ``]`` or ``}`` whose readings
+disagree is refused, and an unterminated string, template or block comment
+proves the scan desynchronised.
 
-Deliberately NOT built here
----------------------------
-The originating spec proposed a second layer: a runtime wrapper that supplies
-``sonnet`` when ``model`` is missing. That is not shipped, and the omission is
-the point. A wrapper that substitutes a default recreates the exact property
-that caused the incident -- an invisible model choice -- and would mask the
-omissions this validator exists to make visible. The author makes the cost
-choice, per call, or the call does not run.
+Any of those voids the whole scan, since a desynchronised mask reclassifies
+every byte after it: one finding names the position and the dispatch is
+refused. A *reference* to the ``agent`` helper that is not a call
+(``const a = agent``, ``[agent]``, a destructure) is refused too, because a
+dispatch through an alias is invisible to a scanner looking for ``agent(``.
 
-Parsing
--------
-Structural, never a line grep. The spec's own first-draft regex reported 131 of
-131 calls missing when 93 of them name a model perfectly well; a regex cannot
-tell an options object from a prompt that happens to contain the text
-``model:``, and it cannot follow a multi-line or nested one.
+Routing contract (OMN-17427): every ``agent()`` options object and ``Agent``
+input carries a ``ROUTE:`` line checked against contract_agent_routing.yaml
+(see ``ROUTE_FIX_LINE``).
 
-``_mask()`` walks the source once and blanks the *contents* of comments, single
-and double quoted strings, template literals **and regular-expression
-literals** -- preserving length, newlines and delimiters, and correctly
-re-entering code mode inside ``${...}`` substitutions so a nested template
-cannot desynchronise the scan. Every structural decision afterwards is made on
-the masked text (where no brace, paren, comma, quote or slash inside a string,
-comment or pattern survives to be miscounted) while every *value* is read from
-the original text.
-
-Regex tokenisation is not a nicety (OMN-17499 follow-up). The first shipped
-revision did not tokenise patterns, and its own docstring claimed the residual
-failed closed. It did not. A regex is ordinary code to a scanner that cannot
-see it, so ``/^https?:\\/\\//`` read as a line comment and blanked the rest of
-its line -- including an ``agent(`` token that followed it -- and
-``/[^'"]+/`` opened a "string" at the quote inside the character class that ran
-until some later line's quote closed it, blanking every ``agent(`` in between.
-Both cases exited 0. The claim that an unparseable call fails closed held only
-when the desynchronisation landed *inside* an argument list; when it landed
-before the call, the call stopped existing.
-
-So the mask now reports what it could not resolve instead of guessing:
-
-* ``/`` is classified the way a JavaScript lexer classifies it -- pattern in
-  expression position, division after a value -- and patterns are parsed with
-  character classes and escapes, so ``\\/`` and ``[a/b]`` do not terminate one.
-* ``)``, ``]`` and ``}`` are the one position where both readings are
-  grammatical (``(a + b) / 2`` versus ``if (ok) /x/.test(s)``). Division is
-  assumed only when the two readings cannot disagree about the rest of the
-  file; when the candidate pattern carries a quote, a backslash, a bracket or
-  a comment opener, the script is refused.
-* A single- or double-quoted string that never closes on its line is not valid
-  JavaScript, so it is proof the scan desynchronised. Same for an unterminated
-  template or block comment.
-
-Any of those voids the whole scan, not just the construct it tripped on: a
-desynchronised mask reclassifies every byte after it. ``check_workflow_script``
-returns one finding naming the position and the reason, and the dispatch is
-refused.
-
-The scanner also refuses a *reference* to the ``agent`` helper that is not a
-call -- ``const a = agent``, ``[agent]``, a destructure. Dispatches through an
-alias are invisible to a scanner looking for ``agent(``, and a control that
-only holds against the accident it was built for is not a control. Measured on
-the live corpus of 1895 workflow scripts, no real script carries one.
-
-Routing contract (OMN-17427)
-----------------------------
-A named model is not yet a justified one. The sibling contract_agent_routing.yaml
-carries the task-complexity routing contract (OMN-17427): seven scored
-dimensions, bands B0 to B5 with the models and efforts each allows, and the hard
-floors (R=3 or J=3 means Opus at least). Every ``agent()`` options object and
-every ``Agent`` input must carry one line in its prompt or label::
-
-    ROUTE: band=<B> score=<n> dims=S<s>A<a>R<r>V<v>N<n>C<c>J<j> dest=<d> model=<m> effort=<e>
-
-The gate refuses a missing or unparsable ROUTE like a missing model, and a ROUTE
-whose model is not the declared model or not in the band's set, whose effort is
-not in the band's set, whose score is not the sum of its dims, that sits below a
-hard floor, or that sits below the band its score implies. The contract is
-parsed with the standard library only (a strict in-module YAML-subset parser,
-because PyYAML cannot be assumed), on the same fail-closed path.
+Lab-host work (OMN-24618): an ``agent()`` prompt that runs ssh, docker or
+systemctl against a lab host alias (ssh config ``Host`` names and the
+``LANDING_POOL_HOSTS`` rows) is refused unless it declares a placement.
 
 ``meta.phases[].model`` is informational only and is not inspected: it declares
 UI phase metadata, not the model a dispatched agent runs on. The per-call
@@ -123,6 +55,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from dataclasses import dataclass
@@ -228,6 +161,60 @@ _ROUTE_RE: Final[re.Pattern[str]] = re.compile(
     r"dest=(?P<dest>[^\s\\]+) model=(?P<model>[A-Za-z0-9_.-]+) "
     r"effort=(?P<effort>[A-Za-z0-9_.-]+)"
 )
+
+#: The one-line remedy for an agent() prompt that does lab-host work (OMN-24618).
+LAB_HOST_FIX_LINE: Final[str] = (
+    "Fix: this prompt does lab-host work; declare one line in the prompt or "
+    "label: `PLACEMENT: remote-lane`, `PLACEMENT: fable-review` or "
+    "`LOCAL-ONLY: <reason>` (a non-empty reason)."
+)
+_LAB_DECL_RE: Final[re.Pattern[str]] = re.compile(
+    r"PLACEMENT:[ \t]*(?:remote-lane|fable-review)\b|LOCAL-ONLY:[ \t]*[^\s\\]*\w{2}",
+    re.IGNORECASE,
+)
+_LAB_CMD_RE: Final[re.Pattern[str]] = re.compile(
+    r"(?<![\w-])(?:ssh|docker|systemctl)(?![\w-])", re.IGNORECASE
+)
+
+
+def _lab_aliases() -> set[str]:
+    """Lab host names: ssh config ``Host`` entries and ``LANDING_POOL_HOSTS`` rows."""
+    try:
+        config = (Path.home() / ".ssh" / "config").read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError, RuntimeError):
+        config = ""
+    names = {
+        t
+        for m in re.finditer(r"^\s*Host\s+(.+)$", config, re.IGNORECASE | re.MULTILINE)
+        for t in m[1].split()
+        if not set(t) & set("*?!")
+    }
+    try:
+        rows = json.loads(os.environ.get("LANDING_POOL_HOSTS", "[]"))
+    except ValueError:
+        rows = []
+    names |= {
+        str(r[k]).rsplit("@", 1)[-1]
+        for r in (rows if isinstance(rows, list) else [])
+        for k in ("name", "target")
+        if isinstance(r, dict) and r.get(k)
+    }
+    return {n.lower() for n in names} - {"github.com"}
+
+
+def _lab_host_work_problem(text: str) -> str | None:
+    """Why ``text`` does undeclared lab-host work, or ``None`` when it does not."""
+    if _LAB_DECL_RE.search(text):
+        return None
+    for line in re.split(r"\r?\n|\\n", text):
+        cmd = _LAB_CMD_RE.search(line)
+        for alias in sorted(_lab_aliases()) if cmd else ():
+            if re.search(rf"(?<![\w.-]){re.escape(alias)}(?![\w-]|\.\w)", line, re.I):
+                return (
+                    f"{cmd[0].lower()} on lab host {alias!r} with no declared placement"
+                )
+    return None
+
 
 _DIMENSION_KEYS: Final[tuple[str, ...]] = tuple("SARVNCJ")
 _BAND_NAMES: Final[tuple[str, ...]] = ("B0", "B1", "B1c", "B2", "B3", "B4", "B5")
@@ -1421,11 +1408,16 @@ def check_workflow_script(
             )
             continue
 
+        label_prop = [prop for prop in props if prop.key == "label"]
+        route_text = source[spans[0][0] : spans[0][1]] + "".join(
+            source[prop.value_start : prop.value_end] for prop in label_prop
+        )
+        lab = _lab_host_work_problem(route_text)
+        if lab is not None:
+            findings.append(Finding(file=filename, line=line, label=label, reason=lab))
+            continue
+
         if routing is not None:
-            label_prop = [prop for prop in props if prop.key == "label"]
-            route_text = source[spans[0][0] : spans[0][1]] + "".join(
-                source[prop.value_start : prop.value_end] for prop in label_prop
-            )
             problem = _route_problem(routing, route_text, literal)
             if problem is not None:
                 findings.append(
@@ -1525,12 +1517,16 @@ def check_agent_input(
             )
         ]
 
+    route_text = "\n".join(
+        value
+        for value in (tool_input.get("prompt"), description)
+        if isinstance(value, str)
+    )
+    lab = _lab_host_work_problem(route_text)
+    if lab is not None:
+        return [Finding(file=_AGENT_TOOL_FILE, line=0, label=label, reason=lab)]
+
     if routing is not None:
-        route_text = "\n".join(
-            value
-            for value in (tool_input.get("prompt"), description)
-            if isinstance(value, str)
-        )
         problem = _route_problem(routing, route_text, model.strip())
         if problem is not None:
             return [Finding(file=_AGENT_TOOL_FILE, line=0, label=label, reason=problem)]
@@ -1560,6 +1556,11 @@ def render_block_reason(findings: list[Finding], allowlist: frozenset[str]) -> s
             "",
             FIX_LINE,
             ROUTE_FIX_LINE,
+            *(
+                [LAB_HOST_FIX_LINE]
+                if "lab host" in "".join(f.reason for f in findings)
+                else []
+            ),
             f"Allowed models: {_allowed(allowlist)} "
             f"(config: {DEFAULT_ALLOWLIST_PATH}).",
             "To disable this guard deliberately: "

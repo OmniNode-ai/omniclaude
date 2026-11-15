@@ -1314,3 +1314,172 @@ def test_effort_is_read_from_the_agent_options_object() -> None:
     ]
     assert efforts == ["low"]
     assert _check(source) == []
+
+
+# ---------------------------------------------------------------------------
+# Lab-host work (OMN-24618)
+# ---------------------------------------------------------------------------
+
+_LAB_HANDLER_PY = (
+    _REPO_ROOT / "src" / "omniclaude" / "handlers" / "handler_lab_host_work.py"
+)
+
+
+@pytest.fixture
+def lab_table(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Lab hosts: h201 and h202 from the pool table, labbox from the ssh config."""
+    (tmp_path / ".ssh").mkdir()
+    (tmp_path / ".ssh" / "config").write_text("Host labbox\nHost *\nHost github.com\n")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv(
+        "LANDING_POOL_HOSTS", json.dumps([{"name": "h201"}, {"name": "h202"}])
+    )
+
+
+def _lab_check(prompt: str, label: str = "r") -> list[Any]:
+    source = f"await agent(`{prompt}`, {{ label: '{label}', model: 'sonnet' }})\n"
+    return list(_GUARD.check_workflow_script(source, ALLOWLIST, filename="case.js"))
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "run ssh h201 docker ps and report",
+        "ssh -o BatchMode=yes me@labbox uptime",
+        "run docker ps on h202 and list the containers",
+        "systemctl restart onex on h201",
+        "first do a thing\\nthen ssh h201 ls",
+    ],
+)
+def test_lab_host_work_refused_without_declaration(
+    lab_table: None, prompt: str
+) -> None:
+    findings = _lab_check(prompt)
+    assert len(findings) == 1
+    assert "no declared placement" in findings[0].reason
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "ssh h201 ls LOCAL-ONLY:",
+        "ssh h201 ls LOCAL-ONLY:   \\nmore",
+        "ssh h201 ls LOCAL-ONLY: .",
+    ],
+)
+def test_lab_host_work_refused_with_empty_local_only_reason(
+    lab_table: None, prompt: str
+) -> None:
+    assert len(_lab_check(prompt)) == 1
+
+
+_DECLARATIONS = [
+    "PLACEMENT: remote-lane",
+    "PLACEMENT: fable-review",
+    "LOCAL-ONLY: reading a mac-local file the lab cannot reach",
+]
+
+
+@pytest.mark.parametrize("declaration", _DECLARATIONS)
+def test_lab_host_work_allowed_with_declaration_in_prompt(
+    lab_table: None, declaration: str
+) -> None:
+    assert _lab_check(f"{declaration}\\nssh h201 docker ps") == []
+
+
+@pytest.mark.parametrize("declaration", _DECLARATIONS)
+def test_lab_host_work_allowed_with_declaration_in_label(
+    lab_table: None, declaration: str
+) -> None:
+    assert _lab_check("ssh h201 docker ps", label=declaration) == []
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "ssh buildbox.example.com uptime",
+        "the docker image is rebuilt nightly; explain how docker layers work",
+        "summarise the h201 design note",
+        "systemctl --user status mything",
+    ],
+)
+def test_lab_host_work_unrelated_prompt_untouched(lab_table: None, prompt: str) -> None:
+    assert _lab_check(prompt) == []
+
+
+def test_lab_host_work_no_table_means_nothing_to_refuse(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("LANDING_POOL_HOSTS", raising=False)
+    assert _lab_check("ssh h201 ls") == []
+
+
+def test_lab_host_work_agent_tool_refused_and_admitted(lab_table: None) -> None:
+    refused = _GUARD.check_agent_input(
+        {"model": "sonnet", "prompt": "ssh h201 docker ps"}, ALLOWLIST
+    )
+    assert len(refused) == 1
+    admitted = _GUARD.check_agent_input(
+        {
+            "model": "sonnet",
+            "prompt": "ssh h201 docker ps",
+            "description": "PLACEMENT: remote-lane",
+        },
+        ALLOWLIST,
+    )
+    assert admitted == []
+
+
+def test_lab_host_work_aliases_load_from_ssh_config_and_pool_table(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / ".ssh").mkdir()
+    (tmp_path / ".ssh" / "config").write_text(
+        "Host alpha beta\nHost *\nHost github.com\n"
+    )
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv(
+        "LANDING_POOL_HOSTS", json.dumps([{"name": "h201", "target": "me@gamma"}])
+    )
+    assert _GUARD._lab_aliases() == {
+        "alpha",
+        "beta",
+        "h201",
+        "gamma",
+    }
+
+
+def test_lab_host_work_real_hook_refuses_then_admits(lab_table: None) -> None:
+    """The registered shell hook, end to end: refused undeclared, silent when declared."""
+    bash = shutil.which("bash")
+    assert bash is not None
+
+    def run(prompt: str) -> subprocess.CompletedProcess[str]:
+        script = (
+            f"await agent(`{_ROUTE_B3}\\n{prompt}`, {{ label: 'r', model: 'sonnet' }})"
+        )
+        payload = json.dumps(
+            {"tool_name": "Workflow", "tool_input": {"script": script}}
+        )
+        return subprocess.run(
+            [bash, str(_HOOK_SCRIPT)],
+            input=payload,
+            capture_output=True,
+            text=True,
+            env={
+                **os.environ,
+                "CLAUDE_PLUGIN_ROOT": str(_REPO_ROOT / "plugins" / "onex"),
+                "CLAUDE_PROJECT_DIR": str(_REPO_ROOT),
+            },
+            cwd=_REPO_ROOT,
+            timeout=_TIMEOUT_S,
+            check=False,
+        )
+
+    refused = run("ssh h201 docker ps")
+    assert refused.returncode == 2, refused.stdout + refused.stderr
+    assert "no declared placement" in refused.stdout
+    assert "PLACEMENT: remote-lane" in refused.stdout
+    admitted = run("PLACEMENT: remote-lane\\nssh h201 docker ps")
+    assert admitted.returncode == 0 and admitted.stdout == ""

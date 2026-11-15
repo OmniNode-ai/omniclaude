@@ -1,0 +1,27 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-24618
+title: "The Workflow guard refuses a Mac agent prompt that does lab-host work unless it declares placement"
+summary: >
+  Extends the PreToolUse Workflow/Agent dispatch gate (workflow_model_guard.py)
+  to refuse an agent() prompt that runs ssh, docker or systemctl against a lab
+  host alias unless the prompt or label declares remote-lane placement, a Fable
+  review, or LOCAL-ONLY with a non-empty reason.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "lab_host_work refused, allowed and unrelated fixtures pass"
+    command: "uv run pytest tests/hooks -k lab_host_work -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-lab-host-work-refused
+    description: "A Workflow agent() prompt that does lab-host work with no declared placement is refused by the real hook; each of remote-lane placement, a Fable review and LOCAL-ONLY with a reason admits it"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -k lab_host_work -q --no-cov"
