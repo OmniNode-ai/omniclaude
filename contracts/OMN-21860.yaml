@@ -48,7 +48,7 @@ dod_evidence:
       - check_type: test_passes
         check_value: "uv run pytest tests/hooks/test_hook_inventory.py -q --no-cov -k 'test_inventory_parses_and_the_live_tree_is_green or test_every_disable_carries_the_four_omn_17006_fields or test_declared_disables_are_on_disk_and_unregistered or test_disables_are_within_review_today'"
       - check_type: command
-        check_value: "bash -o pipefail -c 'test \"$(grep -c \"review_by: .2026-11-14.\" plugins/onex/hooks/contracts/hook_inventory.yaml)\" -ge 2'"
+        check_value: "bash -o pipefail -c 'test \"$(grep -c \"review_by: .2026-12-14.\" plugins/onex/hooks/contracts/hook_inventory.yaml)\" -ge 2'"
         cwd: "${OMNI_HOME}/omniclaude"
       - check_type: command
         check_value: "uv run python scripts/validation/validate_hook_inventory.py"
@@ -61,3 +61,13 @@ dod_evidence:
       - check_type: command
         check_value: "bash -o pipefail -c 'test -z \"$(git diff origin/dev --stat -- plugins/onex/hooks/lib/hook_inventory.py)\" && grep -q \"Reviewed 2026-11-01 (OMN-21860)\" plugins/onex/hooks/contracts/hook_inventory.yaml'"
         cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn21860-review-renewed-2026-11-15
+    description: "The 2026-11-14 review_by lapsed; D1 to D4 were re-read on 2026-11-15 against origin/dev and still hold, so both entries move to 2026-12-14."
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: command
+        check_value: "uv run python scripts/validation/validate_hook_inventory.py"
+        cwd: "${OMNI_HOME}/omniclaude"
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_hook_inventory.py -q --no-cov -k test_disables_are_within_review_today"
