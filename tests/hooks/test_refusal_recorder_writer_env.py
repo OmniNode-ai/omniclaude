@@ -72,14 +72,23 @@ def test_error_chain_writer_that_cannot_start_returns_none(
 ) -> None:
     """Error chain: a writer that raises OSError is a failed recording, never an exception."""
 
+    seen: list[dict[str, str]] = []
+
     def raise_os_error(
         *args: object, **kwargs: object
     ) -> subprocess.CompletedProcess[str]:
+        env = kwargs["env"]
+        assert isinstance(env, dict)
+        seen.append(env)
         raise OSError("fixture writer unavailable")
 
+    for name, value in SERVE_ENV.items():
+        monkeypatch.setenv(name, value)
     monkeypatch.setattr(recorder.subprocess, "run", raise_os_error)
 
     assert (
         recorder._run_writer("row", ledger=Path("/x"), project=Path("/y"), timeout="1s")
         is None
     )
+    assert len(seen) == 1
+    assert not set(SERVE_ENV) & set(seen[0])

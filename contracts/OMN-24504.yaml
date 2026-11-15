@@ -35,7 +35,7 @@ dod_evidence:
         check_value: uv run pytest tests/hooks/test_refusal_recorder_writer_env.py -q -k "drops or bus_environment"
         cwd: ${OMNI_HOME}/omniclaude
   - id: dod-omn24504-ac2
-    description: A writer that raises OSError returns None.
+    description: A writer that raises OSError returns None, and was started without the direct-write markers (fails at the merge base, which passes no env).
     source: manual
     execution_scope: hosted_and_local
     binds_ac:
@@ -45,12 +45,12 @@ dod_evidence:
         check_value: uv run pytest tests/hooks/test_refusal_recorder_writer_env.py -q -k error_chain
         cwd: ${OMNI_HOME}/omniclaude
   - id: dod-omn24504-ac3
-    description: The existing recorder suites still pass with the change; the integrated reading on the ledger host is recorded in the pull request comment.
+    description: The new writer-environment tests and the existing recorder suites pass with the change (the new tests fail at the merge base); the integrated reading on the ledger host is recorded in the pull request comment.
     source: manual
     execution_scope: hosted_and_local
     binds_ac:
       - AC3
     checks:
       - check_type: test_passes
-        check_value: uv run pytest tests/hooks/test_refusal_recorder_delivery_omn20883.py tests/hooks/test_refusal_recorder_state_omn20265.py -q
+        check_value: uv run pytest tests/hooks/test_refusal_recorder_writer_env.py tests/hooks/test_refusal_recorder_delivery_omn20883.py tests/hooks/test_refusal_recorder_state_omn20265.py -q
         cwd: ${OMNI_HOME}/omniclaude
