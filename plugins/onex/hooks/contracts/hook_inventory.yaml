@@ -1276,15 +1276,19 @@ expected_hooks:
     order: 0
 
 disabled_hooks:
-  # Review date moved 2026-10-31 -> 2026-11-14 for the two dispatch-claim rows
+  # Review date moved 2026-10-31 -> 2026-12-15 for the two dispatch-claim rows
   # below. OMN-21845 first moved it to 2026-12-31 to clear the gate; OMN-21860
   # then did the review itself and re-read all four defects against origin/dev
-  # on 2026-11-01, so the date is the reviewed one and each row records what was
-  # re-read. OMN-17005 is still in Backlog with none of its ACs held, so
+  # on 2026-11-01 and set 2026-11-14. That date lapsed on the clock and turned
+  # the required Hook Inventory Gate, Hooks System Tests and Pre-commit Suite
+  # red on omniclaude dev at bda4c6a5f regardless of any diff (the same lapse
+  # that went red at 76c05c284 under the earlier date). OMN-19998 re-read all
+  # four defects against origin/dev on 2026-11-15 and each still holds, so the
+  # date moved to 2026-12-15 and the first row records the re-read.
+  # OMN-17005 is still in Backlog with none of its ACs held, so
   # re-registration is not available, and it has not closed won't-fix, so
-  # conversion to kind delete is not available either. The date lapsing on the
-  # clock turned the required Hook Inventory Gate red on omniclaude dev at
-  # 76c05c284 regardless of any diff. The OMN-17005 decision is still owed.
+  # conversion to kind delete is not available either. The OMN-17005 decision
+  # is still owed.
   - script: "hook_dispatch_claim_pretool.sh"
     owner: "omniclaude hooks lane"
     reason: >
@@ -1296,15 +1300,18 @@ disabled_hooks:
       anonymous lanes are the same claimant and never collide; and the lease
       is a fixed non-renewable 300s whose expiry deletes the claim file
       instead of recording CLAIM_EXPIRED. Re-read against origin/dev on
-      2026-11-01 (OMN-21860): all four still hold. D1 hook_dispatch_claim_pretool.sh
+      2026-11-01 (OMN-21860) and again on 2026-11-15 (OMN-19998): all four
+      still hold. D1 hook_dispatch_claim_pretool.sh
       sources error-guard.sh at line 38 and exits 2 at line 146 with no
       `trap - EXIT`, so error-guard.sh line 222 still turns it into exit 0.
       D2 line 145 still prints {"type":"permissionDenied"}. D3 line 79 is
       still AGENT_ID="${CLAUDE_AGENT_ID:-session}". D4 dispatch_claim_gate.py
       has _DEFAULT_TTL = 300 (line 50) and unlinks an expired claim at line
       261 with no renewal, fencing token or CLAIM_EXPIRED record. OMN-17005
-      is still Backlog. Re-read 2026-11-15 (OMN-21262 landing): D1 to D4 still hold.
-    review_by: "2026-11-28"
+      is still Backlog. Re-read again on 2026-11-15: D1 to D4 still hold at the
+      same lines (error-guard source line 38, exit 2 line 146, permissionDenied
+      line 145, AGENT_ID fallback line 79, _DEFAULT_TTL line 50, unlink line 261).
+    review_by: "2026-12-15"
     restoration:
       kind: "re_register"
       reenable_ticket: "OMN-17005"
@@ -1325,8 +1332,8 @@ disabled_hooks:
       pre-tool sibling — a release path registered without its acquire path
       would report `not_owner` on every call. Reviewed 2026-11-01 (OMN-21860):
       the acquire half's defects D1 to D4 still hold, so this half stays
-      disabled with it.
-    review_by: "2026-11-28"
+      disabled with it. Re-checked 2026-11-15 (OMN-19998): still held.
+    review_by: "2026-12-15"
     restoration:
       kind: "re_register"
       reenable_ticket: "OMN-17005"

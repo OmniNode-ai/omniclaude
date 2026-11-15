@@ -32,11 +32,14 @@ if ! declare -F onex_hook_gate >/dev/null 2>&1; then
         bit="$(hook_bits_bit_for_name "$bit_name" 2>/dev/null || true)"
         [[ -z "$bit" ]] && return 0
 
-        local mask
+        # OMN-22498: with no ONEX_HOOKS_MASK in the environment, honour the mask
+        # `onex hooks enable|disable` saved (Claude Code does not export it). Bash
+        # builtins only: the per-tool-call process budget allows no extra exec here.
+        local mask saved="${ONEX_HOOKS_MASK:-}" _l; [[ -n "$saved" ]] || { while IFS= read -r _l || [[ -n "$_l" ]]; do [[ "$_l" == ONEX_HOOKS_MASK=* ]] && saved="${_l#ONEX_HOOKS_MASK=}"; done < "${OMNIBASE_ENV_FILE:-$HOME/.omnibase/.env}"; } 2>/dev/null || true; saved="${saved//[\"\']/}"; saved="${saved%%[[:space:]#]*}"
         if declare -F hook_bits_parse_mask >/dev/null 2>&1; then
-            mask="$(hook_bits_parse_mask "${ONEX_HOOKS_MASK:-${HOOK_BITS_DEFAULT_MASK:-}}")"
+            mask="$(hook_bits_parse_mask "${saved:-${HOOK_BITS_DEFAULT_MASK:-}}")"
         else
-            mask="${ONEX_HOOKS_MASK:-${HOOK_BITS_DEFAULT_MASK:-0}}"
+            mask="${saved:-${HOOK_BITS_DEFAULT_MASK:-0}}"
         fi
 
         if declare -F hook_bits_is_enabled >/dev/null 2>&1; then

@@ -495,18 +495,20 @@ def test_the_refusal_branch_of_the_vocabulary_step_runs_and_exits_1(
     step = steps["Deployment configuration in workflow files (private vocabularies)"]
     script = tmp_path / "gate.py"
     script.write_text("print('would run')\n", encoding="utf-8")
-    vocab = tmp_path / "v.yaml"
-    vocab.write_text(VOCAB_YAML, encoding="utf-8")
+    fetched = tmp_path / ".public-repo-hygiene-vocabulary"
+    fetched.mkdir()
+    (fetched / "v.yaml").write_text(VOCAB_YAML, encoding="utf-8")
     proc = subprocess.run(
         ["bash", "-c", str(step["run"])],
         capture_output=True,
         text=True,
         check=False,
+        cwd=tmp_path,
         env={
             "PATH": "/usr/bin:/bin",
             "SCRIPT_PATH": str(script),
-            "VOCAB_PATH": str(vocab),
-            "MODEL_VOCAB_PATH": str(tmp_path / "absent.yaml"),
+            "VOCAB_FILE": "v.yaml",
+            "MODEL_VOCAB_FILE": "absent.yaml",
             "DIFF_BASE": "",
         },
     )
@@ -521,8 +523,8 @@ def test_the_model_vocabulary_is_fetched_with_the_lab_vocabulary() -> None:
     with_block = fetch["with"]
     assert isinstance(with_block, dict)
     sparse = str(with_block["sparse-checkout"])
-    assert "vocabularies/public_repo_hygiene_lab_vocabulary.yaml" in sparse
-    assert "vocabularies/public_repo_hygiene_model_vocabulary.yaml" in sparse
+    assert "steps.vocab-files.outputs.lab_vocabulary" in sparse
+    assert "steps.vocab-files.outputs.model_vocabulary" in sparse
 
 
 def test_the_secretless_job_does_not_read_the_private_vocabularies() -> None:

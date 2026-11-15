@@ -7,7 +7,6 @@
     "not in the checker, so changing policy is a config edit rather than a code",
     "change -- and so the policy is visible in one place instead of inferred from",
     "a Python literal.",
-    "",
     "JSON rather than YAML deliberately, unlike the sibling .yaml files in this",
     "directory: the checker sits on a fail-closed enforcement path, so it must",
     "parse its own policy with the standard library alone. A missing PyYAML in",
@@ -20,10 +19,11 @@
     "passes would reintroduce exactly that. Every background agent names its own",
     "model.",
     "",
-    "Fable is absent on purpose (memory feedback_fable_foreground_orchestration_only):",
-    "Fable is a foreground-orchestration model and is banned for background work."
+    "Fable was banned here (memory feedback_fable_foreground_orchestration_only).",
+    "2026-11-10: Fable allowed for background agents on large tasks, band B5 (operator ruling; three at a time at most by practice); haiku stays out."
   ],
   "allowed_models": [
+    "fable",
     "opus",
     "sonnet"
   ]

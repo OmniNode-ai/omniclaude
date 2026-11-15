@@ -37,7 +37,6 @@ from omniclaude.models.model_internal_sibling_pins import (
 
 #: Internal siblings that resolve from a package index, by distribution name.
 REGISTRY_SIBLING_REPOS: Final[dict[str, str]] = {
-    "omnibase-compat": "omnibase_compat",
     "omnibase-core": "omnibase_core",
     "omnibase-infra": "omnibase_infra",
     "omnibase-spi": "omnibase_spi",

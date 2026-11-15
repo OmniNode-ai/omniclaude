@@ -29,8 +29,6 @@ DEFAULT_REPOS: list[str] = [
     "omnibase_spi",
     "omniintelligence",
     "omnimemory",
-    "onex_change_control",
-    "omnibase_compat",
 ]
 
 # Default coverage target per repo (can be overridden)

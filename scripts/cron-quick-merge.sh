@@ -78,7 +78,6 @@ REPOS=(
   "OmniNode-ai/omnibase_core"
   "OmniNode-ai/omnibase_infra"
   "OmniNode-ai/omnibase_spi"
-  "OmniNode-ai/omnibase_compat"
   "OmniNode-ai/omnidash"
   "OmniNode-ai/omniintelligence"
   "OmniNode-ai/omnimemory"

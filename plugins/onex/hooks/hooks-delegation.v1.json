@@ -1,6 +1,6 @@
 {
   "$schema": "https://claude.ai/schemas/hooks.json",
-  "description": "OmniClaude Delegation Hooks - Minimal hook config for delegation interception, cost accounting, and prompt classification",
+  "description": "OmniClaude Delegation Hooks - Minimal hook config for delegation interception and cost accounting, switched by the POST_SKILL_DELEGATION_ENFORCER hook bit",
   "version": "1.0.0",
   "hooks": {
     "SessionStart": [
@@ -41,16 +41,6 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_cost_accounting.sh"
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/user_prompt_delegation_classifier.sh"
           }
         ]
       }

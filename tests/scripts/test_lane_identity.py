@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import pathlib
 import shutil
 import subprocess
 from pathlib import Path
@@ -769,6 +770,48 @@ def test_the_worktrees_directory_is_never_enumerated_as_a_clone(
     repository at all."""
     names = [c.name for c in li._registry_clones(workspace)]
     assert "omni_worktrees" not in names
+
+
+def test_registry_clones_skip_an_unreadable_clone_and_still_enumerate_the_readable_ones(
+    workspace: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A child whose `.git` cannot be read is skipped, not fatal (OMN-24035).
+
+    On lab host h201 a collaborator's clone is unreadable, so `status` and
+    `reconcile` must not crash on it: the readable clones are still enumerated
+    and the workspace root is still counted."""
+    _init_clone(workspace / "locked_repo")
+
+    original_is_dir = pathlib.Path.is_dir
+
+    def _is_dir(self: pathlib.Path) -> bool:
+        if self.name == ".git" and self.parent.name == "locked_repo":
+            raise PermissionError(f"[Errno 13] Permission denied: '{self}'")
+        return original_is_dir(self)
+
+    monkeypatch.setattr(pathlib.Path, "is_dir", _is_dir)
+
+    clones = li._registry_clones(workspace)
+    names = [c.name for c in clones]
+    assert "child_repo" in names
+    assert "locked_repo" not in names
+    assert workspace.name in names
+
+
+def test_control_registry_clones_enumerate_a_readable_clone_when_nothing_is_unreadable(
+    workspace: Path,
+) -> None:
+    """Control: with no unreadable clone, the extra clone is enumerated.
+
+    Pins that the skip in the test above is caused by the unreadable `.git`
+    and not by the enumeration logic itself: a readable clone is always
+    counted."""
+    _init_clone(workspace / "locked_repo")
+
+    names = [c.name for c in li._registry_clones(workspace)]
+    assert "child_repo" in names
+    assert "locked_repo" in names
 
 
 def test_status_names_the_registry_root_when_only_the_root_is_unarmed(

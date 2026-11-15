@@ -271,14 +271,21 @@ jobs:
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dev-head-monitor-dry-run == true && 'true' || 'false' }}
         run: |
           set -euo pipefail
-          # Resolve the platform versions from this checkout's existing lock.
+          # Resolve the platform packages from this checkout's existing lock, the way
+          # the lock sources them (OMN-19998): a git source is installed from its locked
+          # commit, since its dev version may never be on the index.
           mapfile -t packages < <(python3 - <<'PY'
           import tomllib
           from pathlib import Path
           lock = tomllib.loads(Path("uv.lock").read_text())
           for name in ("omnibase-core", "omnibase-infra"):
               package = next(item for item in lock["package"] if item["name"] == name)
-              print(f"{name}=={package['version']}")
+              git = package.get("source", {}).get("git")
+              if git:
+                  url, _, sha = git.partition("#")
+                  print(f"{name} @ git+{url.split('?', 1)[0]}@{sha}")
+              else:
+                  print(f"{name}=={package['version']}")
           PY
           )
           uv run --no-project --with "${packages[0]}" --with "${packages[1]}" --with click python - <<'PY'

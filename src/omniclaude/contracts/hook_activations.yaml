@@ -57,7 +57,12 @@ hook_activations:
 
   - hook_bit: POST_SKILL_DELEGATION_ENFORCER
     enabled_by_default: true
-    description: "Enforces that skills delegate to nodes, not inline logic."
+    # Also BORROWED (OMN-22498, Jake's ruling 2026-11-09) as the one switch for
+    # Claude Code delegation: it gates pre_tool_use_delegation.sh and
+    # post_tool_use_cost_accounting.sh. No free EnumHookBit ordinal exists, the
+    # same reason PRE_TOOL_AGENT_DISPATCH_GATE is borrowed. It is not the
+    # enforcer's own bit; disabling it turns delegation and the enforcer off.
+    description: "Enforces that skills delegate to nodes, not inline logic; also switches Claude Code delegation (borrowed, OMN-22498)."
 
   - hook_bit: POST_TOOL_DELEGATION_COUNTER
     enabled_by_default: true

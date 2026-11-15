@@ -326,7 +326,6 @@ plugins/onex/hooks/scripts/test_injection_probe.sh
 plugins/onex/hooks/scripts/user-prompt-delegation-rule.sh
 plugins/onex/hooks/scripts/user-prompt-submit.sh
 plugins/onex/hooks/scripts/user_prompt_bootstrap_injector.sh
-plugins/onex/hooks/scripts/user_prompt_delegation_classifier.sh
 plugins/onex/hooks/scripts/user_prompt_session_phase_enforcement.sh
 plugins/onex/hooks/scripts/user_prompt_structured_handoff_nudge.sh
 plugins/onex/hooks/scripts/user_prompt_submit_bus_mirror.sh

@@ -71,11 +71,14 @@ def test_ci_runs_the_validator_with_the_baseline_and_feeds_quality_gate() -> Non
     workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text("utf-8"))
     job = workflow["jobs"]["first-party-ref"]
     commands = "\n".join(step.get("run", "") for step in job["steps"])
-    assert RUNTIME in commands
-    assert f"--baseline {BASELINE}" in commands
+    # OMN-19612: the validator allows one home per tag literal and reads a literal,
+    # so the job runs the hook ids whole-tree at the rev the pre-commit block owns.
+    for hook_id in HOOK_IDS:
+        assert f"pre-commit run {hook_id} --all-files" in commands
+    assert not re.search(r"dev-[0-9]{14}-[0-9a-f]{12}", commands)
     assert "first-party-ref" in workflow["jobs"]["quality-gate"]["needs"]
-    pre_commit_tag = _hook_rows()["check-action-pins"][0]["rev"]
-    assert pre_commit_tag not in commands
+    rows = _hook_rows()
+    assert all(hook["args"] == ["--baseline", BASELINE] for _, hook in rows.values())
 
 
 def test_pyproject_first_party_sources_name_a_tag_never_a_rev() -> None:
@@ -139,3 +142,21 @@ def test_one_more_finding_in_a_baselined_file_is_refused(tmp_path: Path) -> None
     canary = _runtime(copy, core_tag, "--baseline", BASELINE)
     assert canary.returncode != 0
     assert "third_party_not_sha" in canary.stdout + canary.stderr
+
+
+def test_precommit_hooks_use_a_core_tag_that_drops_the_stale_pin_limit() -> None:
+    """OMN-19612, omnibase_core tag dev-20261109232713-49e69fc7d3a4 is the first
+    that drops the stale_pin age bound."""
+    for repo, _hook in _hook_rows().values():
+        assert DEV_TAG.fullmatch(repo["rev"])
+        assert repo["rev"].removeprefix("dev-")[:14] >= "20261109232713"
+
+
+def test_first_party_ref_job_runs_both_hooks_whole_tree_with_one_tag_home() -> None:
+    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text("utf-8"))
+    job = workflow["jobs"]["first-party-ref"]
+    commands = "\n".join(step.get("run", "") for step in job["steps"])
+    # One tag home: the job runs each hook id whole-tree instead of repeating a tag.
+    for hook_id in HOOK_IDS:
+        assert f"pre-commit run {hook_id} --all-files" in commands
+    assert re.search(r"dev-[0-9]{14}-[0-9a-f]{12}", commands) is None

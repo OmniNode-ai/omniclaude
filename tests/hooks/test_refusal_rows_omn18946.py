@@ -630,7 +630,7 @@ class TestTheLockIsTakenOnlyWhenARowIsWritten:
             f"#!{sys.executable}\n"
             "import os, pathlib, sys\n"
             f"assert sys.argv[4] == {str(project)!r}\n"
-            "assert os.environ['ONEX_LEDGER_WRITE_VIA'] == 'bus'\n"
+            "assert 'ONEX_LEDGER_WRITE_VIA' not in os.environ\n"
             f"pathlib.Path({str(marker)!r}).write_text('packaged writer invoked')\n"
         )
         stub.chmod(0o755)

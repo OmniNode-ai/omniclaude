@@ -24,7 +24,9 @@
 set -euo pipefail
 _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
 source "$(dirname "${BASH_SOURCE[0]}")/error-guard.sh" 2>/dev/null || true
-onex_hook_gate COST_ACCOUNTING || exit 0
+# OMN-22498: the delegation switch, borrowed bit 11 (see pre_tool_use_delegation.sh).
+# COST_ACCOUNTING is not a hook bit, so the old gate could never turn this off.
+onex_hook_gate POST_SKILL_DELEGATION_ENFORCER || exit 0
 
 # --- Global kill switch ---
 if [[ "${OMNICLAUDE_HOOKS_DISABLED:-0}" == "1" ]]; then
@@ -33,9 +35,12 @@ if [[ "${OMNICLAUDE_HOOKS_DISABLED:-0}" == "1" ]]; then
 fi
 
 # --- Lite mode guard (OMN-5398) ---
+# A customer who installed the delegation hooks (install-delegation.sh writes
+# hooks-delegation.json) is not silenced by it: this hook carries the delegated
+# result back to Claude (OMN-22498).
 _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _MODE_SH="${_SCRIPT_DIR}/../../lib/mode.sh"
-if [[ -f "$_MODE_SH" ]]; then
+if [[ ! -f "${HOME}/.omninode/delegation/hooks-delegation.json" && -f "$_MODE_SH" ]]; then
     source "$_MODE_SH"
     [[ "$(omniclaude_mode)" == "lite" ]] && exit 0
 fi

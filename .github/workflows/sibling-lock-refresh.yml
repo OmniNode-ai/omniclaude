@@ -57,13 +57,15 @@
 # Canary rollout (OMN-13902): landed on omnimemory first per canary-before-
 # fan-out. Once proven green, the same workflow file is copied to the other
 # PyPI-range-pinned consumers (omniclaude, omniintelligence, omnibase_infra).
+#
+# OMN-24189: RULING 2026-11-09T21:54:25Z lane=orchestrator-31d9: a downstream
+# repository moves its pin on a sibling only when it needs something new from
+# it. The nightly schedule is removed; the train runs only by
+# workflow_dispatch, when a change needs a newer sibling.
 
 name: Sibling lock refresh
 
 on:
-  schedule:
-    # Daily at 06:17 UTC — after the overnight release window, before the day's work.
-    - cron: "17 6 * * *"
   workflow_dispatch:
     inputs:
       packages:

@@ -109,6 +109,37 @@ on:
         type: string
         required: false
         default: ""
+      vocabulary_path:
+        description: >-
+          Path, inside the resolved private repository, of the main vocabulary
+          file. Leave unset in normal use -- it resolves from the org Actions
+          variable OMNI_HYGIENE_VOCAB_FILE. The location is not written here
+          for the same reason the repository name is not: this is a public
+          repository. Unset everywhere is a refusal, never a pass.
+        type: string
+        required: false
+        default: ""
+      lab_vocabulary_path:
+        description: >-
+          Path, inside the resolved private repository, of the lab vocabulary
+          file. Leave unset in normal use -- it resolves from the org Actions
+          variable OMNI_HYGIENE_LAB_VOCAB_FILE. The location is not written
+          here for the same reason the repository name is not: this is a
+          public repository. Unset everywhere is a refusal, never a pass.
+        type: string
+        required: false
+        default: ""
+      model_vocabulary_path:
+        description: >-
+          Path, inside the resolved private repository, of the model
+          vocabulary file. Leave unset in normal use -- it resolves from the
+          org Actions variable OMNI_HYGIENE_MODEL_VOCAB_FILE. The location is
+          not written here for the same reason the repository name is not:
+          this is a public repository. Unset everywhere is a refusal, never
+          a pass.
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -278,6 +309,75 @@ jobs:
           fi
           echo "name=${resolved}" >> "$GITHUB_OUTPUT"
 
+      # The three file locations are PRIVATE on purpose, for the same reason
+      # the repository names are: they are not written in this public
+      # workflow. Each resolves from its org Actions variable, and an empty
+      # resolution refuses the gate instead of letting it run with a guess.
+      - name: Resolve the private vocabulary file locations
+        id: vocab-files
+        env:
+          EXPLICIT_VOCAB: ${{ inputs.vocabulary_path }}
+          FROM_VARS_VOCAB: ${{ vars.OMNI_HYGIENE_VOCAB_FILE }}
+          EXPLICIT_LAB: ${{ inputs.lab_vocabulary_path }}
+          FROM_VARS_LAB: ${{ vars.OMNI_HYGIENE_LAB_VOCAB_FILE }}
+          EXPLICIT_MODEL: ${{ inputs.model_vocabulary_path }}
+          FROM_VARS_MODEL: ${{ vars.OMNI_HYGIENE_MODEL_VOCAB_FILE }}
+        run: |
+          set -euo pipefail
+          NL=$'\n'
+          resolved_vocab="${EXPLICIT_VOCAB:-${FROM_VARS_VOCAB:-}}"
+          resolved_lab="${EXPLICIT_LAB:-${FROM_VARS_LAB:-}}"
+          resolved_model="${EXPLICIT_MODEL:-${FROM_VARS_MODEL:-}}"
+          missing=()
+          if [ -z "${resolved_vocab}" ]; then
+            missing+=("vocabulary_path / OMNI_HYGIENE_VOCAB_FILE")
+          fi
+          if [ -z "${resolved_lab}" ]; then
+            missing+=("lab_vocabulary_path / OMNI_HYGIENE_LAB_VOCAB_FILE")
+          fi
+          if [ -z "${resolved_model}" ]; then
+            missing+=("model_vocabulary_path / OMNI_HYGIENE_MODEL_VOCAB_FILE")
+          fi
+          if [ "${#missing[@]}" -gt 0 ]; then
+            joined=""
+            for setting in "${missing[@]}"; do
+              if [ -z "${joined}" ]; then
+                joined="${setting}"
+              else
+                joined="${joined} and ${setting}"
+              fi
+            done
+            echo "::error::the private vocabulary file locations cannot be" \
+                 "resolved: ${joined}. THE GATE DID NOT RUN."
+            exit 1
+          fi
+          for value in "${resolved_vocab}" "${resolved_lab}" "${resolved_model}"; do
+            case "${value}" in
+              /*)
+                echo "::error::a resolved vocabulary location is absolute and" \
+                     "must stay inside the fetched repository. THE GATE" \
+                     "DID NOT RUN."
+                exit 1
+                ;;
+              *"${NL}"*)
+                echo "::error::a resolved vocabulary location is not a plain" \
+                     "path. THE GATE DID NOT RUN."
+                exit 1
+                ;;
+            esac
+            IFS='/' read -r -a components <<< "${value}"
+            for component in "${components[@]}"; do
+              if [ "${component}" = ".." ]; then
+                echo "::error::a resolved vocabulary location escapes the" \
+                     "fetched repository. THE GATE DID NOT RUN."
+                exit 1
+              fi
+            done
+          done
+          echo "vocabulary=${resolved_vocab}" >> "$GITHUB_OUTPUT"
+          echo "lab_vocabulary=${resolved_lab}" >> "$GITHUB_OUTPUT"
+          echo "model_vocabulary=${resolved_model}" >> "$GITHUB_OUTPUT"
+
       - name: Mint token for the private vocabulary repo
         id: vocab-token
         uses: actions/create-github-app-token@v3
@@ -309,7 +409,7 @@ jobs:
           path: .public-repo-hygiene-vocabulary
           persist-credentials: false
           sparse-checkout: |
-            docs/workflows/_shared/public_repo_hygiene_vocabulary.yaml
+            ${{ steps.vocab-files.outputs.vocabulary }}
           sparse-checkout-cone-mode: false
 
       # Unpinned for the same reason as the vocabulary above: it is DATA read
@@ -327,8 +427,8 @@ jobs:
           path: .public-repo-hygiene-lab-vocabulary
           persist-credentials: false
           sparse-checkout: |
-            vocabularies/public_repo_hygiene_lab_vocabulary.yaml
-            vocabularies/public_repo_hygiene_model_vocabulary.yaml
+            ${{ steps.vocab-files.outputs.lab_vocabulary }}
+            ${{ steps.vocab-files.outputs.model_vocabulary }}
           sparse-checkout-cone-mode: false
 
       - name: Run the public-repo hygiene gate
@@ -339,10 +439,12 @@ jobs:
                 && '.omniclaude-public-repo-hygiene/scripts/public_repo_hygiene_gate.py'
                 || 'scripts/public_repo_hygiene_gate.py' }}
           DIFF_BASE: ${{ steps.diff-base.outputs.sha }}
-          VOCAB_PATH: .public-repo-hygiene-vocabulary/docs/workflows/_shared/public_repo_hygiene_vocabulary.yaml
-          LAB_VOCAB_PATH: .public-repo-hygiene-lab-vocabulary/vocabularies/public_repo_hygiene_lab_vocabulary.yaml
+          VOCAB_FILE: ${{ steps.vocab-files.outputs.vocabulary }}
+          LAB_VOCAB_FILE: ${{ steps.vocab-files.outputs.lab_vocabulary }}
         run: |
           set -euo pipefail
+          VOCAB_PATH=".public-repo-hygiene-vocabulary/${VOCAB_FILE}"
+          LAB_VOCAB_PATH=".public-repo-hygiene-lab-vocabulary/${LAB_VOCAB_FILE}"
           # Fail LOUD, not with a bare "python3: can't open file ... Errno 2".
           # A sparse checkout of a path that does not exist at the requested
           # ref SUCCEEDS and leaves an empty side path, so a bad ref surfaces
@@ -412,10 +514,12 @@ jobs:
                 && '.omniclaude-public-repo-hygiene/scripts/public_repo_hygiene_gate.py'
                 || 'scripts/public_repo_hygiene_gate.py' }}
           DIFF_BASE: ${{ steps.diff-base.outputs.sha }}
-          VOCAB_PATH: .public-repo-hygiene-vocabulary/docs/workflows/_shared/public_repo_hygiene_vocabulary.yaml
-          MODEL_VOCAB_PATH: .public-repo-hygiene-lab-vocabulary/vocabularies/public_repo_hygiene_model_vocabulary.yaml
+          VOCAB_FILE: ${{ steps.vocab-files.outputs.vocabulary }}
+          MODEL_VOCAB_FILE: ${{ steps.vocab-files.outputs.model_vocabulary }}
         run: |
           set -euo pipefail
+          VOCAB_PATH=".public-repo-hygiene-vocabulary/${VOCAB_FILE}"
+          MODEL_VOCAB_PATH=".public-repo-hygiene-lab-vocabulary/${MODEL_VOCAB_FILE}"
           for required in "${SCRIPT_PATH}" "${VOCAB_PATH}" "${MODEL_VOCAB_PATH}"; do
             if [ ! -f "${required}" ]; then
               echo "::error::${required} is not present. The vocabulary half of" \

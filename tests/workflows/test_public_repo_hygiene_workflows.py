@@ -4,8 +4,10 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -100,7 +102,7 @@ def test_public_repo_hygiene_reusable_fetches_and_passes_the_lab_vocabulary() ->
     fetch_with = fetch["with"]
     assert isinstance(fetch_with, dict)
     assert fetch_with["path"] == ".public-repo-hygiene-lab-vocabulary"
-    assert "public_repo_hygiene_lab_vocabulary.yaml" in str(
+    assert "steps.vocab-files.outputs.lab_vocabulary" in str(
         fetch_with["sparse-checkout"]
     )
 
@@ -111,6 +113,137 @@ def test_public_repo_hygiene_reusable_fetches_and_passes_the_lab_vocabulary() ->
     assert '--lab-vocabulary "${LAB_VOCAB_PATH}"' in run
     assert 'if [ ! -f "${LAB_VOCAB_PATH}" ]' in run
     assert "OMNI_HYGIENE_LAB_VOCAB_REPO" in text
+
+
+def _run_vocab_files_step(
+    tmp_path: Path, env_overrides: dict[str, str]
+) -> tuple[int, str, dict[str, str]]:
+    """Run the reusable's vocab-file resolution step in a subprocess.
+
+    All six EXPLICIT_*/FROM_VARS_* variables default to empty; the step's
+    own GITHUB_OUTPUT lines are parsed back into an outputs dict.
+    """
+    run = _step(
+        REUSABLE, "public-repo-hygiene", "Resolve the private vocabulary file locations"
+    )["run"]
+    assert isinstance(run, str)
+    script = tmp_path / "vocab_files.sh"
+    script.write_text(run, encoding="utf-8")
+    github_output = tmp_path / "github_output.txt"
+    env = {
+        "PATH": "/usr/bin:/bin",
+        "GITHUB_OUTPUT": str(github_output),
+        "EXPLICIT_VOCAB": "",
+        "FROM_VARS_VOCAB": "",
+        "EXPLICIT_LAB": "",
+        "FROM_VARS_LAB": "",
+        "EXPLICIT_MODEL": "",
+        "FROM_VARS_MODEL": "",
+    }
+    env.update(env_overrides)
+    result = subprocess.run(
+        ["bash", str(script)], env=env, capture_output=True, text=True, check=False
+    )
+    outputs: dict[str, str] = {}
+    if github_output.exists():
+        for line in github_output.read_text(encoding="utf-8").splitlines():
+            if "=" in line:
+                key, _, value = line.partition("=")
+                outputs[key] = value
+    return result.returncode, result.stdout + result.stderr, outputs
+
+
+def test_public_repo_hygiene_reusable_names_no_vocabulary_location() -> None:
+    """No private vocabulary file location may appear in public source."""
+    text = REUSABLE.read_text(encoding="utf-8")
+    assert "docs/workflows/_shared" not in text
+    assert "vocabularies/public_repo_hygiene" not in text
+    assert "OMNI_HYGIENE_VOCAB_FILE" in text
+    assert "OMNI_HYGIENE_LAB_VOCAB_FILE" in text
+    assert "OMNI_HYGIENE_MODEL_VOCAB_FILE" in text
+
+
+def test_vocab_files_step_resolves_all_three_from_variables(
+    tmp_path: Path,
+) -> None:
+    """All three locations resolve from the org Actions variables."""
+    returncode, _, outputs = _run_vocab_files_step(
+        tmp_path,
+        {
+            "FROM_VARS_VOCAB": "a/one.yaml",
+            "FROM_VARS_LAB": "b/two.yaml",
+            "FROM_VARS_MODEL": "c/three.yaml",
+        },
+    )
+    assert returncode == 0
+    assert outputs == {
+        "vocabulary": "a/one.yaml",
+        "lab_vocabulary": "b/two.yaml",
+        "model_vocabulary": "c/three.yaml",
+    }
+
+
+def test_vocab_files_step_input_wins_over_variable(tmp_path: Path) -> None:
+    """An explicit input value beats the org variable it shadows."""
+    returncode, _, outputs = _run_vocab_files_step(
+        tmp_path,
+        {
+            "EXPLICIT_VOCAB": "a/one.yaml",
+            "FROM_VARS_VOCAB": "zz/z.yaml",
+            "FROM_VARS_LAB": "b/two.yaml",
+            "FROM_VARS_MODEL": "c/three.yaml",
+        },
+    )
+    assert returncode == 0
+    assert outputs["vocabulary"] == "a/one.yaml"
+
+
+@pytest.mark.parametrize(
+    ("missing_variable", "present"),
+    [
+        (
+            "OMNI_HYGIENE_VOCAB_FILE",
+            {"FROM_VARS_LAB": "b/two.yaml", "FROM_VARS_MODEL": "c/three.yaml"},
+        ),
+        (
+            "OMNI_HYGIENE_LAB_VOCAB_FILE",
+            {"FROM_VARS_VOCAB": "a/one.yaml", "FROM_VARS_MODEL": "c/three.yaml"},
+        ),
+        (
+            "OMNI_HYGIENE_MODEL_VOCAB_FILE",
+            {"FROM_VARS_VOCAB": "a/one.yaml", "FROM_VARS_LAB": "b/two.yaml"},
+        ),
+    ],
+)
+def test_vocab_files_step_refuses_when_one_location_is_missing(
+    tmp_path: Path, missing_variable: str, present: dict[str, str]
+) -> None:
+    """Blank exactly one location; only that one is named as missing."""
+    returncode, combined, _ = _run_vocab_files_step(tmp_path, present)
+    assert returncode != 0
+    assert missing_variable in combined
+    assert "THE GATE DID NOT RUN" in combined
+    for other in (
+        "OMNI_HYGIENE_VOCAB_FILE",
+        "OMNI_HYGIENE_LAB_VOCAB_FILE",
+        "OMNI_HYGIENE_MODEL_VOCAB_FILE",
+    ):
+        if other != missing_variable:
+            assert other not in combined
+
+
+def test_vocab_files_step_refuses_an_escaping_path(tmp_path: Path) -> None:
+    """A location that escapes the fetched repository is refused."""
+    base = {
+        "FROM_VARS_VOCAB": "a/one.yaml",
+        "FROM_VARS_LAB": "b/two.yaml",
+        "FROM_VARS_MODEL": "c/three.yaml",
+    }
+    for escaping in ("../x.yaml", "/etc/x.yaml"):
+        returncode, _, _ = _run_vocab_files_step(
+            tmp_path, {**base, "FROM_VARS_VOCAB": escaping}
+        )
+        assert returncode != 0
 
 
 def test_public_repo_hygiene_reusable_hands_the_gate_a_pull_request_diff_base() -> None:

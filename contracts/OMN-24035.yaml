@@ -1,0 +1,66 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-24035
+title: "Lane identity check skips folders it cannot read"
+summary: >
+  scripts/lane_identity.py enumerates the workspace's git clones with
+  Path.is_dir on each child's .git. On a lab host where one child folder is not
+  readable by the running user, is_dir raises PermissionError and status and
+  reconcile crash, so the host drift check reads the whole host as DRIFT. The
+  enumeration now skips a child whose .git cannot be read and still lists every
+  readable clone.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn24035-skip-unreadable
+    statement: The clone enumeration skips a child folder it cannot read instead of raising.
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: the registry clone listing skips a child folder whose .git cannot be read instead of raising -- falsifier: pytest tests/scripts/test_lane_identity.py -k unreadable_clone -q fails on origin/dev with PermissionError"
+  - id: req-omn24035-golden-and-control
+    statement: A listing over readable clones is unchanged and only the unreadable one is dropped.
+    acceptance:
+      - id: "AC2"
+        statement: "AC2: a golden listing over readable clones is unchanged, and an unreadable clone is the only one dropped (a control with a readable clone made unreadable loses exactly that one) -- falsifier: pytest tests/scripts/test_lane_identity.py -k registry_clones -q"
+  - id: req-omn24035-integrated
+    statement: On the lab host with the unreadable folder the stamping hook check no longer reads DRIFT for it.
+    acceptance:
+      - id: "AC3"
+        statement: "AC3: integrated: on the lab host with the unreadable folder, the reconcile-workspace-venvs.sh check of the workspace reports no DRIFT for the lane-identity hook after the fix is installed -- falsifier: run reconcile-workspace-venvs.sh --check on that host and read DRIFT for the stamping hook"
+evidence_requirements:
+  - kind: tests
+    description: "The lane identity enumeration tests pass"
+    command: "uv run pytest tests/scripts/test_lane_identity.py -q --no-cov -k 'unreadable_clone or registry_clones'"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn24035-ac1-skip-unreadable
+    description: "With Path.is_dir raising PermissionError for one child's .git, _registry_clones returns the other clones and the workspace root and does not raise. Fails at the merge base, where the PermissionError propagates (measured: PermissionError on a mode 000 child folder)."
+    source: manual
+    binds_ac:
+      - "AC1"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_lane_identity.py -q --no-cov -k unreadable_clone"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn24035-ac2-golden-control
+    description: "A workspace with a readable extra clone enumerates it (control); the unreadable variant drops exactly that clone and keeps child_repo and the root."
+    source: manual
+    binds_ac:
+      - "AC2"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_lane_identity.py -q --no-cov -k registry_clones"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn24035-ac3-integrated
+    description: "AC3 is a host reading on the lab host with the unreadable folder after the fix is installed there; not yet read. The check pins the guard in the tree that the reading depends on."
+    source: manual
+    binds_ac:
+      - "AC3"
+    checks:
+      - check_type: command
+        check_value: "grep -qF 'is skipped, not fatal (OMN-24035)' scripts/lane_identity.py"
+        cwd: "${OMNI_HOME}/omniclaude"

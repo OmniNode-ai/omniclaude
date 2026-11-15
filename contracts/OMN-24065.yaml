@@ -1,0 +1,69 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-24065
+title: "Run the new core validators in each repository's pre-commit"
+summary: >
+  omnibase_core merged five generic validators that no consumer's pre-commit
+  configuration calls. This repository now lists no-id-from-stamp at the core
+  revision its pre-commit config already pins for the first-party checks (a
+  revision that carries it), so no pin moves; it passes over the whole tree with
+  no baseline and no allowlist. declared-timeout-reaches-call,
+  no-time-bound-truncation, no-naive-timestamp and no-fixed-tmp-atomic-write
+  are not listed: each refuses code already in the tree (1, 2, 3 and 25
+  findings) and the canonical-file-shape ratchet refuses a new baseline file,
+  so each needs its findings fixed first.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn24065-hooks-listed
+    statement: This repository's pre-commit config lists the five core validator hooks with a shrink-only baseline for the findings they already held.
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: omniclaude's pre-commit config lists declared-timeout-reaches-call, no-time-bound-truncation, no-naive-timestamp, no-id-from-stamp and no-fixed-tmp-atomic-write at a core revision that carries them, with a shrink-only baseline for the findings it already holds -- falsifier: pre-commit run no-fixed-tmp-atomic-write --all-files fails on a planted fixed-suffix temporary rename and passes on the branch"
+  - id: req-omn24065-consumers
+    statement: Each repository that consumes core hooks lists the same hooks in its own pre-commit config in its own pull request.
+    acceptance:
+      - id: "AC2"
+        statement: "AC2: each further repository that consumes core hooks lists the same five hooks in its own pre-commit config in its own pull request, moving its core pin only where the pinned revision lacks a hook -- falsifier: pre-commit run <hook id> --all-files exits non-zero on a planted violation in that repository"
+  - id: req-omn24065-integrated
+    statement: The hooks run in the consumer's own next CI run on the merged head.
+    acceptance:
+      - id: "AC3"
+        statement: "AC3: integrated: the hooks run in each consumer's own next CI run on the merged head and the dev runtime keeps running on the merged revision -- falsifier: the consumer's CI log for the pre-commit job on the merged head lacks the hook ids, read from the PR watcher state and the running image revision label"
+evidence_requirements:
+  - kind: tests
+    description: "The listed hook passes over the tree"
+    command: "pre-commit run no-id-from-stamp --all-files"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn24065-ac1-hooks-listed
+    description: "The pre-commit config lists no-id-from-stamp; the hook passes over the tree. The other four hooks are not listed because each refuses code already in the tree, so AC1 is met for one of five hooks in this repository (measured: declared-timeout-reaches-call 1 finding, no-time-bound-truncation 2, no-naive-timestamp 3, no-fixed-tmp-atomic-write 25)."
+    source: manual
+    binds_ac:
+      - "AC1"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_pre_commit_no_id_from_stamp_omn24065.py -q --no-cov -k no_id_from_stamp"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn24065-ac2-consumers
+    description: "AC2 is met repository by repository, each in its own pull request; this repository's own entry is the hook listed in its config. Read in each consumer's pull request."
+    source: manual
+    binds_ac:
+      - "AC2"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_pre_commit_no_id_from_stamp_omn24065.py -q --no-cov -k no_id_from_stamp"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn24065-ac3-integrated
+    description: "AC3 is a reading of the consumer's CI run on the merged head and of the running image revision; not yet read. The check pins the hook the reading depends on."
+    source: manual
+    binds_ac:
+      - "AC3"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/scripts/test_pre_commit_no_id_from_stamp_omn24065.py -q --no-cov -k no_id_from_stamp"
+        cwd: "${OMNI_HOME}/omniclaude"

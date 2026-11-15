@@ -1,0 +1,31 @@
+schema_version: 1.0.0
+ticket_id: OMN-17499
+title: Allow Fable for background agents at band B5
+summary: The background-agent model guard refused every agent that named Fable. By operator ruling of 2026-11-10, Fable may run as a background agent on large tasks. The allowlist gains fable, and band B5 of the routing contract allows model fable and effort high. Haiku and a missing model stay refused.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+- id: req-omn17499-fable-b5
+  statement: An agent call that names model fable with a valid band B5 ROUTE line passes the guard, and haiku and a missing model are still refused.
+  acceptance:
+  - id: AC1
+    statement: 'AC1: a Fable agent with a band B5 ROUTE line at effort high passes, Fable below B5 is refused, haiku is refused at every band and a missing model is refused -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -q at the base fails the Fable cases'
+evidence_requirements:
+- kind: tests
+  description: The guard's focused test file, which pins the allowlist and the band sets.
+  command: uv run --frozen pytest tests/hooks/test_workflow_model_guard.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+- id: dod-omn17499-guard-tests
+  description: The guard's focused test file passes at the head; at the base six of its cases fail.
+  source: manual
+  binds_ac:
+  - AC1
+  checks:
+  - check_type: test_passes
+    check_value: uv run --frozen pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -p no:randomly
+    cwd: .
