@@ -1303,8 +1303,8 @@ disabled_hooks:
       still AGENT_ID="${CLAUDE_AGENT_ID:-session}". D4 dispatch_claim_gate.py
       has _DEFAULT_TTL = 300 (line 50) and unlinks an expired claim at line
       261 with no renewal, fencing token or CLAIM_EXPIRED record. OMN-17005
-      is still Backlog.
-    review_by: "2026-11-14"
+      is still Backlog. Re-read 2026-11-15 (OMN-21262 landing): D1 to D4 still hold.
+    review_by: "2026-11-28"
     restoration:
       kind: "re_register"
       reenable_ticket: "OMN-17005"
@@ -1326,7 +1326,7 @@ disabled_hooks:
       would report `not_owner` on every call. Reviewed 2026-11-01 (OMN-21860):
       the acquire half's defects D1 to D4 still hold, so this half stays
       disabled with it.
-    review_by: "2026-11-14"
+    review_by: "2026-11-28"
     restoration:
       kind: "re_register"
       reenable_ticket: "OMN-17005"
