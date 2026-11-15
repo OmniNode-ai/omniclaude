@@ -10,6 +10,12 @@ summary: >
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
+requirements:
+  - id: req-omn24618-lab-host-placement
+    statement: "A Workflow or Agent prompt that runs ssh, docker or systemctl against a lab host alias is refused unless it declares PLACEMENT: remote-lane, PLACEMENT: fable-review or LOCAL-ONLY with a reason."
+    acceptance:
+      - id: AC1
+        statement: "AC1: an agent() prompt doing lab-host work with no placement declaration is refused, and each of the three declarations admits it -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -k lab_host_work -q --no-cov with the host-work check removed from workflow_model_guard.py"
 evidence_requirements:
   - kind: tests
     description: "lab_host_work refused, allowed and unrelated fixtures pass"
@@ -22,6 +28,8 @@ dod_evidence:
   - id: dod-lab-host-work-refused
     description: "A Workflow agent() prompt that does lab-host work with no declared placement is refused by the real hook; each of remote-lane placement, a Fable review and LOCAL-ONLY with a reason admits it"
     source: manual
+    binds_ac:
+      - AC1
     checks:
-      - check_type: command
+      - check_type: test_passes
         check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -k lab_host_work -q --no-cov"
