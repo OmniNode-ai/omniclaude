@@ -311,13 +311,13 @@ def publish_to_kafka_sync(coro) -> bool:
     try:
         try:
             asyncio.get_running_loop()
-            return _run_async_in_new_thread(coro)
+            return bool(_run_async_in_new_thread(coro))
         except RuntimeError:
             pass
 
         loop = asyncio.new_event_loop()
         try:
-            return loop.run_until_complete(coro)
+            return bool(loop.run_until_complete(coro))
         finally:
             loop.close()
 

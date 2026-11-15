@@ -2542,7 +2542,6 @@ class ManifestInjector:
         except Exception as e:
             self.logger.debug(f"Memgraph query failed: {e}")
             return {
-                "url": memgraph_url,
                 "status": "unavailable",
                 "error": str(e),
             }

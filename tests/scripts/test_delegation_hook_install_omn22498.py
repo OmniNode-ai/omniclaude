@@ -3,15 +3,15 @@
 """The delegation hook set installs once, idempotently (OMN-22498 AC2).
 
 Two ``install-delegation.sh --apply`` runs over a scratch HOME whose
-settings.json already holds the OMN-23413 gateway groups, an unrelated user
+settings.json already holds another tool's hook groups, an unrelated user
 hook and an entry an earlier installer wrote.
 
 Failure modes:
   F1. The second run changes settings.json at all.
   F2. More than one legacy delegation PreToolUse Agent|Task entry remains.
-  F3. A gateway group (UserPromptSubmit with no matcher, or PreToolUse
-      ^(Agent|Task)$, each one command running the omnimarket cli_gateway
-      module) is dropped or altered by either run.
+  F3. Another tool's group (UserPromptSubmit with no matcher, or PreToolUse
+      ^(Agent|Task)$, each one command from outside the install root) is
+      dropped or altered by either run.
   F4. An entry an earlier installer wrote (the old hook-scripts/ copy, which
       could not run) survives beside the new one.
   F5. An unrelated user hook is dropped or moved.
@@ -32,27 +32,27 @@ import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _INSTALLER = _REPO_ROOT / "scripts" / "install-delegation.sh"
-_GATEWAY_MODULE = "omnimarket.nodes.node_claude_code_binding_install_effect.cli_gateway"
+_OTHER_TOOL_MODULE = "other_tool.claude_guard"
 
 
-def _gateway_hook(python: str) -> dict[str, Any]:
+def _other_tool_hook(python: str) -> dict[str, Any]:
     return {
         "type": "command",
-        "command": shlex.join([python, "-m", _GATEWAY_MODULE, "hook"]),
+        "command": shlex.join([python, "-m", _OTHER_TOOL_MODULE, "hook"]),
         "timeout": 30,
         "onFailure": "block",
     }
 
 
 def _seed_settings(home: Path) -> dict[str, Any]:
-    python = "/opt/py with space/bin/python3"  # the gateway's python may hold spaces
+    python = "/opt/py with space/bin/python3"  # another tool's python may hold spaces
     legacy = f"{home}/.omninode/delegation/hook-scripts/pre_tool_use_delegation.sh"
     settings = {
         "model": "opus",
         "hooks": {
-            "UserPromptSubmit": [{"hooks": [_gateway_hook(python)]}],
+            "UserPromptSubmit": [{"hooks": [_other_tool_hook(python)]}],
             "PreToolUse": [
-                {"matcher": "^(Agent|Task)$", "hooks": [_gateway_hook(python)]},
+                {"matcher": "^(Agent|Task)$", "hooks": [_other_tool_hook(python)]},
                 {
                     "matcher": "Bash",
                     "hooks": [
@@ -93,17 +93,17 @@ def _apply(tmp_path: Path, home: Path) -> None:
     assert proc.returncode == 0, proc.stdout + proc.stderr
 
 
-def _is_gateway(hook: dict[str, Any]) -> bool:
+def _is_other_tool(hook: dict[str, Any]) -> bool:
     argv = shlex.split(hook.get("command", ""))
-    return argv[1:] == ["-m", _GATEWAY_MODULE, "hook"]
+    return argv[1:] == ["-m", _OTHER_TOOL_MODULE, "hook"]
 
 
-def _gateway_groups(settings: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+def _other_tool_groups(settings: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
     return [
         (event, group)
         for event, groups in settings.get("hooks", {}).items()
         for group in groups
-        if any(_is_gateway(h) for h in group.get("hooks", []))
+        if any(_is_other_tool(h) for h in group.get("hooks", []))
     ]
 
 
@@ -116,22 +116,22 @@ def _commands(settings: dict[str, Any], event: str) -> list[str]:
 
 
 @pytest.mark.unit
-def test_delegation_hook_install_detector_sees_a_dropped_gateway_group() -> None:
+def test_delegation_hook_install_detector_sees_a_dropped_other_tool_group() -> None:
     """Positive control: an installer that replaced hooks wholesale is caught."""
     seeded = _seed_settings_dict()
     wholesale = copy.deepcopy(seeded)
     wholesale["hooks"]["UserPromptSubmit"] = []
-    assert len(_gateway_groups(seeded)) == 2
-    assert len(_gateway_groups(wholesale)) == 1
+    assert len(_other_tool_groups(seeded)) == 2
+    assert len(_other_tool_groups(wholesale)) == 1
 
 
 def _seed_settings_dict() -> dict[str, Any]:
     python = "/opt/py with space/bin/python3"
     return {
         "hooks": {
-            "UserPromptSubmit": [{"hooks": [_gateway_hook(python)]}],
+            "UserPromptSubmit": [{"hooks": [_other_tool_hook(python)]}],
             "PreToolUse": [
-                {"matcher": "^(Agent|Task)$", "hooks": [_gateway_hook(python)]}
+                {"matcher": "^(Agent|Task)$", "hooks": [_other_tool_hook(python)]}
             ],
         }
     }
@@ -157,8 +157,8 @@ def test_delegation_hook_install_twice_is_byte_identical_and_keeps_other_rows(
     pre = _commands(settings, "PreToolUse")
     delegation = [c for c in pre if "pre_tool_use_delegation.sh" in c]
     assert len(delegation) == 1, delegation  # F2
-    assert "/hook-scripts/" not in delegation[0], delegation  # F4
+    assert not any("/hook-scripts/" in c for c in pre), pre  # F4
 
-    assert _gateway_groups(settings) == _gateway_groups(seeded)  # F3
+    assert _other_tool_groups(settings) == _other_tool_groups(seeded)  # F3
     assert "/usr/local/bin/my-own-guard" in pre  # F5
     assert settings["model"] == "opus"

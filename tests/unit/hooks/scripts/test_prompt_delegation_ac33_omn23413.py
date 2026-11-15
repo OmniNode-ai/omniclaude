@@ -127,7 +127,9 @@ def test_any_prompt_is_delegated_and_its_answer_blocks_claude(tmp_path: Path) ->
     """P1, S1: "hi" is not delegatable to the classifier; AC33 still delegates it,
     and the accepted answer is a block naming the model and run."""
     bin_dir = _fake_onex(tmp_path, [_doc("Hello! How can I help?", "r-hi")])
-    out = json.loads(_run(tmp_path, _prompt("hi"), bin_dir))
+    out = json.loads(
+        _run(tmp_path, _prompt("hello there, how are you today?"), bin_dir)
+    )
     assert out["decision"] == "block"
     assert out["reason"].startswith("Hello! How can I help?")
     assert "Qwen3.8-27B" in out["reason"]
@@ -158,10 +160,10 @@ def test_claude_is_told_once_what_delegation_answered(tmp_path: Path) -> None:
     bin_dir = _fake_onex(
         tmp_path, [_doc(_ANSWER, "r-1"), _doc(_DECLINE, "r-2"), _doc(_DECLINE, "r-3")]
     )
-    _run(tmp_path, _prompt("TCP vs UDP?"), bin_dir)
+    _run(tmp_path, _prompt("How do TCP and UDP differ?"), bin_dir)
     out = json.loads(_run(tmp_path, _prompt("now edit my file"), bin_dir))
     context = out["hookSpecificOutput"]["additionalContext"]
-    assert "TCP vs UDP?" in context
+    assert "How do TCP and UDP differ?" in context
     assert _ANSWER in context
     assert "decision" not in out
     assert _run(tmp_path, _prompt("and run the tests"), bin_dir) == ""
@@ -173,7 +175,9 @@ def test_a_prompt_never_waits_past_the_hook_limit(tmp_path: Path) -> None:
     onex = bin_dir / "onex"
     onex.write_text("#!/bin/sh\nsleep 10\n")
     onex.chmod(0o755)
-    assert _run(tmp_path, _prompt("TCP vs UDP?"), bin_dir, limit="1") == ""
+    assert (
+        _run(tmp_path, _prompt("How do TCP and UDP differ?"), bin_dir, limit="1") == ""
+    )
 
 
 # --- the shell entry --------------------------------------------------------
@@ -226,7 +230,7 @@ def test_the_prompt_hook_prints_exactly_the_runner_output(tmp_path: Path) -> Non
     """S1: the runner's block reaches Claude Code unchanged."""
     block = json.dumps({"decision": "block", "reason": _ANSWER})
     plugin = _plugin_with_stub_runner(tmp_path, block + "\n")
-    proc = _run_shell(tmp_path, plugin, _prompt("TCP vs UDP?"))
+    proc = _run_shell(tmp_path, plugin, _prompt("How do TCP and UDP differ?"))
     assert proc.returncode == 0, proc.stderr
     assert json.loads(proc.stdout) == {"decision": "block", "reason": _ANSWER}
 
@@ -253,7 +257,9 @@ def test_with_the_switch_off_a_prompt_prints_nothing(tmp_path: Path) -> None:
     """S3: bit 11 (POST_SKILL_DELEGATION_ENFORCER) cleared."""
     block = json.dumps({"decision": "block", "reason": _ANSWER})
     plugin = _plugin_with_stub_runner(tmp_path, block + "\n")
-    proc = _run_shell(tmp_path, plugin, _prompt("TCP vs UDP?"), mask="0x0")
+    proc = _run_shell(
+        tmp_path, plugin, _prompt("How do TCP and UDP differ?"), mask="0x0"
+    )
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.strip() == ""
 
@@ -267,7 +273,7 @@ def test_the_agent_task_path_still_blocks_with_exit_2(tmp_path: Path) -> None:
         "session_id": "ac33",
         "hook_event_name": "PreToolUse",
         "tool_name": "Agent",
-        "tool_input": {"prompt": "TCP vs UDP?", "description": "q"},
+        "tool_input": {"prompt": "How do TCP and UDP differ?", "description": "q"},
     }
     proc = _run_shell(tmp_path, plugin, agent)
     assert proc.returncode == 2

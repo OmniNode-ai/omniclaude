@@ -57,6 +57,15 @@ def _load_runner() -> ModuleType:
 _runner = _load_runner()
 
 
+def _clean_gate() -> MagicMock:
+    """A sensitivity gate that finds nothing sensitive. Since OMN-23413 a missing
+    gate keeps the task with Claude (fail closed), so tests of the classifier and
+    the delegation path stand in this gate rather than none."""
+    gate = MagicMock()
+    gate.check.return_value = SimpleNamespace(is_sensitive=False, reasons=[])
+    return gate
+
+
 @pytest.fixture(autouse=True)
 def _no_model_call(monkeypatch: pytest.MonkeyPatch) -> object:
     monkeypatch.setenv("ONEX_HOOK_DELEGATE_TIMEOUT_S", "240")  # as the .sh sets it
@@ -158,7 +167,7 @@ def test_invalid_json_returns_not_delegatable() -> None:
 @pytest.mark.unit
 def test_non_object_json_returns_not_delegatable() -> None:
     with (
-        patch.object(_runner, "_import_gate", return_value=None),
+        patch.object(_runner, "_import_gate", return_value=_clean_gate()),
         patch.object(_runner, "_import_classifier", return_value=None),
     ):
         out, code = _run_main("[]")
@@ -173,13 +182,14 @@ def test_non_object_json_returns_not_delegatable() -> None:
 
 
 @pytest.mark.unit
-def test_fail_open_when_gate_unavailable() -> None:
-    """SensitivityGate import failure should fall through to classifier."""
+def test_a_missing_gate_keeps_the_task_with_claude() -> None:
+    """OMN-23413: without a sensitivity gate nothing goes to a delegated model."""
     payload = _tool_json("explain the architecture")
     with patch.object(_runner, "_import_gate", return_value=None):
         out, code = _run_main(payload)
     assert code == 0
-    assert out.startswith("DELEGATED:") or out.startswith("not_delegatable")
+    # the reason is named, so a broken install does not read as a real hit
+    assert out == "not_delegatable:no_gate"
 
 
 @pytest.mark.unit
@@ -187,7 +197,7 @@ def test_fail_open_when_classifier_unavailable() -> None:
     """Classifier import failure should return not_delegatable gracefully."""
     payload = _tool_json("explain the architecture")
     with (
-        patch.object(_runner, "_import_gate", return_value=None),
+        patch.object(_runner, "_import_gate", return_value=_clean_gate()),
         patch.object(_runner, "_import_classifier", return_value=None),
     ):
         out, code = _run_main(payload)
@@ -209,7 +219,9 @@ def test_fail_open_when_gate_instantiation_fails() -> None:
         return original_import(name, *args, **kwargs)
 
     with patch("builtins.__import__", side_effect=fake_import):
-        assert _runner._import_gate() is None
+        # OMN-23413: fails closed (nothing is sent) and names the reason
+        assert _runner._gate_why("explain TCP") == "gate_error:RuntimeError"
+        assert _runner._sensitive("explain TCP") is True
 
 
 @pytest.mark.unit
@@ -230,16 +242,16 @@ def test_fail_open_when_classifier_instantiation_fails() -> None:
 
 
 @pytest.mark.unit
-def test_gate_exception_falls_through_to_classifier() -> None:
-    """An exception in gate.check() must not crash — fall through to classifier."""
+def test_a_gate_exception_keeps_the_task_with_claude() -> None:
+    """An exception in gate.check() must not crash, and (OMN-23413) fails closed."""
     mock_gate = MagicMock()
     mock_gate.check.side_effect = RuntimeError("gate exploded")
     payload = _tool_json("explain the architecture")
     with patch.object(_runner, "_import_gate", return_value=mock_gate):
         out, code = _run_main(payload)
     assert code == 0
-    # Should not raise, result is either delegated or not_delegatable
-    assert out.startswith("DELEGATED:") or out.startswith("not_delegatable")
+    assert out == "not_delegatable:gate_error:RuntimeError"
+    assert "exploded" not in out
 
 
 @pytest.mark.unit
@@ -249,7 +261,7 @@ def test_classifier_exception_returns_not_delegatable() -> None:
     mock_classifier.is_delegatable.side_effect = RuntimeError("classifier exploded")
     payload = _tool_json("explain the architecture")
     with (
-        patch.object(_runner, "_import_gate", return_value=None),
+        patch.object(_runner, "_import_gate", return_value=_clean_gate()),
         patch.object(_runner, "_import_classifier", return_value=mock_classifier),
     ):
         out, code = _run_main(payload)
@@ -274,3 +286,86 @@ def test_sensitive_reasons_are_not_emitted() -> None:
     assert code == 0
     assert out == "not_delegatable:sensitive"
     assert "supersecret123" not in out
+
+
+# ---------------------------------------------------------------------------
+# OMN-23413 review: the gate sees the text that is sent, and names its failures
+# ---------------------------------------------------------------------------
+
+_KEY_BODY = "Ab1Cd2Ef3Gh4Ij5Kl6Mn7Op8Qr9St0UvWx"
+_KEYS = [
+    "sk-" + "ant-api03-" + _KEY_BODY + "-" + _KEY_BODY,
+    "ghp_" + _KEY_BODY + "ab",
+    "AKIA" + "ABCDEFGHIJ012345",
+]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("key", _KEYS)
+@pytest.mark.parametrize("before", ["\n", "\t", "\n```\n", "\u2014", "密钥"])
+def test_a_key_that_starts_a_line_keeps_the_task_with_claude(
+    key: str, before: str
+) -> None:
+    """R1: the gate reads the decoded prompt, not its JSON form, where a newline
+    is backslash-n and hides the key from a word-boundary anchor."""
+    payload = _tool_json(f"Explain what this module does. My key is:{before}{key}")
+    out, code = _run_main(payload)
+    assert code == 0
+    assert out == "not_delegatable:sensitive"
+
+
+@pytest.mark.unit
+def test_a_key_in_any_string_field_keeps_the_task_with_claude() -> None:
+    """R1: every string value of tool_input is checked, nested ones included."""
+    payload = json.dumps(
+        {
+            "tool_name": "Task",
+            "tool_input": {
+                "description": "q",
+                "prompt": "Explain TCP",
+                "extra": {"notes": ["see:\n" + _KEYS[0]]},
+            },
+        }
+    )
+    out, code = _run_main(payload)
+    assert out == "not_delegatable:sensitive"
+
+
+@pytest.mark.unit
+def test_an_unimportable_gate_is_named_not_reported_as_sensitive(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """R5b: a gate that cannot be imported still sends nothing, and says why."""
+    with patch.dict(sys.modules, {"omniclaude.delegation.sensitivity_gate": None}):
+        out, code = _run_main(_tool_json("explain the architecture"))
+    assert code == 0
+    assert out == "not_delegatable:gate_error:ModuleNotFoundError"
+    assert "gate_error:ModuleNotFoundError" in capsys.readouterr().err
+
+
+@pytest.mark.unit
+def test_a_node_without_sensitive_is_named_and_sends_nothing(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """R5a: an omnimarket whose build_prompt_handler takes no ``sensitive`` (older
+    than OMN-23413's fix) keeps every prompt with Claude, and the log says why."""
+    from omnimarket.nodes.node_hook_delegate_effect import container
+
+    def old_build_prompt_handler(cli: object | None = None) -> object:
+        raise AssertionError("never built: the call itself must fail")
+
+    prompt = {
+        "hook_event_name": "UserPromptSubmit",
+        "session_id": "skew",
+        "prompt": "what is TCP?",
+    }
+    with (
+        patch.object(container, "build_handler", return_value=MagicMock()),
+        patch.object(container, "build_prompt_handler", old_build_prompt_handler),
+    ):
+        out, code = _run_main(json.dumps(prompt))
+    assert code == 0
+    assert out == ""  # nothing printed: the prompt goes to Claude as typed
+    err = capsys.readouterr().err
+    assert "node_skew" in err
+    assert "what is TCP" not in err

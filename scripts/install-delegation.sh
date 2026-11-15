@@ -64,8 +64,6 @@ PYTHON_BIN=""
 ENDPOINT_URL=""
 SKIP_PIP=false
 SKIP_SMOKE=false
-GATEWAY=false
-ONEX_BIN=""
 
 # ---------------------------------------------------------------------------
 # Logging helpers
@@ -123,8 +121,6 @@ Options:
   --skip-pip              Skip pip install (assume omniclaude is already
                           importable; useful for CI and re-runs).
   --skip-smoke            Skip the post-install smoke test.
-  --gateway               Use the canonical ONEX gateway hook installer only.
-  --onex <path>           ONEX executable for --gateway (default: onex on PATH).
   -h, --help              Show this help.
 
 Examples:
@@ -139,8 +135,6 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --apply)        APPLY=true; DRY_RUN=false; shift; continue ;;
     --uninstall)    UNINSTALL=true; DRY_RUN=false; shift; continue ;;
-    --gateway)      GATEWAY=true; shift; continue ;;
-    --onex)         requirement="an executable path"; destination=ONEX_BIN ;;
     --from-source)  requirement="a path"; destination=FROM_SOURCE ;;
     --python)       requirement="an interpreter path"; destination=PYTHON_BIN ;;
     --endpoint-url) requirement="a URL"; destination=ENDPOINT_URL ;;
@@ -160,23 +154,6 @@ done
 if "${APPLY}" && "${UNINSTALL}"; then
   log_err "--apply and --uninstall are mutually exclusive"
   exit 2
-fi
-
-# Gateway hook ownership is the existing ONEX Claude binding effect's. This
-# compatibility entry point acquires no package, rewrites no model overlay and
-# merges no second settings copy. Both callers use the same canonical engine.
-if "${GATEWAY}"; then
-  if [[ -z "${ONEX_BIN}" ]]; then ONEX_BIN="$(command -v onex || true)"; fi
-  if [[ -z "${ONEX_BIN}" || ! -x "${ONEX_BIN}" ]]; then
-    log_err "ONEX CLI is required for gateway hook installation; install the CLI first or pass --onex PATH"
-    exit 1
-  fi
-  if "${UNINSTALL}"; then exec "${ONEX_BIN}" claude hooks uninstall --yes; fi
-  if "${DRY_RUN}"; then
-    log_dry "would run: ${ONEX_BIN} claude hooks install --yes"
-    exit 0
-  fi
-  exec "${ONEX_BIN}" claude hooks install --yes
 fi
 
 # ---------------------------------------------------------------------------
@@ -507,7 +484,7 @@ existing = settings.setdefault("hooks", {})
 # Drop every entry this installer wrote (under the install root), then add
 # the current set below, so a re-install also updates an entry's fields such
 # as its timeout (OMN-23413). Every other hook, including other tools' rows
-# such as the OMN-23413 gateway groups, stays exactly where it is (OMN-22498).
+# such as another tool's hook groups, stays exactly where it is (OMN-22498).
 for event in list(existing):
     groups = [{**g, "hooks": [h for h in g.get("hooks", []) if f"{sys.argv[3]}/" not in (h.get("command") or "")]} for g in existing[event]]
     existing[event] = [g for g in groups if g["hooks"]]

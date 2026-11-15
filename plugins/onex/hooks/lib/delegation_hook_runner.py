@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Delegation hook runner for pre_tool_use_delegation.sh (OMN-10607, OMN-23413).
-
-Agent/Task: SensitivityGate, TaskClassifier, node_hook_delegate_effect, then prints
-not_delegatable:<why> or "DELEGATED: <task_type> answered by <model> (run <id>)",
-NON-AUTHORITATIVE telemetry JSON and the answer. A prompt prints the node's hook output.
-"""
+#
+# Delegation hook runner for pre_tool_use_delegation.sh (OMN-10607, OMN-23413).
+# Agent/Task: SensitivityGate, TaskClassifier, node_hook_delegate_effect, then prints
+# not_delegatable:<why> or "DELEGATED: <task_type> answered by <model> (run <id>)",
+# NON-AUTHORITATIVE telemetry JSON and the answer. A prompt prints the node's hook
+# output. Every reason that keeps text with Claude is named in the hook log.
 
 from __future__ import annotations
 
@@ -19,9 +19,8 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 # Path bootstrap — allow running from the plugin lib dir or repo root
 # ---------------------------------------------------------------------------
-_HERE = Path(__file__).parent
-_PLUGIN_ROOT = _HERE.parent.parent  # hooks/lib -> hooks -> plugins/onex
-_REPO_ROOT = _PLUGIN_ROOT.parent.parent  # plugins/onex -> omniclaude root
+# hooks/lib -> hooks -> plugins/onex -> plugins -> omniclaude root
+_REPO_ROOT = Path(__file__).parents[4]
 
 for _candidate in [_REPO_ROOT / "src", _REPO_ROOT]:
     if _candidate.exists() and str(_candidate) not in sys.path:
@@ -29,12 +28,10 @@ for _candidate in [_REPO_ROOT / "src", _REPO_ROOT]:
 
 
 def _import_gate():  # type: ignore[return]
-    try:
-        from omniclaude.delegation.sensitivity_gate import SensitivityGate
+    # An import or construction error is named by _gate_why (gate_error:<type>).
+    from omniclaude.delegation.sensitivity_gate import SensitivityGate
 
-        return SensitivityGate()
-    except Exception:  # noqa: BLE001
-        return None
+    return SensitivityGate()
 
 
 def _import_classifier():  # type: ignore[return]
@@ -59,12 +56,11 @@ def _import_telemetry():  # type: ignore[return]
 
 
 def _build_telemetry_json(
-    task_type: str, model: str, latency_ms: int, correlation_id: str, session_id: str
+    task_type: str, model: str, t0: float, correlation_id: str, session_id: str
 ) -> str:
-    """NON-AUTHORITATIVE telemetry JSON, or "" when hook_delegation_telemetry is missing."""
+    # NON-AUTHORITATIVE telemetry JSON, or "" when hook_delegation_telemetry is
+    # missing (calling its None stand-ins raises TypeError, caught below).
     TelemetryClass, hash_fn = _import_telemetry()
-    if TelemetryClass is None or hash_fn is None:
-        return ""
     try:
         telemetry = TelemetryClass(
             correlation_id=correlation_id,
@@ -72,7 +68,7 @@ def _build_telemetry_json(
             task_type=task_type,
             delegated_to=model,
             routing_policy_hash=hash_fn(),
-            delegation_latency_ms=latency_ms,
+            delegation_latency_ms=int((time.monotonic() - t0) * 1000),
             # tokens_input / tokens_output / cost_usd stay 0 — hook has no LLM usage
         )
         return json.dumps(telemetry.to_dict())
@@ -80,12 +76,33 @@ def _build_telemetry_json(
         return ""
 
 
-def _sensitive(text: str) -> bool:
-    gate = _import_gate()
+def _gate_why(text: str) -> str:
+    # "" when text may go to a delegated model, else why not. Fails closed
+    # (OMN-23413): with no working gate nothing is sent, and stderr (the hook log)
+    # names the reason, so a broken install never reads as a real hit. Empty text
+    # holds nothing to keep.
+    why = "no_gate"
     try:
-        return gate is not None and bool(gate.check(text).is_sensitive)
-    except Exception:  # noqa: BLE001 - fail open, proceed to the classifier
-        return False
+        gate = _import_gate() if text else None
+        if gate is not None or not text:
+            return "sensitive" if text and gate.check(text).is_sensitive else ""
+    except Exception as error:  # noqa: BLE001 - fail closed, keep it with Claude
+        why = f"gate_error:{type(error).__name__}"
+    print(f"delegation gate unavailable ({why}): nothing sent", file=sys.stderr)
+    return why
+
+
+def _sensitive(text: str) -> bool:
+    # The node's check for recent conversation (OMN-23413): any text, uncut or not.
+    return bool(_gate_why(text))
+
+
+def _strings(value: object) -> list[str]:
+    # Every string a tool input holds, decoded and nested ones included.
+    items = [*value.keys(), *value.values()] if isinstance(value, dict) else value
+    if isinstance(items, list):
+        return [text for item in items for text in _strings(item)]
+    return [value] if isinstance(value, str) else []
 
 
 def main() -> int:
@@ -105,12 +122,10 @@ def main() -> int:
     correlation_id = correlation_id or os.environ.get("HOOK_CORRELATION_ID", "")
     session_id = str(fields.get("session_id", ""))
     if not session_id:
-        try:
-            from .session_id import resolve_session_id  # noqa: PLC0415
+        try:  # PLC0415 (import outside top level) is off for this repo
+            from .session_id import resolve_session_id
         except ImportError:
-            from plugins.onex.hooks.lib.session_id import (
-                resolve_session_id,  # noqa: PLC0415
-            )
+            from plugins.onex.hooks.lib.session_id import resolve_session_id
         session_id = resolve_session_id(default="")
 
     handler = container.build_handler()
@@ -123,14 +138,19 @@ def main() -> int:
         prompt = str(fields.get("prompt", ""))
         # The intent only picks a task class; a classifier error exits 1 and the
         # .sh passes the prompt to Claude.
-        classifier = _import_classifier()
-        intent = (
-            classifier.is_delegatable(prompt).classified_intent if classifier else ""
-        )
+        tc = _import_classifier()  # the TaskClassifier
+        intent = tc.is_delegatable(prompt).classified_intent if tc else ""
         request = models.ModelPromptDelegateRequest.of(
             fields, session_id, _sensitive(prompt), intent, limit
         )
-        result = container.build_prompt_handler().handle(request)
+        # The node withholds recent conversation this gate flags (OMN-23413). An
+        # omnimarket older than that callback (dependency skew) sends nothing.
+        try:
+            prompt_handler = container.build_prompt_handler(sensitive=_sensitive)
+        except TypeError:
+            print("prompt not_delegatable:node_skew (no sensitive)", file=sys.stderr)
+            return 0
+        result = prompt_handler.handle(request)
         print(result.log_line, file=sys.stderr)  # the .sh appends stderr to its log
         print(result.hook_output)
         return 0
@@ -140,8 +160,11 @@ def main() -> int:
     tool_text = (
         json.dumps(tool_input) if isinstance(tool_input, dict) else str(tool_input)
     )
-    if _sensitive(tool_text):
-        print("not_delegatable:sensitive")
+    # The gate reads the decoded strings that are sent, not only their JSON form,
+    # where a newline is backslash-n and hides a key from a word boundary.
+    why = _gate_why("\n".join([*_strings(tool_input), tool_text]))
+    if why:
+        print(f"not_delegatable:{why}")
         return 0
 
     why = "no_classifier"  # OMN-23413: the hook log names every pass-through's reason
@@ -163,9 +186,8 @@ def main() -> int:
                 run = result.run_id
                 print(f"DELEGATED: {task_type} answered by {model} (run {run})")
                 # NON-AUTHORITATIVE telemetry on a second line, for emit_via_daemon.
-                latency_ms = int((time.monotonic() - t0) * 1000)
                 telemetry_json = _build_telemetry_json(
-                    task_type, model, latency_ms, correlation_id, session_id
+                    task_type, model, t0, correlation_id, session_id
                 )
                 if telemetry_json:
                     print(telemetry_json)

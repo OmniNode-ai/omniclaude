@@ -15,7 +15,9 @@
 # UserPromptSubmit. One switch: POST_SKILL_DELEGATION_ENFORCER (bit 11).
 
 set -euo pipefail
-_OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
+# ONEX_DELEGATION_HOOK (prompts | subagents) labels each registration in Claude
+# Code's settings and in this log, without a second script (OMN-23413).
+_OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")${ONEX_DELEGATION_HOOK:+[${ONEX_DELEGATION_HOOK}]}"
 
 # Resolve paths before cd $HOME
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,7 +25,11 @@ source "${SCRIPT_DIR}/error-guard.sh" 2>/dev/null || true
 
 TOOL_INFO=$(cat)
 if ! command -v jq >/dev/null 2>&1; then
-    printf '%s\n' "$TOOL_INFO"
+    # Without jq the event cannot be read. A prompt hook's stdout becomes
+    # Claude's context, so anything that may be a prompt prints nothing: echoing
+    # it would put the whole hook envelope (prompt, transcript path) into the
+    # conversation. A tool call still passes through by echoing its input.
+    [[ "$TOOL_INFO" == *UserPromptSubmit* ]] || printf '%s\n' "$TOOL_INFO"
     exit 0
 fi
 TOOL_NAME=$(printf '%s\n' "$TOOL_INFO" | jq -r '.tool_name // ""' 2>/dev/null) || TOOL_NAME=""
