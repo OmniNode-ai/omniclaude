@@ -358,8 +358,12 @@ def resolve_lane_fields(
         return "", "unresolved"
 
 
-#: The environment names that mark a process as a direct ledger writer (OMN-24504).
-DIRECT_WRITE_ENV = ("ONEX_LEDGER_WRITE_VIA", "ONEX_LEDGER_RECORD_WRITER")
+#: The environment settings that mark a process as a direct ledger writer (OMN-24504): the name and
+#: the value that marks it (``None``: any value). A declared ``bus`` mode is never one of them.
+DIRECT_WRITE_ENV = (
+    ("ONEX_LEDGER_WRITE_VIA", "local"),
+    ("ONEX_LEDGER_RECORD_WRITER", None),
+)
 
 
 def _run_writer(
@@ -367,8 +371,12 @@ def _run_writer(
 ) -> subprocess.CompletedProcess[str] | None:
     """One ``onex-ledger --append`` run, or ``None`` when it could not start."""
     # The friction guard calls this recorder from inside the ledger serve, whose environment
-    # marks it a direct file writer; without those names the writer publishes over the bus.
-    env = {k: v for k, v in os.environ.items() if k not in DIRECT_WRITE_ENV}
+    # marks it a direct file writer; without those settings the writer publishes over the bus.
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if not any(k == n and m in (None, v) for n, m in DIRECT_WRITE_ENV)
+    }
     argv = ["uv", "run", "--quiet", "--project", str(project), "onex-ledger"]
     argv += [str(ledger), "--append", row, "--timeout", timeout]
     try:

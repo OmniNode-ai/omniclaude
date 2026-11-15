@@ -26,8 +26,10 @@ SERVE_ENV = {
 }
 
 
-def _record_env(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
-    """The environment the writer subprocess is started with, from a serve-like caller."""
+def _record_env(
+    monkeypatch: pytest.MonkeyPatch, caller: dict[str, str] = SERVE_ENV
+) -> dict[str, str]:
+    """The environment the writer subprocess is started with, from a caller with ``caller``."""
     seen: list[dict[str, str]] = []
 
     def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
@@ -36,7 +38,7 @@ def _record_env(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
         seen.append(env)
         return subprocess.CompletedProcess(args, returncode=0)
 
-    for name, value in SERVE_ENV.items():
+    for name, value in caller.items():
         monkeypatch.setenv(name, value)
     monkeypatch.setattr(recorder.subprocess, "run", fake_run)
     done = recorder._run_writer(
@@ -54,6 +56,15 @@ def test_writer_environment_drops_the_direct_write_variables(
 
     assert not set(SERVE_ENV) & set(env)
     assert "PATH" in env
+
+
+def test_bus_environment_keeps_a_declared_bus_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A host that declares the bus keeps it: only the direct-write settings are dropped."""
+    env = _record_env(monkeypatch, {"ONEX_LEDGER_WRITE_VIA": "bus"})
+
+    assert env["ONEX_LEDGER_WRITE_VIA"] == "bus"
 
 
 def test_bus_environment_control_keeps_the_markers_when_the_list_is_emptied(
