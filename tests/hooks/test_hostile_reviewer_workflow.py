@@ -591,10 +591,10 @@ def test_dependency_clones_are_pinned_and_review_install_excludes_rl(
     ]
     combined = "\n".join(run_blocks)
 
-    for repo in ("omniintelligence", "omnibase_core", "omnibase_compat"):
+    for repo in ("omniintelligence", "omnibase_core"):
         repo_url = f"https://github.com/OmniNode-ai/{repo}.git"
         assert repo_url in combined, f"{repo} clone must be present"
-    # core and compat are read at the pin this repo's uv.lock records, never a live
+    # core is read at the pin this repo's uv.lock records, never a live
     # branch (ruling 2026-10-01). omniintelligence is read at its newest dev-* tag
     # (OMN-20910), resolved at run time; a branch tip stays refused.
     assert "--branch dev" not in combined, "dependency clones must not track dev"
@@ -628,8 +628,11 @@ def test_dependency_clones_are_pinned_and_review_install_excludes_rl(
     assert 'p["name"] == "omnibase-core"' in combined
     assert 'p["source"]["git"].rsplit("#", 1)[-1]' in combined
     assert 'https://github.com/OmniNode-ai/omnibase_core.git "$core_ref"' in combined
-    assert "n=omnibase-compat" in combined
-    assert combined.count('--branch "v${pin_version}"') == 1
+    assert "omnibase_compat" not in combined, (
+        "omnibase_compat is retired and never cloned"
+    )
+    assert "n=omnibase-compat" not in combined
+    assert combined.count('--branch "v${pin_version}"') == 0
 
     assert "uv sync --locked --all-extras --python 3.12" in combined, (
         "reviewer dependency install must use the locked review path"

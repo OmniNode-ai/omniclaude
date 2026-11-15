@@ -8,8 +8,8 @@
 # "\.201") references inside the scanned path set.
 #
 # Scanned paths (OMN-17993): .github/workflows/** AND tests/**.
-# Until OMN-17993 this gate scanned workflow files only. omnibase_compat — a
-# repo that ships this very workflow — carried the exact banned literal as a
+# Until OMN-17993 this gate scanned workflow files only. a sibling
+# repo that ships this very workflow carried the exact banned literal as a
 # fixture value in tests/unit/contracts/delegation/, and the gate reported
 # green over it. Every repo that inherited this workflow had the same blind
 # spot. A gate scoped to a subtree reports green over the rest of the tree.

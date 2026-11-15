@@ -84,7 +84,7 @@ from pathlib import Path
 
 import click
 
-from omnibase_compat.contracts.pr_occ_stamp import parse_pr_occ_metadata_stamp
+from omnibase_core.contracts.pr_occ_metadata_stamp import parse_pr_occ_metadata_stamp
 
 
 @click.group()

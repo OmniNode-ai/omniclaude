@@ -845,7 +845,7 @@ repos:
         stages: [pre-commit]
 
       # OMN-13873: dep-provenance gate — forbid first-party git-source overrides.
-      # omnibase-core / omnibase-spi / omnibase-compat / omnibase-infra must resolve
+      # omnibase-core / omnibase-spi / omnibase-infra must resolve
       # from PyPI, not git commits/branches/tags, on dev/main (recurrence guard for
       # PR #2184's UNRELEASED-commit overrides that passed all CI green). Pure static
       # + offline; onex-change-control is intentionally exempt (immutable-main pin
