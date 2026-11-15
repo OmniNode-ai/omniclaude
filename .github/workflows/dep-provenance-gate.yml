@@ -10,7 +10,7 @@
 # dependency *provenance*, not runtime behavior, so no test catches it.
 #
 # This gate is a pure static provenance check (no network calls). It FAILS if
-# any of omnibase-core / omnibase-spi / omnibase-compat (hyphen or underscore
+# any of omnibase-core / omnibase-spi (hyphen or underscore
 # spelling) has a git / rev / branch / tag source override in pyproject.toml's
 # [tool.uv.sources] block. onex-change-control is intentionally NOT checked (it
 # follows an immutable-main pin release model). A single line may be exempted

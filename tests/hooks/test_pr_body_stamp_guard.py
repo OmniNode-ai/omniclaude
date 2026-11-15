@@ -18,6 +18,7 @@ it" is admitted. The remedy is the paste the refusal prints, not a bypass.
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import re
@@ -388,15 +389,17 @@ def test_stamp_pattern_is_the_repo_canonical_one() -> None:
 def test_every_canonical_rendered_stamp_matches_the_pattern() -> None:
     """Positive control across the shared contract, when it is importable.
 
-    ``omnibase_compat`` renders the line every producer writes. Both of its
+    ``omnibase_core`` renders the line every producer writes. Both of its
     source kinds must be recognised by this gate, or the gate protects only
     half the vocabulary.
     """
-    compat = pytest.importorskip("omnibase_compat.contracts.pr_occ_stamp")
+    stamp_module = importlib.import_module(
+        "omnibase_core.contracts.pr_occ_metadata_stamp"
+    )
     policy = load_policy(POLICY_PATH)
     for rendered in ("Evidence-Source: OCC#1234", "Evidence-Source: 0a1b2c3d4e5f"):
         assert stamp_lines(rendered, policy) == [rendered], rendered
-    assert hasattr(compat, "parse_pr_occ_metadata_stamp")
+    assert hasattr(stamp_module, "parse_pr_occ_metadata_stamp")
 
 
 def test_strip_is_idempotent() -> None:
