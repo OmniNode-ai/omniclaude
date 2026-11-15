@@ -1,0 +1,71 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+schema_version: "1.0.0"
+ticket_id: OMN-24552
+title: "Review the lapsed hook inventory entries and set the next review date"
+summary: >
+  The review_by of 2026-11-14 on the disabled hook_dispatch_claim_pretool.sh and
+  hook_dispatch_claim_posttool.sh rows lapsed and the hook-inventory gate refused every
+  commit from 2026-11-15T00:00Z. The whole inventory was compared with the registered and
+  installed hooks, defects D1 to D4 of OMN-17005 were re-read and probed, both rows stay
+  disabled with review_by 2026-11-29 and the recorded review, and the gate code is unchanged.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn24552-review-done
+    statement: The two disabled dispatch-claim hook rows carry the recorded second review with a fresh review_by, the four defects are re-read, and the gate code is unchanged.
+    acceptance:
+      - id: AC1
+        statement: "AC1: each of the four defects D1 to D4 of the dispatch-claim pair is read again on the omniclaude dev head and the pull request body states for each whether it still holds -- falsifier: grep the pull request body for D1, D2, D3 and D4 each followed by a held or fixed verdict"
+      - id: AC2
+        statement: "AC2: the two dispatch-claim rows carry review_by 2026-11-29 with a recorded review, and a test of their review date fails on the old date as of 2026-11-15 and passes on the new one -- falsifier: uv run pytest tests/hooks/test_hook_inventory.py -k dispatch_claim -q fails on the dev head and passes on the branch"
+      - id: AC3
+        statement: "AC3: the gate script exits 0 on the branch and the gate's own code is unchanged -- falsifier: uv run python scripts/validation/validate_hook_inventory.py exits 0 and git diff origin/dev --stat -- plugins/onex/hooks/lib/hook_inventory.py prints no lines"
+      - id: AC4
+        statement: "AC4: integrated: in a lane work area on the branch, the repository's own pre-commit run of the hook-inventory-gate accepts one commit, read from that run -- falsifier: uv run pre-commit run hook-inventory-gate --all-files prints Passed on the branch and Failed on the dev head dated 2026-11-15"
+evidence_requirements:
+  - kind: tests
+    command: "uv run pytest tests/hooks/test_hook_inventory.py -q --no-cov -k 'dispatch_claim or within_review'"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn24552-defects-reread
+    description: "D1 to D4 of OMN-17005 are re-read on the dev head and the PR body states per defect whether it still holds; the inventory records the second review and the gate TTL is intact."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: command
+        check_value: "bash -o pipefail -c 'grep -c \"Second review 2026-11-15 (OMN-24552)\" plugins/onex/hooks/contracts/hook_inventory.yaml && grep -c \"_DEFAULT_TTL = 300\" plugins/onex/hooks/lib/dispatch_claim_gate.py'"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn24552-rows-in-review
+    description: "Both dispatch-claim rows carry review_by 2026-11-29 and the dispatch-claim and review-window tests pass."
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_hook_inventory.py -q --no-cov -k 'dispatch_claim or within_review'"
+      - check_type: command
+        check_value: "bash -o pipefail -c 'test \"$(grep -c \"review_by: .2026-11-29.\" plugins/onex/hooks/contracts/hook_inventory.yaml)\" -ge 2'"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn24552-gate-green-unchanged
+    description: "The gate's own validator exits 0 and plugins/onex/hooks/lib/hook_inventory.py is unchanged against origin/dev."
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: command
+        check_value: "uv run python scripts/validation/validate_hook_inventory.py"
+        cwd: "${OMNI_HOME}/omniclaude"
+      - check_type: command
+        check_value: "bash -o pipefail -c 'test -z \"$(git diff origin/dev --stat -- plugins/onex/hooks/lib/hook_inventory.py)\"'"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn24552-pre-commit-integrated
+    description: "The repository's own pre-commit run of the hook-inventory-gate accepts on the branch."
+    source: manual
+    binds_ac: [AC4]
+    checks:
+      - check_type: command
+        check_value: "uv run pre-commit run hook-inventory-gate --all-files"
+        cwd: "${OMNI_HOME}/omniclaude"

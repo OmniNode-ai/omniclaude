@@ -596,16 +596,19 @@ def test_disables_are_within_review_today() -> None:
     assert not lapsed, [f.render() for f in lapsed]
 
 
-def test_the_dispatch_claim_disables_outlive_their_lapsed_review_date() -> None:
-    """OMN-21845: the two dispatch-claim rows carry a review date past the lapse.
+@pytest.mark.parametrize("lapse_day", [date(2026, 11, 1), date(2026, 11, 15)])
+def test_the_dispatch_claim_disables_outlive_their_lapsed_review_date(
+    lapse_day: date,
+) -> None:
+    """OMN-21845/OMN-24552: the rows carry a review date past each lapse day.
 
     ``test_disables_are_within_review_today`` reads the calendar, so it goes red
     with no diff and green again with none: it cannot show that *this* change is
-    what fixed anything. This test pins 2026-11-01, the day the two rows lapsed
-    on, so the row's own ``review_by`` is the subject. Move either row back to
-    2026-10-31 and it fails.
+    what fixed anything. This test pins each lapse day the two rows lapsed on —
+    2026-11-01 under OMN-21845 and 2026-11-15 under OMN-24552 — so the rows'
+    own ``review_by`` is the subject. Move either row back past either lapse
+    day and it fails.
     """
-    lapse_day = date(2026, 11, 1)
     inventory = _LIB.load_inventory(_REPO_ROOT / _INVENTORY_REL)
     dispatch_claim = {
         disabled.script: disabled
