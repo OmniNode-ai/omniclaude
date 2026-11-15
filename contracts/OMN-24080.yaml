@@ -1,0 +1,67 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-24080
+title: "canonical-clone-sync ignores folders that are not registry clones"
+summary: >
+  canonical_clone_sync.sibling_clones listed every direct child of the
+  registry's parent folder as a sibling clone. A folder that was not a clone of
+  a registry repository was refused, and that one refusal raised exit 3 for the
+  whole run. A direct child is now kept only when its GitHub owner is a
+  registry owner (ONEX_REGISTRY_OWNERS, or the owner of the home folder), or
+  when a *_INTERNAL_HOME variable names its path. Other folders are neither
+  synced nor refused.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn24080-unregistered-ignored
+    statement: A folder beside the registry that is not a registry clone is left out of the sibling list and cannot raise the refusal bound.
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: with an unregistered folder beside the registry, sibling_clones leaves it out and the refusal bound is not raised -- falsifier: pytest tests/hooks/test_canonical_clone_sync.py -k an_unregistered_folder_beside_the_registry -q fails on origin/dev"
+  - id: req-omn24080-registered-kept
+    statement: A registered clone and a *_INTERNAL_HOME path are still kept, and a registered clone that is refused still raises the bound.
+    acceptance:
+      - id: "AC2"
+        statement: "AC2: a registry-owner clone and a *_INTERNAL_HOME path are still kept, and a refused registered clone still raises the bound -- falsifier: pytest tests/hooks/test_canonical_clone_sync.py -q"
+  - id: req-omn24080-integrated
+    statement: The Mac canonical-clone-sync job's next run with an unregistered folder present exits 0.
+    acceptance:
+      - id: "AC3"
+        statement: "AC3: integrated: the Mac canonical-clone-sync job's next run, with an unregistered folder present beside the registry, exits 0 -- falsifier: launchctl list ai.omninode.canonical-clone-sync reads last exit status 0 and the job's stdout log shows a run after the install time with the folder present"
+evidence_requirements:
+  - kind: tests
+    description: "The canonical clone sync tests pass"
+    command: "uv run pytest tests/hooks/test_canonical_clone_sync.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn24080-ac1-unregistered-ignored
+    description: "An unregistered folder beside the registry is left out of sibling_clones and never raises the refusal bound. Fails at the merge base, where the folder is listed and refused."
+    source: manual
+    binds_ac:
+      - "AC1"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_canonical_clone_sync.py -q --no-cov -k an_unregistered_folder_beside_the_registry"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn24080-ac2-registered-kept
+    description: "A registry-owner clone and a *_INTERNAL_HOME path are kept, and a refused registered clone still raises the bound."
+    source: manual
+    binds_ac:
+      - "AC2"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_canonical_clone_sync.py -q --no-cov"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn24080-ac3-integrated
+    description: "AC3 is a reading of the Mac job after the fix is installed there; not yet read. The check pins the owner filter in the tree that the reading depends on."
+    source: manual
+    binds_ac:
+      - "AC3"
+    checks:
+      - check_type: command
+        check_value: "grep -qF 'ONEX_REGISTRY_OWNERS' plugins/onex/hooks/lib/canonical_clone_sync.py"
+        cwd: "${OMNI_HOME}/omniclaude"

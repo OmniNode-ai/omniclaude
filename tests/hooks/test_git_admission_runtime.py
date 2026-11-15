@@ -90,7 +90,8 @@ def test_batched_adapter_reuses_loaded_node_without_changing_verdict(
     second = bash_guard_cores.run_core(request)
     assert first == second
     assert first[0] == 2
-    assert json.loads(first[1])["decision"] == "block"
+    # The merged stream may open with the runtime banner; the verdict is the last line.
+    assert json.loads(first[1].splitlines()[-1])["decision"] == "block"
 
 
 def test_batched_adapter_reports_missing_core_before_traceback(
