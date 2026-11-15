@@ -24,6 +24,12 @@ You need the plan as a committed file in a git worktree, so a diff has a base. I
 
 Confirm the final reviewer's model id from the session environment. Do not guess it. If the environment does not list Fable 5.2, or a dispatch guard refuses it, stop and say which of the two blocked; never substitute another model for the final pass.
 
+## Before round 1: the first slice
+
+The plan must have a section headed "First slice" naming the smallest cut that can be built and tested alone, and a section headed "Later rungs" for the rest.
+
+Run the first-slice check before any reviewer is sent the plan: `onex run-node node_plan_first_slice_compute --timeout 60 --input '{"plan_text": "<the plan file text>"}'`. Its result carries a verdict of `ok`, `no_first_slice_section` or `empty_first_slice_section`. When the verdict is not `ok`, return the plan to its author and send it to no reviewer.
+
 ## Round 1: find problems
 
 Send the plan to the first reviewers, for example Codex at high effort, Sonnet and Opus. Give each reviewer the plan and the rules it must fit (contracts, nodes and overlays, no new scripts, no hard-coded values), and ask for findings only: what is wrong, unbuildable, untestable, missing, or contradicts a decision already made, each with the line it concerns. Not a rewrite.
@@ -32,7 +38,7 @@ Send the plan to the first reviewers, for example Codex at high effort, Sonnet a
 
 Fix every finding you agree with in the plan file, and write down the ones you reject with a one-line reason. Commit. A finding that needs a decision only the plan's owner can make stays in the plan as an open decision; do not decide it yourself.
 
-Repeat rounds 1 and 2 until a round returns no finding you agree with. Two rounds is usual.
+Repeat rounds 1 and 2 over the whole plan only until no blocking finding is left. A blocking finding is a wrong fact, a step that cannot be built or tested, or a contradiction with a recorded operator ruling. After that, stop full-plan rounds. Review the first slice alone until a Codex round returns clean, build it with its tests, and review each later rung the same way when it is next to be built. Findings that are not blocking are listed for the author and do not start another full-plan round (operator ruling, 2026-11-14).
 
 ## Final round: Fable 5.2, diffs only
 
