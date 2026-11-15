@@ -1679,3 +1679,142 @@ def test_lab_host_work_real_hook_refuses_then_admits(lab_table: None) -> None:
     assert "PLACEMENT: remote-lane" in refused.stdout
     admitted = run("PLACEMENT: remote-lane\\nssh h201 docker ps")
     assert admitted.returncode == 0 and admitted.stdout == ""
+
+
+# ---------------------------------------------------------------------------
+# Second review fixes (OMN-24618): ROUTE check unchanged, host table path,
+# variable hosts
+# ---------------------------------------------------------------------------
+
+_FIXTURES = Path(__file__).parent / "fixtures" / "workflow_model_guard"
+
+
+def _route_findings(source: str, monkeypatch: pytest.MonkeyPatch, expand: bool) -> Any:
+    """The ROUTE-check verdict with the lab check off; ``expand`` False reads the prompt as written."""
+    monkeypatch.setattr(_GUARD, "_lab_host_work_problem", lambda *a, **k: None)
+    if not expand:
+        monkeypatch.setattr(
+            _GUARD,
+            "_lab_prompt",
+            lambda src, masked, span: (src[span[0] : span[1]], True),
+        )
+    return [(f.line, f.reason) for f in _check_routed(source)]
+
+
+_ROUTE_CONST_SCRIPT = (
+    f"const HEAD = `{_ROUTE_B3}`\n"
+    "await agent(`${HEAD}\\nwork`, { label: 'a', model: 'sonnet' })\n"
+)
+
+
+def test_lab_host_work_const_expansion_does_not_feed_route_check() -> None:
+    """A ROUTE line held in a const is not read by the ROUTE check: still refused as before."""
+    findings = _check_routed(_ROUTE_CONST_SCRIPT)
+    assert len(findings) == 1 and "ROUTE" in findings[0].reason
+
+
+@pytest.mark.parametrize(
+    "name", sorted(p.name for p in _FIXTURES.glob("*.js")) or ["<none>"]
+)
+def test_lab_host_work_route_verdict_unchanged_on_real_scripts(
+    name: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = (_FIXTURES / name).read_text(encoding="utf-8")
+    expanded = _route_findings(source, monkeypatch, expand=True)
+    assert expanded == _route_findings(source, monkeypatch, expand=False)
+
+
+def test_lab_host_work_route_verdict_unchanged_on_const_script(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert _route_findings(_ROUTE_CONST_SCRIPT, monkeypatch, True) == _route_findings(
+        _ROUTE_CONST_SCRIPT, monkeypatch, False
+    )
+
+
+def test_lab_host_work_check_sees_expanded_prompt_in_real_script(
+    lab_table: None,
+) -> None:
+    name = sorted(p.name for p in _FIXTURES.glob("passing_*.js"))[0]
+    source = (_FIXTURES / name).read_text(encoding="utf-8")
+    assert not any("lab host" in f.reason for f in _check(source))
+    held = (
+        source
+        + "\nconst LABP = 'ssh h201 docker ps'\nawait agent(LABP, { label: 'z', model: 'sonnet' })\n"
+    )
+    assert any("lab host" in f.reason for f in _check(held))
+
+
+def _overlay_layout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reader: str
+) -> None:
+    """the registry root with the overlays clone beside it, the way the placement code finds the table."""
+    for var in ("LANDING_POOL_HOSTS", "ONEX_LAB_RUN_HOSTS", "ONEX_SKILL_OVERLAY_ROOTS"):
+        monkeypatch.delenv(var, raising=False)
+    (tmp_path / ".ssh").mkdir()
+    (tmp_path / ".ssh" / "config").write_text("Host sshalias\nHost *\n")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    home = tmp_path / "reg" / "registry_root"
+    home.mkdir(parents=True)
+    monkeypatch.setenv("OMNI_HOME", str(home))
+    store = tmp_path / "reg" / reader / "node_overlay_store_read_effect"
+    store.mkdir(parents=True)
+    (store / "overlay.yaml").write_text(f"snapshot_root: {tmp_path}/snap\n")
+    (tmp_path / "snap" / "lab_hosts").mkdir(parents=True)
+    (tmp_path / "snap" / "lab_hosts" / "overlay.yaml").write_text(_TABLE)
+
+
+@pytest.mark.parametrize(
+    "reader", ["overlays/overlays", "overlay-store-reader/overlays/overlays"]
+)
+def test_lab_host_work_host_table_read_beside_registry_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reader: str
+) -> None:
+    _overlay_layout(tmp_path, monkeypatch, reader)
+    for prompt in (
+        "ssh h301 uptime",
+        "ssh tablehost docker ps",
+        "ssh sshalias uptime",
+        f"ssh {_ip(192, 168, 86, 201)} uptime",
+    ):
+        findings = _lab_check(prompt)
+        assert len(findings) == 1 and "no declared placement" in findings[0].reason
+    assert _lab_check("ssh buildbox.example.com uptime") == []
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "ssh ${HOST} uptime",
+        'ssh -o BatchMode=yes "$HOST" docker ps',
+        "for h in $HOSTS; do ssh $h systemctl status onex; done",
+        "docker -H ${target} ps",
+        "systemctl --host=$box restart onex",
+        "Task: ${args.x}",
+    ],
+)
+def test_lab_host_work_variable_host_refused(lab_table: None, prompt: str) -> None:
+    findings = _lab_check(prompt)
+    assert len(findings) == 1
+    assert "lab host" in findings[0].reason or "cannot be read" in findings[0].reason
+
+
+@pytest.mark.parametrize("declaration", _DECLARATIONS)
+@pytest.mark.parametrize(
+    "prompt",
+    ["ssh ${HOST} uptime", "for h in $HOSTS; do ssh $h ls; done", "Task: ${args.x}"],
+)
+def test_lab_host_work_variable_host_declared_admitted(
+    lab_table: None, prompt: str, declaration: str
+) -> None:
+    assert _lab_check(f"{declaration}\\n{prompt}") == []
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    ["docker ps on this machine", "ssh buildbox.example.com uptime", "echo ${HOME}"],
+)
+def test_lab_host_work_variable_host_unrelated_untouched(
+    lab_table: None, prompt: str
+) -> None:
+    assert _lab_check(prompt) == []

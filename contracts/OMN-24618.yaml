@@ -16,6 +16,12 @@ requirements:
     acceptance:
       - id: AC1
         statement: "AC1: an agent() prompt doing lab-host work with no placement declaration is refused, and each of the three declarations admits it -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -k lab_host_work -q --no-cov with the host-work check removed from workflow_model_guard.py"
+      - id: AC2
+        statement: "AC2: the same prompts are admitted when the label or prompt declares remote-lane placement, a Fable review, or LOCAL-ONLY with a non-empty reason, and a LOCAL-ONLY with no reason is refused -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -k lab_host_work -q --no-cov"
+      - id: AC3
+        statement: "AC3: a prompt with no lab-host work is untouched by the new rule, including ssh to a non-lab host and the word docker in prose with no host target -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -k lab_host_work_unrelated -q --no-cov"
+      - id: AC4
+        statement: "AC4: the refusal is read live on the operator Mac after the branch is installed through the declared plugin install path, with installed=<host>:<revision> recorded -- falsifier: run a test Workflow whose agent() prompt runs ssh to h201 on the Mac after install and read the refusal text in the tool result"
 evidence_requirements:
   - kind: tests
     description: "lab_host_work refused, allowed and unrelated fixtures pass"
@@ -33,3 +39,27 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -k lab_host_work -q --no-cov"
+  - id: dod-lab-host-work-allowed
+    description: "Remote-lane placement, a Fable review and LOCAL-ONLY with a real reason each admit the prompt, in the prompt or the label, for literal, const-held and variable-host prompts; an empty or placeholder LOCAL-ONLY reason is refused"
+    source: manual
+    binds_ac:
+      - AC2
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -k 'lab_host_work and (allowed or admitted or declared)' -q --no-cov"
+  - id: dod-lab-host-work-unrelated
+    description: "A prompt with no lab-host work, ssh to a non-lab host and docker in prose with no host target are untouched, and the ROUTE check verdict on real scripts is unchanged"
+    source: manual
+    binds_ac:
+      - AC3
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -k 'lab_host_work and (unrelated or untouched or unchanged)' -q --no-cov"
+  - id: dod-lab-host-work-live-refusal
+    description: "The branch is installed on the operator Mac through the declared plugin install path and a test Workflow whose agent() prompt runs ssh to h201 is refused with the fix line; the install revision is recorded as installed=<host>:<revision> by the orchestrator after the Mac install"
+    source: manual
+    binds_ac:
+      - AC4
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -k lab_host_work_real_hook_refuses_then_admits -q --no-cov"

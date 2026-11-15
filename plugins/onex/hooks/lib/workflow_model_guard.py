@@ -191,10 +191,8 @@ def _lab_table_text(env: Mapping[str, str]) -> str:
     roots = [Path(p) for p in env.get("ONEX_SKILL_OVERLAY_ROOTS", "").split(":") if p]
     if env.get("OMNI_HOME"):
         beside = Path(env["OMNI_HOME"]).resolve().parent
-        roots += [
-            beside / d / "overlays" / "overlays"
-            for d in ("overlays", "overlay-store-reader")
-        ]
+        roots += [beside / "overlays" / "overlays"]
+        roots += [beside / "overlay-store-reader" / "overlays" / "overlays"]
     for root in roots:
         text = _lab_read(root / "node_overlay_store_read_effect" / "overlay.yaml")
         line = re.search(r"^snapshot_root:\s*(.+)$", text, re.M)
@@ -253,6 +251,22 @@ def _lab_hostnames(env: Mapping[str, str] | None = None) -> set[str]:
     }
 
 
+_LAB_ARGS: Final = re.compile(r"\$\{[^}]*\bargs\b")
+_LAB_HOST_FLAG: Final = re.compile(r"(?:-H|--host|--context|-c)(?:=|\s+)(\S+)")
+_LAB_SSH_ARG: Final = frozenset("bcDEeFIiJLlmOopQRSWw")
+
+
+def _lab_variable_host(line: str, cmd: str) -> str | None:
+    """The host operand of an ssh, docker or systemctl command when it is a variable."""
+    rest = re.split(rf"(?<![\w-]){cmd}(?![\w-])", line, maxsplit=1, flags=re.I)[1]
+    if cmd.lower() != "ssh":
+        return next((m[1] for m in _LAB_HOST_FLAG.finditer(rest) if "$" in m[1]), None)
+    toks, i = rest.split(), 0
+    while i < len(toks) and toks[i].startswith("-"):
+        i += 1 + (len(toks[i]) == 2 and toks[i][1] in _LAB_SSH_ARG)
+    return toks[i] if i < len(toks) and "$" in toks[i] else None
+
+
 def _lab_end(masked: str, pos: int) -> int:
     """End of the declaration whose initializer starts at ``pos``."""
     depth, joiners = 0, "+-*/%,=([{?:&|.<>!"
@@ -304,6 +318,8 @@ def _lab_host_work_problem(text: str, readable: bool = True) -> str | None:
         return None
     if not readable:
         return "the prompt of this agent() call cannot be read (not a literal, nor a const in the script), so lab-host work cannot be ruled out and no placement is declared"
+    if _LAB_ARGS.search(text):
+        return "the prompt of this agent() call interpolates runtime args, so it cannot be read in full, lab-host work cannot be ruled out and no placement is declared"
     names = _lab_hostnames()
     prefixes = {n.rsplit(".", 1)[0] + "." for n in names if _LAB_IPV4.fullmatch(n)} | {
         f"{192}.{168}."
@@ -320,6 +336,7 @@ def _lab_host_work_problem(text: str, readable: bool = True) -> str | None:
             for n in sorted(names)
             if re.search(rf"(?<![\w.-]){re.escape(n)}(?![\w-]|\.\w)", line, re.I)
         ]
+        hit += [v] if (v := _lab_variable_host(line, cmd[0])) else []
         if hit:
             return f"{cmd[0].lower()} on lab host {hit[0]!r} with no declared placement"
     return None
@@ -1391,11 +1408,13 @@ def check_workflow_script(
             continue
 
         label_prop = [prop for prop in props if prop.key == "label"]
-        prompt, readable = _lab_prompt(source, masked, spans[0])
-        route_text = prompt + "".join(
+        label_text = "".join(
             source[prop.value_start : prop.value_end] for prop in label_prop
         )
-        lab = _lab_host_work_problem(route_text, readable)
+        # The ROUTE check reads the argument as written; only the lab-host check follows consts.
+        route_text = source[spans[0][0] : spans[0][1]] + label_text
+        prompt, readable = _lab_prompt(source, masked, spans[0])
+        lab = _lab_host_work_problem(prompt + label_text, readable)
         if lab is not None:
             findings.append(Finding(file=filename, line=line, label=label, reason=lab))
             continue
