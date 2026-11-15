@@ -29,8 +29,7 @@ requirements:
 evidence_requirements:
   - kind: tests
     description: The wiring test passes at the head.
-    command: uv run pytest tests/ci/test_ledger_file_census_hook_omn24480.py -q --no-cov -o addopts=''
-      -n 0
+    command: uv run pytest tests/ci/test_ledger_file_census_hook_omn24480.py -q
 emergency_bypass:
   enabled: false
   justification: ''
@@ -45,8 +44,7 @@ dod_evidence:
       - AC1
     checks:
       - check_type: test_passes
-        check_value: uv run pytest tests/ci/test_ledger_file_census_hook_omn24480.py -q --no-cov -o addopts=''
-          -n 0
+        check_value: uv run pytest tests/ci/test_ledger_file_census_hook_omn24480.py -q
         cwd: ${OMNI_HOME}/omniclaude
   - id: dod-omn24480-omniclaude-ac2
     description: 'Failing control: at the merge base the hook and the count file are absent, so the wiring
@@ -58,8 +56,7 @@ dod_evidence:
       - AC2
     checks:
       - check_type: test_passes
-        check_value: uv run pytest tests/ci/test_ledger_file_census_hook_omn24480.py -q --no-cov -o addopts=''
-          -n 0 -k "is_wired or ratchet_row"
+        check_value: uv run pytest tests/ci/test_ledger_file_census_hook_omn24480.py -q -k "is_wired or ratchet_row"
         cwd: ${OMNI_HOME}/omniclaude
   - id: dod-omn24480-omniclaude-ac3
     description: The hook as pre-commit runs it prints the CENSUS line for omniclaude with its count
