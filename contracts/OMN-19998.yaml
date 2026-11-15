@@ -478,6 +478,8 @@ dod_evidence:
     source: manual
     checks:
       - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_hook_inventory_dispatch_claim_review_by_omn19998.py -q --no-cov"
+      - check_type: test_passes
         check_value: "uv run pytest tests/hooks/test_hook_inventory.py -q --no-cov"
       - check_type: command
         check_value: "grep -c 'review_by: \"2026-12-15\"' plugins/onex/hooks/contracts/hook_inventory.yaml"
