@@ -1276,7 +1276,7 @@ expected_hooks:
     order: 0
 
 disabled_hooks:
-  # Review date moved 2026-10-31 -> 2026-11-14 for the two dispatch-claim rows
+  # Review date moved 2026-10-31 -> 2026-11-28 for the two dispatch-claim rows
   # below. OMN-21845 first moved it to 2026-12-31 to clear the gate; OMN-21860
   # then did the review itself and re-read all four defects against origin/dev
   # on 2026-11-01, so the date is the reviewed one and each row records what was
@@ -1303,8 +1303,10 @@ disabled_hooks:
       still AGENT_ID="${CLAUDE_AGENT_ID:-session}". D4 dispatch_claim_gate.py
       has _DEFAULT_TTL = 300 (line 50) and unlinks an expired claim at line
       261 with no renewal, fencing token or CLAIM_EXPIRED record. OMN-17005
-      is still Backlog.
-    review_by: "2026-11-14"
+      is still Backlog. Re-read again on 2026-11-15: D1 to D4 still hold at the
+      same lines (error-guard source line 38, exit 2 line 146, permissionDenied
+      line 145, AGENT_ID fallback line 79, _DEFAULT_TTL line 50, unlink line 261).
+    review_by: "2026-11-28"
     restoration:
       kind: "re_register"
       reenable_ticket: "OMN-17005"
@@ -1326,7 +1328,7 @@ disabled_hooks:
       would report `not_owner` on every call. Reviewed 2026-11-01 (OMN-21860):
       the acquire half's defects D1 to D4 still hold, so this half stays
       disabled with it.
-    review_by: "2026-11-14"
+    review_by: "2026-11-28"
     restoration:
       kind: "re_register"
       reenable_ticket: "OMN-17005"
