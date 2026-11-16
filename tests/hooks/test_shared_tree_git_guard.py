@@ -752,11 +752,12 @@ def test_force_push_to_a_protected_branch_is_refused_via_a_cd_prefix(
 #: this launch with the same arguments was admitted (measured on omniclaude dev
 #: ac7889091, 2026-11-16).
 WRAPPED_PUSH_LAUNCH = (
+    "rm -f /tmp/lane/push.pid /tmp/lane/push.done; "
     'python3 -c \'import subprocess,sys;subprocess.Popen(["bash","-c",sys.argv[1]],'
     "start_new_session=True,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,"
     "stderr=subprocess.DEVNULL)' "
     '\'echo $$ > /tmp/lane/push.pid; perl -e "alarm 2400; exec @ARGV" git push {args}'
-    " > /tmp/lane/push.log 2>&1; echo $? > /tmp/lane/push.done'"
+    " > /tmp/lane/push.log 2>&1; r=$?; echo $r > /tmp/lane/push.done; test $r -ne 142 || kill -- -$$'"
 )
 
 #: The other wrappers a push is run under: a shell, a bound, both.
