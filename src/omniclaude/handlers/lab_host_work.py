@@ -13,6 +13,9 @@ lab's placement and load bar. Such a prompt is refused unless it declares one li
 ``PLACEMENT: remote-lane``, ``PLACEMENT: fable-review`` or ``LOCAL-ONLY: <reason>``
 (a reason of at least three words that is not a placeholder).
 
+The guard loads this file by path from its own repository checkout. A plugin cache copy has
+no ``src/``, so there the check is off and no dispatch is refused for it (OMN-24738).
+
 What the check is, and is not:
 
 * It is a **shape check**, not a truth check, in the posture of the actor-line
@@ -29,14 +32,21 @@ What the check is, and is not:
   (a host on a later line than its command counts, and so does a dotted name such
   as ``<host>.example.org``). A command whose host is a shell variable (``ssh $HOST``,
   ``ssh user@${H}``) is lab-host work unless declared, since the name cannot be
-  read.
+  read, once some lab host is known.
 * A prompt passed by name is followed to its consts and functions in the script
   (depth six). An identifier in the prompt that no const or function in the script
-  defines (``args.x``, a loop variable, a parameter) is an unresolved substitution:
-  the prompt cannot be read, lab-host work cannot be ruled out, and it is refused
-  unless it declares a placement.
-* The check does not run on a lab host: a dispatching host that is itself a row of
-  the table is where lab work belongs.
+  defines (``args.x``, a loop variable) is an unresolved substitution.
+* The check does not run on a lab host: a dispatching host that is a row of the table where
+  lab work may be placed (not a ``local: true`` row, not ``available: false``) is where lab
+  work belongs. The launching host's own row is ``local: true`` and is checked like any other
+  Mac: it is the host this check exists for.
+* With no lab host known at all the check refuses nothing.
+* An unresolved substitution is refused only when the text reached holds a command word whose
+  host cannot be read, or holds no literal text at all. ``Summarise ${args.path}`` names no
+  command and is admitted; ``ssh ${args.host} uptime`` and a bare ``args.prompt`` are refused.
+  A const whose initializer calls ``agent()`` is an earlier agent's result, and the arrow
+  parameters of a function in the script are bound as ``function`` parameters are.
+* The table and the ssh config are read once per run of the guard.
 
 The ROUTE check never reads what this check expands; the guard hands each its own text.
 """
@@ -63,7 +73,7 @@ _FIXED: Final = re.compile(r"PLACEMENT:[ \t]*(?:remote-lane|fable-review)\b", re
 _LOCAL: Final = re.compile(r"LOCAL-ONLY:([^\r\n]*)", re.I)
 _SPLIT: Final = re.compile(r"\r?\n|\\n")
 _CMD: Final = re.compile(
-    r"(?<![\w-])(?:ssh|scp|sftp|rsync|docker|systemctl)(?![\w-])", re.I
+    r"(?<![\w./-])(?:ssh|scp|sftp|rsync|docker|systemctl)(?![\w-])", re.I
 )
 _SSH_FAMILY: Final = frozenset({"ssh", "scp", "sftp", "rsync"})
 _SHELL_VAR: Final = r"\$(?:\{[A-Za-z_]|\(|[A-Za-z_])"
@@ -132,6 +142,8 @@ _SKIP: Final = frozenset(
         "Date",
     ]
 )
+_ARROW: Final = re.compile(r"(?:\(([^()]*)\)|(?<![\w$.])([A-Za-z_$][\w$]*))\s*=>")
+_AGENT_CALL: Final = re.compile(r"(?<![\w$.])agent\s*\(")
 _NO_LITERAL: Final[str] = "<no literal text>"
 _UNREADABLE: Final[str] = "cannot be read"
 _REFUSED: Final[str] = "no declared placement"
@@ -200,45 +212,92 @@ def _table_text(env: Mapping[str, str]) -> str:
     return ""
 
 
-def hostnames(env: Mapping[str, str] | None = None) -> set[str]:
-    """Lab host names: pool rows (``LANDING_POOL_HOSTS``, else the table) and ssh config names."""
-    env = os.environ if env is None else env
-    names: set[str] = set()
+_Row = tuple[set[str], bool, bool]
+
+
+def _rows(env: Mapping[str, str]) -> list[_Row]:
+    """The rows of the lab host table as ``(names, local, available)``: the name, target and
+    fallback targets of a row, whether it is the launching host's own, whether it takes work."""
+    rows: list[_Row] = []
     if env.get("LANDING_POOL_HOSTS") is not None:
         try:
-            rows = json.loads(env["LANDING_POOL_HOSTS"] or "[]")
+            raw = json.loads(env["LANDING_POOL_HOSTS"] or "[]")
         except ValueError:
-            rows = []
-        names |= (
-            {
-                str(r[k])
-                for r in rows
-                if isinstance(r, dict)
-                for k in ("name", "target")
-                if r.get(k)
-            }
-            if isinstance(rows, list)
-            else set()
+            raw = []
+        for r in raw if isinstance(raw, list) else []:
+            if isinstance(r, dict):
+                names = {str(r[k]) for k in ("name", "target") if r.get(k)}
+                rows.append(
+                    (names, r.get("local") is True, r.get("available") is not False)
+                )
+        return rows
+    in_hosts = False
+    for raw_line in _table_text(env).splitlines():
+        if raw_line and not raw_line[0].isspace() and raw_line[0] != "-":
+            in_hosts = raw_line.split(":")[0].strip() == "hosts"
+        m = re.match(
+            r"\s*(?:-\s*)?(name|target|fallback_targets|local|available):\s*(.*)$",
+            raw_line,
         )
-    else:
-        in_hosts = False
-        for raw in _table_text(env).splitlines():
-            if raw and not raw[0].isspace() and raw[0] != "-":
-                in_hosts = raw.split(":")[0].strip() == "hosts"
-            row = re.match(
-                r"\s*(?:-\s*)?(?:name|target|fallback_targets):\s*(.*)$", raw
-            )
-            if in_hosts and row:
-                names |= {_scalar(v) for v in row[1].strip("[] ").split(",")}
-    ssh = _read(Path(env.get("HOME") or str(Path.home())) / ".ssh" / "config") or ""
-    names |= {
-        t
-        for m in re.finditer(r"^\s*(?:Host|HostName)\s+(.+)$", ssh, re.I | re.M)
-        for t in m[1].split()
-        if not set(t) & set("*?!")
-    }
-    names = {n.rsplit("@", 1)[-1].lower() for n in names if n}
-    return names - {"github.com", "localhost", ""}
+        if not (in_hosts and m):
+            continue
+        if m[1] == "name" or not rows:
+            rows.append((set(), False, True))
+        names, local, available = rows[-1]
+        value = _scalar(m[2]).lower()
+        if m[1] == "local":
+            local = value == "true"
+        elif m[1] == "available":
+            available = value != "false"
+        else:
+            names |= {_scalar(v) for v in m[2].strip("[] ").split(",")}
+        rows[-1] = (names, local, available)
+    return rows
+
+
+def _norm(names: set[str]) -> set[str]:
+    return {n.rsplit("@", 1)[-1].lower() for n in names if n} - {""}
+
+
+_MEMO: dict[
+    tuple[str | None, ...], tuple[frozenset[str], frozenset[str], frozenset[str]]
+] = {}
+_MEMO_KEYS: Final = (
+    "LANDING_POOL_HOSTS",
+    "ONEX_LAB_RUN_HOSTS",
+    "ONEX_SKILL_OVERLAY_ROOTS",
+    "OMNI_HOME",
+    "HOME",
+)
+
+
+def _tables(
+    env: Mapping[str, str],
+) -> tuple[frozenset[str], frozenset[str], frozenset[str]]:
+    """``(names, placeable, local)``: every lab host name, the names of the rows where lab work
+    may be placed (not ``local``, not ``available: false``) and the names of the ``local`` rows.
+    Read once per run: the table and the ssh config do not change while the guard runs."""
+    key = tuple(env.get(k) for k in _MEMO_KEYS)
+    if key not in _MEMO:
+        rows = _rows(env)
+        ssh = _read(Path(env.get("HOME") or str(Path.home())) / ".ssh" / "config") or ""
+        ssh_names = {
+            t
+            for m in re.finditer(r"^\s*(?:Host|HostName)\s+(.+)$", ssh, re.I | re.M)
+            for t in m[1].split()
+            if not set(t) & set("*?!")
+        }
+        skip = {"github.com", "localhost"}
+        every = _norm(set().union(*(r[0] for r in rows), ssh_names)) - skip
+        placeable = _norm(set().union(*(r[0] for r in rows if r[2] and not r[1])))
+        local = _norm(set().union(*(r[0] for r in rows if r[1])))
+        _MEMO[key] = (frozenset(every), frozenset(placeable), frozenset(local))
+    return _MEMO[key]
+
+
+def hostnames(env: Mapping[str, str] | None = None) -> set[str]:
+    """Lab host names: pool rows (``LANDING_POOL_HOSTS``, else the table) and ssh config names."""
+    return set(_tables(os.environ if env is None else env)[0])
 
 
 def _end(masked: str, pos: int) -> int:
@@ -277,6 +336,9 @@ def expand(
             for c, m in zip(source[lo:hi], masked[lo:hi], strict=True)
             if c != m and c not in " \t\r\n'\"`${}"
         )
+        for arrow in _ARROW.finditer(masked, lo, hi):
+            # The parameters of an arrow function are bound as ``function`` parameters are.
+            seen.update(_IDENT.findall(arrow[1] or arrow[2]))
         for ident in _IDENT.finditer(masked, lo, hi):
             name = ident[0]
             if name in seen or name in _SKIP:
@@ -298,6 +360,8 @@ def expand(
                 seen.update(_IDENT.findall(masked[start : masked.find(")", start)]))
                 start = max(masked.find("{", start), start)
             end = _end(masked, start)
+            if _AGENT_CALL.search(masked, start, end):
+                continue  # an earlier agent's result: not text of this prompt, nor lab work
             ranges.append((start, end))
             queue.append((start, end, depth + 1))
     if literal == 0:
@@ -313,11 +377,18 @@ def expand(
     return text, lit, unresolved
 
 
-def _own_host(names: set[str], hostname: str | None) -> bool:
-    """Whether the dispatching host is itself a lab host (a row of the table)."""
+def _is_host(names: frozenset[str], own: str) -> bool:
+    short = {n.split(".", 1)[0] for n in names if not _IPV4.fullmatch(n)}
+    return own in names or own.split(".", 1)[0] in short
+
+
+def _own_host(
+    placeable: frozenset[str], local: frozenset[str], hostname: str | None
+) -> bool:
+    """Whether the dispatching host is a row where lab work may be placed. A ``local: true`` row
+    is the launching host (the operator Mac): it never counts, whatever its hostname is."""
     own = (socket.gethostname() if hostname is None else hostname).lower()
-    short = {n.split(".")[0] for n in names if not _IPV4.fullmatch(n)}
-    return bool(own) and (own in names or own.split(".")[0] in short)
+    return bool(own) and _is_host(placeable, own) and not _is_host(local, own)
 
 
 def _variable_host(literal: str) -> tuple[str, str] | None:
@@ -341,8 +412,8 @@ def problem(
     if declared(text):
         return None
     text, literal = _SPLIT.sub("\n", text), _SPLIT.sub("\n", literal)
-    names = hostnames(env)
-    if _own_host(names, hostname):
+    names, placeable, local = _tables(os.environ if env is None else env)
+    if not names or _own_host(placeable, local, hostname):
         return None
     cmd = _CMD.search(text)
     if cmd is not None:
@@ -363,7 +434,7 @@ def problem(
                 f"{var[0]} to a host held in the variable {var[1]!r}, which cannot "
                 f"be read, with {_REFUSED}"
             )
-    if unresolved:
+    if unresolved and (cmd is not None or _NO_LITERAL in unresolved):
         return (
             f"the prompt of this agent() call {_UNREADABLE}: {unresolved[0]!r} is not a "
             "literal nor a const in the script, so lab-host work cannot be ruled out "

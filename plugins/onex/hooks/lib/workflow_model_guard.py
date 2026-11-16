@@ -48,7 +48,7 @@ choice, per call, or the call does not run.
 Lab-host work (OMN-24618): an ``agent()`` or ``Agent`` prompt that runs ssh, scp,
 sftp, rsync, docker or systemctl against a lab host is refused unless it declares
 a placement. That check lives in ``src/omniclaude/handlers/lab_host_work.py``
-(this file only shrinks); see its docstring for what it reads and what it is not.
+(this file only shrinks; with no ``src/`` beside it the check is off); see its docstring.
 
 Parsing
 -------
@@ -257,8 +257,10 @@ _LAB_MODULE: Final[Path] = (
 
 
 @functools.cache
-def _lab() -> ModuleType:
-    """The lab-host check, loaded by path (standard library only). A missing file raises."""
+def _lab() -> ModuleType | None:
+    """The lab-host check, loaded by path (standard library only); ``None`` in a copy with no ``src/``."""
+    if not _LAB_MODULE.is_file():
+        return None
     spec = importlib.util.spec_from_file_location("lab_host_work", _LAB_MODULE)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"lab-host check unreadable: {_LAB_MODULE}")
@@ -1393,9 +1395,7 @@ def check_workflow_script(
                     "agent inherits the parent session's model"
                 )
             )
-            findings.append(
-                Finding(file=filename, line=line, label=label, reason=reason)
-            )
+            add(line, label, reason)
             continue
 
         prop = model_props[-1]
@@ -1431,9 +1431,9 @@ def check_workflow_script(
         if routing is not None:
             route_text = source[spans[0][0] : spans[0][1]] + label_text
             problem = _route_problem(routing, route_text, literal)
-        if problem is None:
-            text, lit, open_names = _lab().expand(source, masked, spans[0])
-            problem = _lab().problem(text + label_text, lit + label_text, open_names)
+        if problem is None and (lab := _lab()):
+            text, lit, open_names = lab.expand(source, masked, spans[0])
+            problem = lab.problem(text + label_text, lit + label_text, open_names)
         if problem is not None:
             add(line, label, problem)
 
@@ -1520,8 +1520,8 @@ def check_agent_input(
     problem = None
     if routing is not None:
         problem = _route_problem(routing, route_text, model.strip())
-    if problem is None:
-        problem = _lab().problem(route_text, route_text, [])
+    if problem is None and (lab := _lab()):
+        problem = lab.problem(route_text, route_text, [])
     return [] if problem is None else refuse(problem)
 
 
@@ -1547,7 +1547,7 @@ def render_block_reason(findings: list[Finding], allowlist: frozenset[str]) -> s
             "",
             FIX_LINE,
             ROUTE_FIX_LINE,
-            *_lab().fix_lines([f.reason for f in findings]),
+            *(lab.fix_lines([f.reason for f in findings]) if (lab := _lab()) else []),
             f"Allowed models: {_allowed(allowlist)} "
             f"(config: {DEFAULT_ALLOWLIST_PATH}).",
             "To disable this guard deliberately: "

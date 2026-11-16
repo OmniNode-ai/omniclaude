@@ -26,6 +26,14 @@ requirements:
         statement: "AC5: a host named on a later line than its command word and a dotted host name are both refused -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k 'multiline_host or dotted_host' fails with the per-line search"
       - id: AC6
         statement: "AC6: the lab check skips a dispatching host that is itself a lab host and builds in no address range, and its logic lives in src/omniclaude/handlers/lab_host_work.py so the baselined guard file does not grow -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k 'dispatching_host or unconfigured_address' fails when the host or the range check is removed"
+      - id: AC7
+        statement: "AC7: the shell hook run from a copy of plugins/onex laid out as the plugin cache lays it out (no src/ beside it) admits a benign Agent call and a benign Workflow script with exit 0 and no output, and still refuses an Agent call that names no model -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k installed_layout fails when the guard raises on the missing lab module"
+      - id: AC8
+        statement: "AC8: the own-host skip never applies to a local true row or an available false row, so with the launching host as a local true row and the hostname set to its target an ssh command to a lab host is refused, while a placeable row still skips -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k local_row_own_host fails when a local row counts as a lab host"
+      - id: AC9
+        statement: "AC9: an unresolved substitution is refused only when the reached text holds a command word with no readable host or holds no literal text, an empty name set refuses nothing, and arrow parameters and earlier agent results are bound -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k unresolved_substitution fails when every unresolved identifier refuses"
+      - id: AC10
+        statement: "AC10: the command pattern ignores the ssh or docker in a path such as ~/.ssh/config, and the host table and ssh config are read once per hook run -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k 'ssh_config_path or table_read_once' fails without the dot and slash lookbehind or with a read per agent() call"
 evidence_requirements:
   - kind: tests
     description: "lab_host_work refused, allowed and unrelated fixtures pass"
@@ -77,3 +85,35 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -k real_hook_refuses_then_admits -q --no-cov"
+  - id: dod-lab-host-installed-layout
+    description: "The shell hook run from a copy of plugins/onex laid out as the plugin cache lays it out admits a benign dispatch with exit 0 and still refuses an unnamed model; the check needs only repository files, so the hosted runner can run it"
+    source: manual
+    binds_ac:
+      - AC7
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -k installed_layout -q --no-cov"
+  - id: dod-lab-host-local-row
+    description: "The own-host skip does not apply to a local true row or an unavailable row"
+    source: manual
+    binds_ac:
+      - AC8
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -k local_row_own_host -q --no-cov"
+  - id: dod-lab-host-unresolved-substitution
+    description: "An unresolved substitution refuses only with an unreadable command word or no literal text; an empty name set refuses nothing"
+    source: manual
+    binds_ac:
+      - AC9
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -k unresolved_substitution -q --no-cov"
+  - id: dod-lab-host-ssh-path-and-read-once
+    description: "A path holding ssh or docker is not a command, and the table is read once per run"
+    source: manual
+    binds_ac:
+      - AC10
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -k 'ssh_config_path or table_read_once' -q --no-cov"

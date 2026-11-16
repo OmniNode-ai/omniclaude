@@ -1671,7 +1671,7 @@ def test_lab_host_work_local_only_real_reason_allowed(
     assert _lab_check(f"LOCAL-ONLY: {reason}\\nssh h201 ls") == []
 
 
-@pytest.mark.parametrize("host", ["h201", "h201.example.org", "labbox"])
+@pytest.mark.parametrize("host", ["h201", "h201.example.org"])
 def test_lab_host_work_skipped_when_the_dispatching_host_is_a_lab_host(
     lab_table: None, monkeypatch: pytest.MonkeyPatch, host: str
 ) -> None:
@@ -1709,8 +1709,10 @@ def test_lab_host_work_function_parameter_is_what_the_call_passes(
     """A parameter is resolved by the call's argument, which sits in the scanned span."""
     setup = "function build(x) { return `explain ${x}` }\n"
     assert _lab_script("build('docker layers')", setup) == []
-    assert _refused(_lab_script("build(args.topic)", setup), "cannot be read")
+    assert _lab_script("build(args.topic)", setup) == []
     assert _refused(_lab_script("build('ssh h201 ls')", setup))
+    with_command = "function build(x) { return `docker ${x}` }\n"
+    assert _refused(_lab_script("build(args.topic)", with_command), "cannot be read")
 
 
 def test_lab_host_work_const_held_prompt_with_declaration_admitted(
@@ -1762,8 +1764,6 @@ def test_lab_host_work_unreadable_prompt_with_declaration_admitted(
     [
         # A host from the script's args, in a template, in a concatenation, in a loop.
         ("`ssh ${args.host} uptime`", ""),
-        ("`Task: ${args.x}`", ""),
-        ("args.prompt + ' go'", ""),
         ("`ssh ${h} uptime`", "for (const h of ['h201', 'h202']) { void h }"),
         ("`ssh ${HOST} uptime`", "const HOST = args.host"),
     ],
@@ -1792,9 +1792,9 @@ def test_lab_host_work_variable_host_substitution_makes_the_prompt_unreadable(
     ],
 )
 def test_lab_host_work_variable_host_shell_variable_refused_unless_declared(
-    lab_env: Path, prompt: str
+    lab_table: None, prompt: str
 ) -> None:
-    """No table is configured, so no name matches: the host is a shell variable and cannot be read."""
+    """No name matches: the host is a shell variable and cannot be read."""
     source = f"await agent('{prompt}', {{ label: 'r', model: 'sonnet' }})\n"
     findings = list(_GUARD.check_workflow_script(source, ALLOWLIST, filename="c.js"))
     assert _refused(findings), prompt
@@ -1877,16 +1877,14 @@ def test_route_expansion_second_call_interpolating_the_first_result_is_accepted(
     call's ROUTE (sonnet) ahead of the second call's own (opus) and refused it on ROUTE alone."""
     first = _route("sonnet", "B3", 9, "S2A1R1V2N1C1J1")
     second = _route("opus", "B4", 14, "S2A2R2V2N2C2J2")
-    declared = "PLACEMENT: remote-lane"
     source = (
         f"const first = await agent('{first}\\nwork', {{ label: 'a', model: 'sonnet' }})\n"
-        f"await agent(first + ' go', {{ label: '{second} {declared}', model: 'opus' }})\n"
+        f"await agent(first + ' go', {{ label: '{second}', model: 'opus' }})\n"
     )
     findings = _GUARD.check_workflow_script(
         source, ALLOWLIST, filename="c.js", routing=ROUTING
     )
-    assert [f.label for f in findings] == ["a"] or findings == []
-    assert not any("does not match" in f.reason for f in findings)
+    assert findings == []
 
 
 def test_route_expansion_a_real_route_mismatch_is_still_refused(
@@ -1934,3 +1932,239 @@ def test_lab_host_work_real_hook_refuses_then_admits(lab_table: None) -> None:
     assert "PLACEMENT: remote-lane" in refused.stdout
     admitted = run("PLACEMENT: remote-lane\\nssh h201 docker ps")
     assert admitted.returncode == 0 and admitted.stdout == ""
+
+
+# ---------------------------------------------------------------------------
+# OMN-24738: the installed shape, the local row, the unresolved substitution
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def installed_plugin(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A copy of ``plugins/onex`` laid out as the plugin cache lays it out: the plugin
+    directory and nothing of the repository (no ``src/``) around it."""
+    root = (
+        tmp_path_factory.mktemp("cache")
+        / "plugins"
+        / "cache"
+        / "omninode-tools-dev"
+        / "onex"
+        / "9.9.9"
+    )
+    shutil.copytree(
+        _REPO_ROOT / "plugins" / "onex",
+        root,
+        ignore=shutil.ignore_patterns("__pycache__", ".venv", "*.pyc"),
+    )
+    return root
+
+
+def _installed_hook(plugin: Path, tool_name: str, tool_input: dict[str, Any]) -> Any:
+    bash = shutil.which("bash")
+    assert bash is not None
+    return subprocess.run(
+        [bash, str(plugin / "hooks" / "scripts" / _HOOK_SCRIPT.name)],
+        input=json.dumps({"tool_name": tool_name, "tool_input": tool_input}),
+        capture_output=True,
+        text=True,
+        env={
+            **os.environ,
+            "CLAUDE_PLUGIN_ROOT": str(plugin),
+            "CLAUDE_PROJECT_DIR": str(_REPO_ROOT),
+        },
+        cwd=_REPO_ROOT,
+        timeout=_TIMEOUT_S,
+        check=False,
+    )
+
+
+def test_lab_host_work_installed_layout_admits_a_benign_agent_call(
+    installed_plugin: Path,
+) -> None:
+    """In the cache layout the lab check has no ``src/`` to load from. That must switch the
+    check off, never refuse every dispatch: a benign call exits 0 and prints nothing."""
+    own = installed_plugin.parents[1] / "src" / "omniclaude" / "handlers"
+    assert not (own / "lab_host_work.py").exists(), "the layout must hold no src/"
+    benign = _installed_hook(
+        installed_plugin,
+        "Agent",
+        {"model": "sonnet", "prompt": f"{_ROUTE_B3}\nsummarise the design note"},
+    )
+    assert benign.returncode == 0, benign.stdout + benign.stderr
+    assert benign.stdout == ""
+    script = (
+        f"await agent(`{_ROUTE_B3}\nsummarise it`, {{ label: 'r', model: 'sonnet' }})"
+    )
+    workflow = _installed_hook(installed_plugin, "Workflow", {"script": script})
+    assert workflow.returncode == 0, workflow.stdout + workflow.stderr
+    assert workflow.stdout == ""
+
+
+def test_lab_host_work_installed_layout_still_refuses_an_unnamed_model(
+    installed_plugin: Path,
+) -> None:
+    """Control: the rest of the guard still runs in the cache layout."""
+    refused = _installed_hook(
+        installed_plugin, "Agent", {"prompt": f"{_ROUTE_B3}\nsummarise it"}
+    )
+    assert refused.returncode == 2, refused.stdout + refused.stderr
+    assert "model" in refused.stdout
+
+
+def test_lab_host_work_installed_layout_repository_layout_still_checks_the_lab(
+    lab_table: None,
+) -> None:
+    """Control: with ``src/`` beside the guard the lab check is loaded and refuses."""
+    assert _GUARD._lab() is not None
+    assert _refused(_lab_check("ssh h201 docker ps"))
+
+
+_LOCAL_TABLE = """\
+hosts:
+  - name: macbox
+    target: dev-mac
+    local: true
+  - name: h201
+    target: lab201
+  - name: parked
+    target: parked-host
+    available: false
+"""
+
+
+def _own_host_env(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, hostname: str, rows: str
+) -> None:
+    (tmp_path / ".ssh").mkdir()
+    (tmp_path / ".ssh" / "config").write_text("Host *\n")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("LANDING_POOL_HOSTS", raising=False)
+    table = tmp_path / "lab_hosts.yaml"
+    table.write_text(rows)
+    monkeypatch.setenv("ONEX_LAB_RUN_HOSTS", str(table))
+    monkeypatch.setattr(_lab().socket, "gethostname", lambda: hostname)
+
+
+def test_lab_host_work_local_row_own_host_is_checked_like_any_mac(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The operator Mac is a ``local: true`` row of the table. The own-host skip never applies to
+    it, whatever its hostname is, or the check is off on the one host it exists for."""
+    _own_host_env(monkeypatch, tmp_path, "dev-mac", _LOCAL_TABLE)
+    assert _refused(_lab_check("ssh h201 docker ps"))
+    assert _refused(_lab_check("docker ps on lab201"))
+    assert _lab_check("PLACEMENT: remote-lane\\nssh h201 docker ps") == []
+
+
+def test_lab_host_work_local_row_own_host_in_the_pool_variable_is_checked(
+    monkeypatch: pytest.MonkeyPatch, lab_env: Path
+) -> None:
+    rows = [{"name": "macbox", "target": "dev-mac", "local": True}, {"name": "h201"}]
+    monkeypatch.setenv("LANDING_POOL_HOSTS", json.dumps(rows))
+    monkeypatch.setattr(_lab().socket, "gethostname", lambda: "dev-mac")
+    assert _refused(_lab_check("ssh h201 docker ps"))
+
+
+@pytest.mark.parametrize(
+    ("hostname", "skipped"),
+    [("lab201", True), ("h201", True), ("dev-mac", False), ("parked-host", False)],
+)
+def test_lab_host_work_local_row_own_host_skip_only_on_a_placeable_row(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    hostname: str,
+    skipped: bool,
+) -> None:
+    """Control: a row where lab work may be placed still skips; a local row and an
+    ``available: false`` row do not."""
+    _own_host_env(monkeypatch, tmp_path, hostname, _LOCAL_TABLE)
+    assert (_lab_check("ssh h201 docker ps") == []) is skipped
+
+
+@pytest.mark.parametrize(
+    ("expr", "setup"),
+    [
+        ("`Summarise ${args.path}`", ""),
+        ("`Summarise ${f}`", "for (const f of files) { void f }"),
+        ("`Summarise ${items.map(i => i.name).join(',')}`", ""),
+        ("fmt('layers')", "const fmt = (n) => `explain docker ${n}`"),
+        ("fmt('layers')", "const fmt = n => `explain docker ${n}`"),
+        (
+            "`Review: ${first}`",
+            "const first = await agent('plan it', { label: 'a', model: 'sonnet' })",
+        ),
+        (
+            "`Review: ${v}`",
+            "const v = pick ? await agent('a', { label: 'x', model: 'sonnet' }) : "
+            "await agent('b', { label: 'y', model: 'sonnet' })",
+        ),
+        ("args.prompt + ' go'", ""),
+    ],
+)
+def test_lab_host_work_unresolved_substitution_with_no_command_word_admitted(
+    lab_table: None, expr: str, setup: str
+) -> None:
+    assert _lab_script(expr, setup) == []
+
+
+@pytest.mark.parametrize(
+    ("expr", "setup"),
+    [
+        ("`ssh ${args.host} uptime`", ""),
+        ("`docker ps ${args.flags}`", ""),
+        ("args.prompt", ""),
+        ("`${v}`", "const v = await agent('a', { label: 'x', model: 'sonnet' })"),
+    ],
+)
+def test_lab_host_work_unresolved_substitution_refused_when_unreadable(
+    lab_table: None, expr: str, setup: str
+) -> None:
+    """A command word with no readable host, or no literal text at all, is still refused."""
+    assert _refused(_lab_script(expr, setup), "cannot be read")
+    assert _lab_script(expr, setup + "\n// x", label="PLACEMENT: remote-lane") == []
+
+
+def test_lab_host_work_unresolved_substitution_admitted_when_no_lab_host_is_known(
+    lab_env: Path,
+) -> None:
+    """An empty name set means no table, no pool and no ssh config: there is nothing to refuse."""
+    assert _lab()._tables(os.environ)[0] == frozenset()
+    assert _lab_script("`Summarise ${args.path}`") == []
+    assert _lab_script("args.prompt") == []
+    assert _lab_check("ssh $HOST ls") == []
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "read ~/.ssh/config and say what h201 is",
+        "open ./.ssh/config then describe h202",
+        "list /opt/bin/docker and h201",
+    ],
+)
+def test_lab_host_work_ssh_config_path_is_not_a_command(
+    lab_table: None, prompt: str
+) -> None:
+    assert _lab_check(prompt) == []
+    assert _refused(_lab_check(f"{prompt}\\nthen ssh h201 uptime"))
+
+
+def test_lab_host_work_table_read_once_per_hook_run(
+    lab_table: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The ssh config and the table are read when the first agent() call is checked, not again
+    for each of the following calls."""
+    reads: list[Path] = []
+    real = _lab()._read
+
+    def counting(path: Path) -> str | None:
+        reads.append(path)
+        return real(path)
+
+    monkeypatch.setattr(_lab(), "_read", counting)
+    calls = "".join(
+        f"await agent(`summarise part {i}`, {{ label: 'c{i}', model: 'sonnet' }})\n"
+        for i in range(25)
+    )
+    assert _GUARD.check_workflow_script(calls, ALLOWLIST, filename="many.js") == []
+    assert len(reads) == 1, reads
