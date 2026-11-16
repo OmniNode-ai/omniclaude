@@ -33,6 +33,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -89,6 +90,9 @@ _ROUTE_B4 = (
 _ROUTE_B5 = (
     "ROUTE: band=B5 score=18 dims=S3A3R2V2N3C2J3 dest=lane model=opus effort=xhigh"
 )
+_ROUTE_B1_HAIKU = (
+    "ROUTE: band=B1 score=3 dims=S1A1R0V1N0C0J0 dest=haiku-lane model=haiku effort=low"
+)
 _ROUTE_B5_FABLE = (
     "ROUTE: band=B5 score=16 dims=S3A3R3V3N2C2J0 dest=claude model=fable effort=high "
     "(complexity: operator ruling)"
@@ -117,14 +121,14 @@ def _routed_call(route: str | None, model: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def test_shipped_allowlist_is_exactly_the_three_background_models() -> None:
-    """Fable joined on 2026-11-10 (operator ruling) for large tasks at band B5."""
-    assert set(ALLOWLIST) == {"fable", "opus", "sonnet"}
+def test_shipped_allowlist_is_exactly_the_four_background_models() -> None:
+    """Fable joined 2026-11-10 (B5), haiku 2026-11-16 (B1) by operator ruling."""
+    assert set(ALLOWLIST) == {"fable", "haiku", "opus", "sonnet"}
 
 
-def test_shipped_allowlist_has_no_haiku() -> None:
-    """Operator ruling OMN-17427: haiku is removed from background dispatch."""
-    assert "haiku" not in ALLOWLIST
+def test_shipped_allowlist_has_haiku() -> None:
+    """RULING 2026-11-16T19:43:11Z: haiku may run low-score mechanical work."""
+    assert "haiku" in ALLOWLIST
 
 
 def test_shipped_allowlist_has_no_inherit_escape_hatch() -> None:
@@ -235,7 +239,7 @@ def test_unlisted_model_fails_and_the_message_quotes_the_offending_value() -> No
     assert len(findings) == 1
     assert "'gpt-5'" in findings[0].reason
     assert "not an allowed background model" in findings[0].reason
-    assert "fable, opus, sonnet" in findings[0].reason
+    assert "fable, haiku, opus, sonnet" in findings[0].reason
     assert findings[0].label == "other-call"
 
 
@@ -324,18 +328,21 @@ def test_double_quoted_model_passes() -> None:
     assert _check('await agent("x", { label: "dq", model: "sonnet" })') == []
 
 
-@pytest.mark.parametrize("model", ["sonnet", "opus"])
+@pytest.mark.parametrize("model", ["sonnet", "opus", "haiku"])
 def test_workflow_agent_on_an_allowed_model_passes(model: str) -> None:
     assert _check(f"await agent(`x`, {{ label: 'ok', model: '{model}' }})") == []
 
 
-@pytest.mark.parametrize("model", ["haiku", "claude-haiku-4-5-20251001"])
-def test_workflow_agent_on_haiku_is_refused_and_says_it_is_removed(model: str) -> None:
-    findings = _check(f"await agent(`x`, {{ label: 'h', model: '{model}' }})")
+def test_workflow_agent_on_a_haiku_alias_is_allowed_and_a_pinned_id_is_not() -> None:
+    """The alias is the allowlisted spelling; a dated id is not, and no longer
+    carries a 'removed' note because haiku is not removed."""
+    assert _check("await agent(`x`, { label: 'h', model: 'haiku' })") == []
+    findings = _check(
+        "await agent(`x`, { label: 'h', model: 'claude-haiku-4-5-20251001' })"
+    )
     assert len(findings) == 1
     assert "not an allowed background model" in findings[0].reason
-    assert "haiku is removed" in findings[0].reason
-    assert "onex delegate" in findings[0].reason
+    assert "haiku is removed" not in findings[0].reason
 
 
 def test_line_numbers_point_at_the_offending_call() -> None:
@@ -449,14 +456,18 @@ def test_agent_with_opus_passes() -> None:
     )
 
 
-@pytest.mark.parametrize("model", ["haiku", "claude-haiku-4-5-20251001"])
-def test_agent_on_haiku_is_refused_and_says_it_is_removed(model: str) -> None:
+def test_agent_on_a_haiku_alias_is_allowed_and_a_pinned_id_is_not() -> None:
+    allowed = _GUARD.check_agent_input(
+        {"subagent_type": "general-purpose", "model": "haiku"}, ALLOWLIST
+    )
+    assert allowed == []
     findings = _GUARD.check_agent_input(
-        {"subagent_type": "general-purpose", "model": model}, ALLOWLIST
+        {"subagent_type": "general-purpose", "model": "claude-haiku-4-5-20251001"},
+        ALLOWLIST,
     )
     assert len(findings) == 1
-    assert "haiku is removed" in findings[0].reason
-    assert "onex delegate" in findings[0].reason
+    assert "not an allowed background model" in findings[0].reason
+    assert "haiku is removed" not in findings[0].reason
 
 
 def test_agent_with_no_model_fails() -> None:
@@ -1108,17 +1119,89 @@ def test_fable_is_refused_below_band_b5() -> None:
     assert "band B4" in findings[0].reason
 
 
-def test_haiku_is_still_refused_at_every_band() -> None:
-    for route in (_ROUTE_B3, _ROUTE_B4, _ROUTE_B5_FABLE):
+def test_haiku_is_refused_at_b2_and_above_naming_the_bands_models() -> None:
+    """Haiku is allowed in band B1 only (RULING 2026-11-16T19:43:11Z)."""
+    for route in (_ROUTE_B2, _ROUTE_B3, _ROUTE_B4, _ROUTE_B5, _ROUTE_B5_FABLE):
         band = route.split("band=")[1].split()[0]
-        swapped = (
-            route.replace("model=fable", "model=haiku")
-            .replace("model=opus", "model=haiku")
-            .replace("model=sonnet", "model=haiku")
-        )
+        swapped = re.sub(r"model=\w+", "model=haiku", route)
         findings = _check_routed(_routed_call(swapped, "haiku"))
-        assert findings, band
-        assert any("haiku" in f.reason for f in findings), band
+        assert len(findings) == 1, band
+        reason = findings[0].reason
+        assert f"band {band} allows only:" in reason, band
+        assert "'haiku' is not in that set" in reason, band
+        assert "haiku is removed" not in reason, band
+
+
+def test_haiku_route_in_the_haiku_band_passes() -> None:
+    assert _check_routed(_routed_call(_ROUTE_B1_HAIKU, "haiku")) == []
+
+
+@pytest.mark.parametrize("effort", ["low", "medium"])
+def test_haiku_band_accepts_the_efforts_in_its_set(effort: str) -> None:
+    route = _ROUTE_B1_HAIKU.replace("effort=low", f"effort={effort}")
+    assert _check_routed(_routed_call(route, "haiku")) == []
+
+
+@pytest.mark.parametrize("effort", ["high", "xhigh", "max", "ultra"])
+def test_haiku_band_refuses_an_effort_outside_its_set(effort: str) -> None:
+    route = _ROUTE_B1_HAIKU.replace("effort=low", f"effort={effort}")
+    findings = _check_routed(_routed_call(route, "haiku"))
+    assert len(findings) == 1
+    assert "effort" in findings[0].reason
+    assert "band B1" in findings[0].reason
+
+
+@pytest.mark.parametrize("model", ["sonnet", "opus", "fable"])
+def test_haiku_band_refuses_any_other_model(model: str) -> None:
+    route = _ROUTE_B1_HAIKU.replace("model=haiku", f"model={model}")
+    findings = _check_routed(_routed_call(route, model))
+    assert len(findings) == 1
+    assert "band B1 allows only: haiku" in findings[0].reason
+
+
+def test_haiku_route_whose_score_does_not_fit_the_haiku_band_is_refused() -> None:
+    """Score 5 implies band B2; a haiku ROUTE claiming B1 sits below its score."""
+    route = _ROUTE_B1_HAIKU.replace("score=3", "score=5").replace(
+        "S1A1R0V1N0C0J0", "S1A1R1V1N1C0J0"
+    )
+    findings = _check_routed(_routed_call(route, "haiku"))
+    assert len(findings) == 1
+    assert "below the band score 5 implies" in findings[0].reason
+
+
+def test_haiku_route_with_a_hard_floor_dimension_is_refused() -> None:
+    route = _ROUTE_B1_HAIKU.replace("S1A1R0V1N0C0J0", "S0A0R3V0N0C0J0")
+    findings = _check_routed(_routed_call(route, "haiku"))
+    assert len(findings) == 1
+    assert "hard floor" in findings[0].reason
+
+
+def test_haiku_band_is_data_only_b1c_and_b0_still_dispatch_no_agent() -> None:
+    assert ROUTING.bands["B1"].models == frozenset({"haiku"})
+    assert ROUTING.bands["B1"].efforts == frozenset({"low", "medium"})
+    assert ROUTING.bands["B0"].models == frozenset()
+    assert ROUTING.bands["B1c"].models == frozenset()
+    # Every other band is exactly as before the haiku ruling.
+    assert ROUTING.bands["B2"].models == frozenset({"sonnet"})
+    assert ROUTING.bands["B2"].efforts == frozenset({"medium", "high"})
+    assert ROUTING.bands["B3"].models == frozenset({"sonnet"})
+    assert ROUTING.bands["B3"].efforts == frozenset({"high"})
+    assert ROUTING.bands["B4"].models == frozenset({"opus"})
+    assert ROUTING.bands["B5"].models == frozenset({"opus", "fable"})
+
+
+def test_haiku_agent_tool_dispatch_in_b1_passes_and_in_b3_is_refused() -> None:
+    base = {"subagent_type": "general-purpose", "model": "haiku", "description": "d"}
+    ok = _GUARD.check_agent_input(
+        {**base, "prompt": f"{_ROUTE_B1_HAIKU}\nwork"}, ALLOWLIST, routing=ROUTING
+    )
+    assert ok == []
+    b3 = _ROUTE_B3.replace("model=sonnet", "model=haiku")
+    bad = _GUARD.check_agent_input(
+        {**base, "prompt": f"{b3}\nwork"}, ALLOWLIST, routing=ROUTING
+    )
+    assert len(bad) == 1
+    assert "band B3 allows only: sonnet" in bad[0].reason
 
 
 def test_a_missing_model_is_still_refused_with_a_fable_route() -> None:
@@ -1211,7 +1294,7 @@ def test_effort_must_be_in_the_band_set() -> None:
     assert "effort" in findings[0].reason
 
 
-@pytest.mark.parametrize("band", ["B0", "B1", "B1c"])
+@pytest.mark.parametrize("band", ["B0", "B1c"])
 def test_non_model_band_cannot_dispatch_an_agent(band: str) -> None:
     route = f"ROUTE: band={band} score=2 dims=S1A1R0V0N0C0J0 dest=x model=sonnet effort=high"
     findings = _check_routed(_routed_call(route, "sonnet"))
@@ -1244,6 +1327,31 @@ def test_registered_hook_blocks_b4_route_with_sonnet_model(tmp_path: Path) -> No
     )
     assert result.returncode == 2
     assert "band B4" in result.stdout
+
+
+def test_registered_hook_passes_a_haiku_route_in_the_haiku_band(tmp_path: Path) -> None:
+    result = _run_hook(
+        {
+            "tool_name": "Workflow",
+            "tool_input": {"script": _routed_call(_ROUTE_B1_HAIKU, "haiku")},
+        },
+        tmp_path,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout == ""
+
+
+def test_registered_hook_blocks_a_haiku_route_in_b3(tmp_path: Path) -> None:
+    route = _ROUTE_B3.replace("model=sonnet", "model=haiku")
+    result = _run_hook(
+        {
+            "tool_name": "Workflow",
+            "tool_input": {"script": _routed_call(route, "haiku")},
+        },
+        tmp_path,
+    )
+    assert result.returncode == 2
+    assert "band B3 allows only: sonnet" in result.stdout
 
 
 def test_registered_hook_blocks_a_missing_route(tmp_path: Path) -> None:

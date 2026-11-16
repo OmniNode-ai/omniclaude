@@ -18,12 +18,12 @@
     "silently inherited the parent session's banned model. Adding a spelling that",
     "passes would reintroduce exactly that. Every background agent names its own",
     "model.",
-    "",
     "Fable was banned here (memory feedback_fable_foreground_orchestration_only).",
-    "2026-11-10: Fable allowed for background agents on large tasks, band B5 (operator ruling; three at a time at most by practice); haiku stays out."
+    "2026-11-10: Fable allowed for background agents on large tasks, band B5 (operator ruling; three at a time at most by practice). 2026-11-16: haiku allowed for low-score mechanical work, band B1 only (RULING 2026-11-16T19:43:11Z, OMN-24977); a haiku ROUTE in B2 and above is refused by the routing contract, not by this list."
   ],
   "allowed_models": [
     "fable",
+    "haiku",
     "opus",
     "sonnet"
   ]

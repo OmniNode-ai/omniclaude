@@ -208,20 +208,15 @@ _CLOSERS: Final[frozenset[str]] = frozenset(")]}")
 #: The one-line remedy printed with every block.
 FIX_LINE: Final[str] = (
     "Fix: give every agent() options object an explicit model: "
-    "'opus' | 'sonnet'. Trivial text work goes to `onex delegate` (local lab models)."
-)
-
-#: Appended to a refusal whose offending value names haiku.
-HAIKU_REMOVED_NOTE: Final[str] = (
-    "haiku is removed from the background-agent allowlist (OMN-17427); "
-    "trivial text work goes to `onex delegate` (local lab models) instead"
+    "'opus' | 'sonnet' | 'haiku'. Mechanical band-B1 work may name 'haiku'; "
+    "text-only work goes to `onex delegate`."
 )
 
 #: The one-line remedy for a missing or refused ROUTE line (OMN-17427).
 ROUTE_FIX_LINE: Final[str] = (
     "Fix: carry one line in the prompt or label: ROUTE: band=<B> score=<n> "
     "dims=S<s>A<a>R<r>V<v>N<n>C<c>J<j> dest=<d> model=<m> effort=<e> "
-    "(band B2 to B5 for a Claude agent; the model and effort must be in the "
+    "(band B1 to B5 for a Claude agent; the model and effort must be in the "
     "band's set, and R=3 or J=3 needs band B4 or B5)."
 )
 
@@ -348,11 +343,6 @@ def load_allowlist(path: Path | None = None) -> frozenset[str]:
 
 def _allowed(allowlist: frozenset[str]) -> str:
     return ", ".join(sorted(allowlist))
-
-
-def _removed_note(value: str) -> str:
-    """Name the haiku removal when the refused value is a haiku spelling."""
-    return f"; {HAIKU_REMOVED_NOTE}" if "haiku" in value.lower() else ""
 
 
 # ---------------------------------------------------------------------------
@@ -701,7 +691,7 @@ def _route_problem(
     if not band.models:
         return (
             f"band {band_name} dispatches no Claude agent (destination: "
-            f"{band.destination}); an agent() or Agent call needs band B2 to B5"
+            f"{band.destination}); an agent() or Agent call needs a band with models"
         )
     if route_model not in band.models:
         return (
@@ -1419,7 +1409,6 @@ def check_workflow_script(
                 (
                     f"model: {literal!r} is not an allowed background model "
                     f"(allowed: {_allowed(allowlist)})"
-                    f"{_removed_note(literal)}"
                 ),
             )
             continue
@@ -1509,7 +1498,6 @@ def check_agent_input(
         return refuse(
             f"model {model.strip()!r} is not an allowed background model "
             f"(allowed: {_allowed(allowlist)})"
-            f"{_removed_note(model)}"
         )
 
     route_text = "\n".join(
