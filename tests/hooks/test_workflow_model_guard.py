@@ -501,14 +501,18 @@ def _registered_command() -> str:
 
 
 def _run_hook(
-    payload: dict[str, Any], tmp_path: Path
+    payload: dict[str, Any],
+    tmp_path: Path,
+    *,
+    hook_script: Path = _HOOK_SCRIPT,
+    registry_root: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     home = tmp_path / "home"
     home.mkdir(exist_ok=True)
     env = {
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
         "HOME": str(home),
-        "CLAUDE_PLUGIN_ROOT": str(_HOOKS_DIR.parent),
+        "CLAUDE_PLUGIN_ROOT": str(hook_script.parents[2]),
         "CLAUDE_PROJECT_DIR": str(_REPO_ROOT),
         "ONEX_HOOK_LOG": str(tmp_path / "hook.log"),
         "ONEX_STATE_DIR": str(tmp_path / "state"),
@@ -517,8 +521,10 @@ def _run_hook(
         # host happens to be in.
         "OMNICLAUDE_MODE": "full",
     }
+    if registry_root is not None:
+        env["OMNI_HOME"] = str(registry_root)
     return subprocess.run(
-        ["bash", str(_HOOK_SCRIPT)],
+        ["bash", str(hook_script)],
         input=json.dumps(payload),
         capture_output=True,
         text=True,
@@ -1139,8 +1145,9 @@ def test_haiku_band_refuses_an_effort_outside_its_set(effort: str) -> None:
     route = _ROUTE_B1_HAIKU.replace("effort=low", f"effort={effort}")
     findings = _check_routed(_routed_call(route, "haiku"))
     assert len(findings) == 1
-    assert "effort" in findings[0].reason
-    assert "band B1" in findings[0].reason
+    assert findings[0].reason == (
+        f"ROUTE effort={effort} is not allowed for band B1 (allowed: low, medium)"
+    )
 
 
 @pytest.mark.parametrize("model", ["sonnet", "opus", "fable"])
@@ -1422,3 +1429,124 @@ def test_effort_is_read_from_the_agent_options_object() -> None:
     ]
     assert efforts == ["low"]
     assert _check(source) == []
+
+
+def _copied_hook(tmp_path: Path) -> Path:
+    """An installed-tree shape independent of the canonical clone and test module."""
+    hooks = tmp_path / "installed" / "hooks"
+    shutil.copytree(_HOOKS_DIR, hooks, ignore=shutil.ignore_patterns("__pycache__"))
+    return hooks / "scripts" / _HOOK_SCRIPT.name
+
+
+def _haiku_payload(tool_name: str, route: str | None) -> dict[str, Any]:
+    if tool_name == "Workflow":
+        tool_input = {"script": _routed_call(route, "haiku")}
+    else:
+        tool_input = {
+            "model": "haiku",
+            "subagent_type": "general-purpose",
+            "description": "mechanical readback",
+            "prompt": f"{route}\nReturn the supplied text" if route else "Return text",
+        }
+    return {"tool_name": tool_name, "tool_input": tool_input}
+
+
+def test_registered_hook_uses_installed_policy_with_stale_clone(tmp_path: Path) -> None:
+    hook = _copied_hook(tmp_path)
+    registry_root = tmp_path / "stale-registry"
+    config = registry_root / "omniclaude" / "plugins" / "onex" / "hooks" / "config"
+    config.mkdir(parents=True)
+    (config / "agent_model_allowlist.json").write_text(
+        json.dumps({"allowed_models": ["sonnet", "opus", "fable"]}), encoding="utf-8"
+    )
+    contract = _GUARD.DEFAULT_ROUTING_CONTRACT_PATH.read_text(encoding="utf-8")
+    (config / "contract_agent_routing.yaml").write_text(
+        contract.replace('models: ["haiku"]', "models: []"), encoding="utf-8"
+    )
+    payload = _haiku_payload("Workflow", _ROUTE_B1_HAIKU)
+    result = _run_hook(payload, tmp_path, hook_script=hook, registry_root=registry_root)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout == ""
+    # Positive control: this exact loaded tree's policy decides, even with the
+    # same stale clone and the same payload. A disabled hook cannot pass it.
+    installed_allowlist = hook.parents[1] / "config" / "agent_model_allowlist.json"
+    installed_allowlist.write_text(
+        json.dumps({"allowed_models": ["sonnet", "opus", "fable"]}), encoding="utf-8"
+    )
+    refused = _run_hook(
+        payload, tmp_path, hook_script=hook, registry_root=registry_root
+    )
+    assert refused.returncode == 2, refused.stdout + refused.stderr
+    assert (
+        "model: 'haiku' is not an allowed background model"
+        in json.loads(refused.stdout)["reason"]
+    )
+
+
+@pytest.mark.parametrize("tool_name", ["Workflow", "Agent"])
+def test_registered_hook_route_model_mismatch(tool_name: str, tmp_path: Path) -> None:
+    result = _run_hook(_haiku_payload(tool_name, _ROUTE_B3), tmp_path)
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert (
+        "ROUTE model=sonnet does not match declared model 'haiku'"
+        in json.loads(result.stdout)["reason"]
+    )
+
+
+@pytest.mark.parametrize("tool_name", ["Workflow", "Agent"])
+@pytest.mark.parametrize("state", ["missing", "unparsable"])
+def test_haiku_routing_contract_unreadable(
+    tool_name: str, state: str, tmp_path: Path
+) -> None:
+    hook = _copied_hook(tmp_path)
+    payload = _haiku_payload(tool_name, _ROUTE_B1_HAIKU)
+    control = _run_hook(payload, tmp_path, hook_script=hook)
+    assert control.returncode == 0, control.stdout + control.stderr
+    contract = hook.parents[1] / "config" / "contract_agent_routing.yaml"
+    if state == "missing":
+        contract.unlink()
+    else:
+        contract.write_text("bands: [invalid\n", encoding="utf-8")
+    # Even a call without a ROUTE must not bypass an unreadable policy.
+    for route in (_ROUTE_B1_HAIKU, None):
+        result = _run_hook(_haiku_payload(tool_name, route), tmp_path, hook_script=hook)
+        assert result.returncode == 2, result.stdout + result.stderr
+        reason = json.loads(result.stdout)["reason"]
+        assert "guard could not evaluate" in reason
+        assert "routing contract" in reason
+
+
+def test_band_table_pinned() -> None:
+    data = yaml.safe_load(
+        _GUARD.DEFAULT_ROUTING_CONTRACT_PATH.read_text(encoding="utf-8")
+    )
+    expected = {
+        "B0": ([], [], None, None, 300, None),
+        "B1": (["haiku"], ["low", "medium"], 0, 4, 240, None),
+        "B1c": ([], [], 0, 4, 240, None),
+        "B2": (["sonnet"], ["medium", "high"], 5, 8, 1800, 4),
+        "B3": (["sonnet"], ["high"], 9, 13, 3600, 15),
+        "B4": (["opus"], ["high"], 14, 17, 7200, 5),
+        "B5": (["opus", "fable"], ["xhigh", "high"], 18, 21, 10800, 5),
+    }
+    keys = (
+        "models",
+        "efforts",
+        "score_min",
+        "score_max",
+        "timeout_s",
+        "max_concurrent",
+    )
+    assert {
+        band: tuple(row[key] for key in keys) for band, row in data["bands"].items()
+    } == expected
+    assert (
+        data["bands"]["B1"]["destination"]
+        == "Haiku lane, or onex delegate for pure text"
+    )
+    no_agent_route = (
+        "ROUTE: band=B1c score=0 dims=S0A0R0V0N0C0J0 dest=node model=haiku effort=low"
+    )
+    findings = _check_routed(_routed_call(no_agent_route, "haiku"))
+    assert len(findings) == 1
+    assert "an agent() or Agent call needs band B1 to B5" in findings[0].reason

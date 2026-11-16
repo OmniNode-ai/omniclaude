@@ -667,7 +667,7 @@ def _route_problem(
     if not band.models:
         return (
             f"band {band_name} dispatches no Claude agent (destination: "
-            f"{band.destination}); an agent() or Agent call needs a band with models"
+            f"{band.destination}); an agent() or Agent call needs band B1 to B5"
         )
     if route_model not in band.models:
         return (

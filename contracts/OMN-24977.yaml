@@ -37,7 +37,7 @@ emergency_bypass:
   follow_up_ticket_id: ""
 dod_evidence:
   - id: dod-omn24977-ac1
-    description: "AC1: the focused test file pins B1 models {haiku} and efforts {low, medium} and B0, B1c, B2, B3, B4, B5 as before; 146 passed on the branch"
+    description: "AC1: the focused test file pins B1 models {haiku} and efforts {low, medium} and B0, B1c, B2, B3, B4, B5 as before; 154 passed in the focused file on h053"
     source: manual
     checks:
       - check_type: test_passes
@@ -51,16 +51,48 @@ dod_evidence:
         check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k haiku"
     binds_ac: ["AC2"]
   - id: dod-omn24977-ac3
-    description: "AC3: 22 tests failed on origin/dev d3d5bbe84 with the new test file (the ids are in the PR body), and the same file passes on the branch"
+    description: "AC3: the original reviewed-head test file against base d3d5bbe8419ffa6d14e5e631ed33b4585ac70d96 produced 23 failed and 123 passed on h053; the full log and test ids are retained in the lane evidence and described in the PR comment; the expanded branch file has 154 passed"
     source: manual
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -p no:randomly"
     binds_ac: ["AC3"]
   - id: dod-omn24977-ac4
-    description: "AC4: the STATUS row naming installed= and observed= is written after the branch install and cited in a PR comment that names the head; this check pins what the installed hook depends on in the tree, the haiku entry of the B1 band and of the allowlist, which are absent at the merge base"
+    description: >-
+      AC4: read the fix3287-2245 STATUS row with installed=h053:<current HEAD>,
+      proof=fix3287-2245-b1-haiku-stale-clone and the observed acceptance of one
+      Workflow B1 haiku agent while OMNI_HOME names a clone without haiku.
+      This is the lab substitute authorized for this lane; the Mac install is
+      still pending for the orchestrator. A config grep is not install evidence.
+      The launching host writes the row after committing and pushing this tree.
     source: manual
+    execution_scope: local_done_gate
+    status: pending
     checks:
       - check_type: command
-        check_value: "grep -q '\"haiku\"' plugins/onex/hooks/config/agent_model_allowlist.json && grep -q 'models: \\[\"haiku\"\\]' plugins/onex/hooks/config/contract_agent_routing.yaml"
+        check_value: |-
+          python3 - <<'PY_STATUS'
+          import os
+          import subprocess
+          from pathlib import Path
+          head = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+          ledger = Path(os.environ["ONEX_LEDGER_PATH"])
+          expected = {
+              "lane": "fix3287-2245",
+              "ticket": "OMN-25097",
+              "installed": "h053:" + head,
+              "proof": "fix3287-2245-b1-haiku-stale-clone",
+              "observed": "Workflow B1 model=haiku effort=low exit=0 stdout=empty stale_clone_without_haiku=true",
+          }
+          for line in ledger.read_text(encoding="utf-8").splitlines():
+              cells = line.split(" | ")
+              if len(cells) < 3 or cells[1] != "STATUS":
+                  continue
+              fields = dict(cell.split("=", 1) for cell in cells[2:] if "=" in cell)
+              if all(fields.get(key) == value for key, value in expected.items()):
+                  print(line)
+                  break
+          else:
+              raise SystemExit("missing current-head STATUS acceptance proof; Mac install remains pending")
+          PY_STATUS
     binds_ac: ["AC4"]
