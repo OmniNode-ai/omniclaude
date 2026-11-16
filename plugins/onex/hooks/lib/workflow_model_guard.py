@@ -3,38 +3,138 @@
 # SPDX-License-Identifier: MIT
 """Fail-closed background-agent model guard (OMN-17499).
 
-Decision core of the ``PreToolUse`` hook that REFUSES a Workflow or Agent
-dispatch whose background agent does not name its own model (CLAUDE.md,
-"Background-agent model guard", holds the history, the allowlist and the
-measurements). No wrapper supplies a default: the author chooses per call.
+Why this exists
+---------------
+On 2026-09-01 one session dispatched 41 workflow scripts whose ``agent()``
+calls omitted ``model:``. Every one of those agents inherited the parent
+session's model, which was Fable -- banned for background work by memory
+``feedback_fable_foreground_orchestration_only``. Measured over that session's
+script directory: 131 ``agent()`` call sites in 101 scripts, of which 38 carry
+no explicit model by the structural count this module performs (the forensics
+pass, counting by hand off a regex, reported 41 -- the discrepancy is itself an
+argument for structural parsing). Either way a 29 percent miss rate, invisible
+until a forensics pass hours later, after the work had already run on the
+banned model.
 
-Parsing is structural. ``_mask()`` blanks the contents of comments, strings,
-templates and regular-expression literals (length and newlines kept); every
-structural decision is made on the masked text, every value read from the
-source. A scan that cannot be trusted (an ambiguous ``/``, an unterminated
-string, template or comment) voids the whole script, and a reference to the
-``agent`` helper that is not a call is refused. Each call also carries a
-``ROUTE:`` line checked against contract_agent_routing.yaml (OMN-17427).
+The control that was supposed to stop this was a memory entry. It failed 41
+times, silently, in one session. The default is inherited and invisible: the
+omission is unobservable at author time and unobservable at run time. A control
+that only surfaces a violation after the fact is not a control.
 
-Lab-host work (OMN-24618): an ``agent()`` prompt that runs ssh, docker or
-systemctl against a lab host is refused unless it declares a placement. Lab
-hosts are the pool rows or lab host table the placement code reads, the ssh
-config names and any address on a configured lab subnet. A prompt passed by
-name is followed to its const; one that cannot be read is refused.
+Two facts decide the shape of the fix:
 
-``meta.phases[].model`` is informational only and is not inspected.
+* Workflow scripts live under ``~/.claude/projects/<project>/workflows/scripts/``
+  and are in **no repository**, so a pre-commit hook or a repo CI validator
+  never sees them. The dispatch seam is the only place the choice is observable
+  before the cost is incurred.
+* The ``Agent`` tool has the same hole from the other side. A call with no
+  ``model`` inherits the parent's; ``subagent_type: "fork"`` *always* inherits
+  the parent's and has no way not to.
+
+So this module is the decision core of a ``PreToolUse`` hook that REFUSES the
+call, the same primitive as ``pre_tool_use_worktree_guard.sh`` refusing a
+``git worktree add`` outside the canonical root. It is not a linter and not a
+warning.
+
+Deliberately NOT built here
+---------------------------
+The originating spec proposed a second layer: a runtime wrapper that supplies
+``sonnet`` when ``model`` is missing. That is not shipped, and the omission is
+the point. A wrapper that substitutes a default recreates the exact property
+that caused the incident -- an invisible model choice -- and would mask the
+omissions this validator exists to make visible. The author makes the cost
+choice, per call, or the call does not run.
+
+Lab-host work (OMN-24618): an ``agent()`` or ``Agent`` prompt that runs ssh, scp,
+sftp, rsync, docker or systemctl against a lab host is refused unless it declares
+a placement. That check lives in ``src/omniclaude/handlers/lab_host_work.py``
+(this file only shrinks); see its docstring for what it reads and what it is not.
+
+Parsing
+-------
+Structural, never a line grep. The spec's own first-draft regex reported 131 of
+131 calls missing when 93 of them name a model perfectly well; a regex cannot
+tell an options object from a prompt that happens to contain the text
+``model:``, and it cannot follow a multi-line or nested one.
+
+``_mask()`` walks the source once and blanks the *contents* of comments, single
+and double quoted strings, template literals **and regular-expression
+literals** -- preserving length, newlines and delimiters, and correctly
+re-entering code mode inside ``${...}`` substitutions so a nested template
+cannot desynchronise the scan. Every structural decision afterwards is made on
+the masked text (where no brace, paren, comma, quote or slash inside a string,
+comment or pattern survives to be miscounted) while every *value* is read from
+the original text.
+
+Regex tokenisation is not a nicety (OMN-17499 follow-up). The first shipped
+revision did not tokenise patterns, and its own docstring claimed the residual
+failed closed. It did not. A regex is ordinary code to a scanner that cannot
+see it, so ``/^https?:\\/\\//`` read as a line comment and blanked the rest of
+its line -- including an ``agent(`` token that followed it -- and
+``/[^'"]+/`` opened a "string" at the quote inside the character class that ran
+until some later line's quote closed it, blanking every ``agent(`` in between.
+Both cases exited 0. The claim that an unparseable call fails closed held only
+when the desynchronisation landed *inside* an argument list; when it landed
+before the call, the call stopped existing.
+
+So the mask now reports what it could not resolve instead of guessing:
+
+* ``/`` is classified the way a JavaScript lexer classifies it -- pattern in
+  expression position, division after a value -- and patterns are parsed with
+  character classes and escapes, so ``\\/`` and ``[a/b]`` do not terminate one.
+* ``)``, ``]`` and ``}`` are the one position where both readings are
+  grammatical (``(a + b) / 2`` versus ``if (ok) /x/.test(s)``). Division is
+  assumed only when the two readings cannot disagree about the rest of the
+  file; when the candidate pattern carries a quote, a backslash, a bracket or
+  a comment opener, the script is refused.
+* A single- or double-quoted string that never closes on its line is not valid
+  JavaScript, so it is proof the scan desynchronised. Same for an unterminated
+  template or block comment.
+
+Any of those voids the whole scan, not just the construct it tripped on: a
+desynchronised mask reclassifies every byte after it. ``check_workflow_script``
+returns one finding naming the position and the reason, and the dispatch is
+refused.
+
+The scanner also refuses a *reference* to the ``agent`` helper that is not a
+call -- ``const a = agent``, ``[agent]``, a destructure. Dispatches through an
+alias are invisible to a scanner looking for ``agent(``, and a control that
+only holds against the accident it was built for is not a control. Measured on
+the live corpus of 1895 workflow scripts, no real script carries one.
+
+Routing contract (OMN-17427)
+----------------------------
+A named model is not yet a justified one. The sibling contract_agent_routing.yaml
+carries the task-complexity routing contract (OMN-17427): seven scored
+dimensions, bands B0 to B5 with the models and efforts each allows, and the hard
+floors (R=3 or J=3 means Opus at least). Every ``agent()`` options object and
+every ``Agent`` input must carry one line in its prompt or label::
+
+    ROUTE: band=<B> score=<n> dims=S<s>A<a>R<r>V<v>N<n>C<c>J<j> dest=<d> model=<m> effort=<e>
+
+The gate refuses a missing or unparsable ROUTE like a missing model, and a ROUTE
+whose model is not the declared model or not in the band's set, whose effort is
+not in the band's set, whose score is not the sum of its dims, that sits below a
+hard floor, or that sits below the band its score implies. The contract is
+parsed with the standard library only (a strict in-module YAML-subset parser,
+because PyYAML cannot be assumed), on the same fail-closed path.
+
+``meta.phases[].model`` is informational only and is not inspected: it declares
+UI phase metadata, not the model a dispatched agent runs on. The per-call
+``model:`` is the only thing that decides where the work executes.
 """
 
 from __future__ import annotations
 
 import argparse
+import functools
+import importlib.util
 import json
-import os
 import re
 import sys
-from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 from typing import Final
 
 __all__ = [
@@ -137,194 +237,6 @@ _ROUTE_RE: Final[re.Pattern[str]] = re.compile(
     r"effort=(?P<effort>[A-Za-z0-9_.-]+)"
 )
 
-LAB_HOST_FIX_LINE: Final[str] = (
-    "Fix: this prompt does lab-host work; declare one line in the prompt or "
-    "label: `PLACEMENT: remote-lane`, `PLACEMENT: fable-review` or "
-    "`LOCAL-ONLY: <reason>` (a real reason of at least three words, not a "
-    "placeholder)."
-)
-_LAB_FIXED: Final = re.compile(r"PLACEMENT:[ \t]*(?:remote-lane|fable-review)\b", re.I)
-_LAB_LOCAL: Final = re.compile(r"LOCAL-ONLY:([^\r\n]*)", re.I)
-_LAB_SPLIT: Final = re.compile(r"\r?\n|\\n")
-_LAB_CMD: Final = re.compile(
-    r"(?<![\w-])(?:ssh|scp|sftp|rsync|docker|systemctl)(?![\w-])", re.I
-)
-_LAB_IPV4: Final = re.compile(r"(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w]|\.\d)")
-_LAB_FILLER: Final = frozenset(
-    re.findall(
-        r"\w+",
-        "tbd todo na none unknown reason placeholder fixme xxx because just this that it the a an for to of and or no why here later",
-    )
-)
-_LAB_IDENT: Final = re.compile(r"(?<![\w$.])[A-Za-z_$][\w$]*")
-_LAB_SKIP: Final = frozenset(
-    re.findall(
-        r"\w+",
-        "await async new typeof void null undefined true false this return if else const let var function",
-    )
-)
-
-
-def _lab_reason_ok(reason: str) -> bool:
-    words = re.findall(r"[A-Za-z][A-Za-z'-]*", reason)
-    kept = [w for w in words if w.lower() not in _LAB_FILLER]
-    return len(words) >= 3 and len(kept) >= 2 and not reason.strip().startswith("<")
-
-
-def _lab_declared(text: str) -> bool:
-    return bool(_LAB_FIXED.search(text)) or any(
-        _lab_reason_ok(_LAB_SPLIT.split(m[1], maxsplit=1)[0])
-        for m in _LAB_LOCAL.finditer(text)
-    )
-
-
-def _lab_read(path: Path) -> str:
-    try:
-        return path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return ""
-
-
-def _lab_table_text(env: Mapping[str, str]) -> str:
-    """The lab host table the placement code reads: ``ONEX_LAB_RUN_HOSTS``, else
-    the ``lab_hosts`` overlay under the overlay store reader's ``snapshot_root``."""
-    if env.get("ONEX_LAB_RUN_HOSTS"):
-        return _lab_read(Path(env["ONEX_LAB_RUN_HOSTS"]))
-    roots = [Path(p) for p in env.get("ONEX_SKILL_OVERLAY_ROOTS", "").split(":") if p]
-    if env.get("OMNI_HOME"):
-        beside = Path(env["OMNI_HOME"]).resolve().parent
-        roots += [
-            beside / d / "overlays" / "overlays"
-            for d in ("overlays", "overlay-store-reader")
-        ]
-    for root in roots:
-        text = _lab_read(root / "node_overlay_store_read_effect" / "overlay.yaml")
-        line = re.search(r"^snapshot_root:\s*(.+)$", text, re.M)
-        if line:
-            home = env.get("HOME") or str(Path.home())
-            snap = line[1].split(" #")[0].strip().strip("'\"")
-            return _lab_read(
-                Path(snap.replace("~", home, 1)) / "lab_hosts" / "overlay.yaml"
-            )
-    return ""
-
-
-def _lab_hostnames(env: Mapping[str, str] | None = None) -> set[str]:
-    """Lab host names: pool rows (``LANDING_POOL_HOSTS``, else the table) and ssh config names."""
-    env = os.environ if env is None else env
-    names: set[str] = set()
-    if env.get("LANDING_POOL_HOSTS") is not None:
-        try:
-            rows = json.loads(env["LANDING_POOL_HOSTS"] or "[]")
-        except ValueError:
-            rows = []
-        names |= (
-            {
-                str(r[k])
-                for r in rows
-                if isinstance(r, dict)
-                for k in ("name", "target")
-                if r.get(k)
-            }
-            if isinstance(rows, list)
-            else set()
-        )
-    else:
-        in_hosts = False
-        for raw in _lab_table_text(env).splitlines():
-            if raw and not raw[0].isspace() and raw[0] != "-":
-                in_hosts = raw.split(":")[0].strip() == "hosts"
-            row = re.match(
-                r"\s*(?:-\s*)?(?:name|target|fallback_targets):\s*(.*)$", raw
-            )
-            if in_hosts and row:
-                names |= {
-                    v.split(" #")[0].strip(" '\"")
-                    for v in row[1].strip("[] ").split(",")
-                }
-    ssh = _lab_read(Path(env.get("HOME") or str(Path.home())) / ".ssh" / "config")
-    names |= {
-        t
-        for m in re.finditer(r"^\s*(?:Host|HostName)\s+(.+)$", ssh, re.I | re.M)
-        for t in m[1].split()
-        if not set(t) & set("*?!")
-    }
-    names = {n.rsplit("@", 1)[-1].lower() for n in names if n}
-    return names - {"github.com", "localhost"}
-
-
-def _lab_end(masked: str, pos: int) -> int:
-    """End of the declaration whose initializer starts at ``pos``."""
-    depth, joiners = 0, "+-*/%,=([{?:&|.<>!"
-    for i in range(pos, len(masked)):
-        depth += (masked[i] in "([{") - (masked[i] in ")]}")
-        done = masked[i] == ";" or (
-            masked[i] == "\n"
-            and masked.count("`", pos, i) % 2 == 0
-            and masked[pos:i].strip()[-1:] not in joiners
-            and masked[i:].lstrip()[:1] not in joiners + ")"
-        )
-        if depth < 0 or (depth == 0 and done):
-            return i
-    return len(masked)
-
-
-def _lab_prompt(source: str, masked: str, span: tuple[int, int]) -> tuple[str, bool]:
-    """The prompt argument with every const, let, var or function it names in this
-    script expanded (depth six); ``False`` when no literal prompt text was reached."""
-    parts, literal, seen, queue = [source[span[0] : span[1]]], 0, set(), [(*span, 0)]
-    while queue:
-        lo, hi, depth = queue.pop()
-        literal += sum(
-            1
-            for c, m in zip(source[lo:hi], masked[lo:hi], strict=True)
-            if c != m and c not in " \t\r\n'\"`${}"
-        )
-        for ident in _LAB_IDENT.finditer(masked, lo, hi):
-            name = ident[0]
-            decl = re.search(
-                rf"(?<![\w$.])(?:(?:const|let|var)\s+{re.escape(name)}\s*=|function\s*\*?\s+{re.escape(name)}\s*\()",
-                masked,
-            )
-            if name in seen or name in _LAB_SKIP or decl is None or depth >= 6:
-                continue
-            seen.add(name)
-            start = decl.end()
-            if masked[start - 1] == "(":
-                start = max(masked.find("{", start), start)
-            end = _lab_end(masked, start)
-            parts.append(source[start:end])
-            queue.append((start, end, depth + 1))
-    return "\n".join(parts), literal > 0
-
-
-def _lab_host_work_problem(text: str, readable: bool = True) -> str | None:
-    """Why ``text`` does undeclared lab-host work, or ``None`` when it does not."""
-    if _lab_declared(text):
-        return None
-    if not readable:
-        return "the prompt of this agent() call cannot be read (not a literal, nor a const in the script), so lab-host work cannot be ruled out and no placement is declared"
-    names = _lab_hostnames()
-    prefixes = {n.rsplit(".", 1)[0] + "." for n in names if _LAB_IPV4.fullmatch(n)} | {
-        f"{192}.{168}."
-    }
-    for line in _LAB_SPLIT.split(text):
-        cmd = _LAB_CMD.search(line)
-        if cmd is None:
-            continue
-        hit = [
-            a[0] for a in _LAB_IPV4.finditer(line) if a[0].startswith(tuple(prefixes))
-        ]
-        hit += [
-            n
-            for n in sorted(names)
-            if re.search(rf"(?<![\w.-]){re.escape(n)}(?![\w-]|\.\w)", line, re.I)
-        ]
-        if hit:
-            return f"{cmd[0].lower()} on lab host {hit[0]!r} with no declared placement"
-    return None
-
-
 _DIMENSION_KEYS: Final[tuple[str, ...]] = tuple("SARVNCJ")
 _BAND_NAMES: Final[tuple[str, ...]] = ("B0", "B1", "B1c", "B2", "B3", "B4", "B5")
 #: B1c is a typed-choice variant of B1, so it ranks with it.
@@ -339,15 +251,38 @@ _BAND_RANK: Final[dict[str, int]] = {
 }
 
 _AGENT_TOOL_FILE: Final[str] = "<Agent tool call>"
+_LAB_MODULE: Final[Path] = (
+    Path(__file__).resolve().parents[4] / "src/omniclaude/handlers/lab_host_work.py"
+)
+
+
+@functools.cache
+def _lab() -> ModuleType:
+    """The lab-host check, loaded by path (standard library only). A missing file raises."""
+    spec = importlib.util.spec_from_file_location("lab_host_work", _LAB_MODULE)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"lab-host check unreadable: {_LAB_MODULE}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 class AllowlistError(RuntimeError):
-    """The configured allowlist could not be resolved."""
+    """The configured allowlist could not be resolved.
+
+    Raised, never defaulted around. The caller converts this into a block: a
+    guard that cannot read its own policy must refuse, not wave the call
+    through on a guess (CLAUDE.md rule 8).
+    """
 
 
 @dataclass(frozen=True, slots=True)
 class Finding:
-    """One refusal-worthy fact about a single dispatch site."""
+    """One refusal-worthy fact about a single dispatch site.
+
+    ``line`` is 1-based within ``file``. It is ``0`` for the ``Agent`` tool,
+    which has structured input rather than a source file.
+    """
 
     file: str
     line: int
@@ -365,7 +300,14 @@ class Finding:
 
 
 def load_allowlist(path: Path | None = None) -> frozenset[str]:
-    """Read the allowed background models from config."""
+    """Read the allowed background models from config.
+
+    Fail-fast on every degenerate shape: a missing file, unreadable bytes,
+    malformed JSON, a missing or non-list ``allowed_models``, a non-string or
+    blank entry, or an empty list. None of those get a default -- a silently
+    empty allowlist would refuse every dispatch, and a silently full one would
+    enforce nothing.
+    """
     resolved = path if path is not None else DEFAULT_ALLOWLIST_PATH
     try:
         raw = resolved.read_text(encoding="utf-8")
@@ -505,7 +447,15 @@ def _yaml_value(cell: str, path: Path, lineno: int) -> object:
 
 
 def _parse_contract_yaml(text: str, path: Path) -> object:
-    """Parse the contract's YAML subset with the standard library only."""
+    """Parse the contract's YAML subset with the standard library only.
+
+    The fail-closed path cannot depend on PyYAML, so this reads exactly what
+    ``contract_agent_routing.yaml`` uses: ``#`` comment and blank lines,
+    two-space block mappings, block sequences of scalars or of mappings, one-line
+    flow lists of scalars, double-quoted strings, non-negative integers, ``null``
+    and bare words. Anything else, a tab, a duplicate key or a bad indent raises
+    ``AllowlistError`` rather than being guessed at.
+    """
     lines: list[tuple[int, int, str]] = []
     for lineno, raw in enumerate(text.splitlines(), start=1):
         if "\t" in raw:
@@ -596,7 +546,12 @@ def _parse_contract_yaml(text: str, path: Path) -> object:
 
 
 def load_routing(path: Path | None = None) -> Routing:
-    """Read the routing contract (``contract_agent_routing.yaml``)."""
+    """Read the routing contract (``contract_agent_routing.yaml``).
+
+    Fail-fast like ``load_allowlist``: a missing section, a missing dimension or
+    band, a malformed band, or a hard floor naming an unknown dimension or band
+    raises ``AllowlistError``. A guard that cannot read its contract refuses.
+    """
     resolved = path if path is not None else DEFAULT_ROUTING_CONTRACT_PATH
     try:
         text = resolved.read_text(encoding="utf-8")
@@ -766,7 +721,13 @@ def _route_problem(
 
 @dataclass(frozen=True, slots=True)
 class _Desync:
-    """A place where the scanner could not tell one construct from another."""
+    """A place where the scanner could not tell one construct from another.
+
+    Its presence voids the whole scan of that source. A desynchronised mask
+    does not merely lose the construct it tripped on -- it silently reclassifies
+    every byte after it, which is exactly how an ``agent(`` token disappears
+    from a script that contains one (OMN-17499 follow-up, gaps 1 and 2).
+    """
 
     offset: int
     reason: str
@@ -824,7 +785,17 @@ def _mask_block_comment(
 
 
 def _mask_quoted(source: str, out: list[str], i: int, desyncs: list[_Desync]) -> int:
-    """Blank a ``'``- or ``"``-delimited literal, keeping both delimiters."""
+    """Blank a ``'``- or ``"``-delimited literal, keeping both delimiters.
+
+    A single- or double-quoted JavaScript string cannot contain a raw newline;
+    only a backslash line-continuation carries one across. So a scan that walks
+    off the end of the line looking for the closing quote has proved one of two
+    things -- the source is not valid JavaScript, or this quote was never a
+    string delimiter at all (a quote inside a regular-expression literal the
+    slash classifier got wrong). Either way the mask from here on is fiction,
+    so the newline is recorded as a desync and the scan resumes at it rather
+    than blanking whole lines of real code on the way to some distant quote.
+    """
     n = len(source)
     quote = source[i]
     start = i
@@ -867,7 +838,18 @@ def _mask_quoted(source: str, out: list[str], i: int, desyncs: list[_Desync]) ->
 
 
 def _scan_regex(source: str, i: int) -> tuple[int, int] | None:
-    """Parse a regular-expression literal starting at the ``/`` at ``i``."""
+    """Parse a regular-expression literal starting at the ``/`` at ``i``.
+
+    Returns ``(close_slash_index, index_past_flags)``, or ``None`` when no
+    closing ``/`` is reached before the end of the line -- a regex literal
+    cannot span a newline, so that is proof this ``/`` was not one.
+
+    Character classes are tracked because ``/`` is literal inside ``[...]``
+    (``/[a/b]/`` is one regex, not two divisions), and backslash escapes are
+    skipped because ``\\/`` is a literal slash, not the terminator. Those two
+    rules are the whole reason the shipped scanner mis-read
+    ``/^https?:\\/\\//`` as a line comment.
+    """
     n = len(source)
     j = i + 1
     in_class = False
@@ -894,7 +876,19 @@ def _scan_regex(source: str, i: int) -> tuple[int, int] | None:
 
 
 def _slash_context(source: str, prev: int) -> str:
-    """Classify a ``/`` as ``regex``, ``division`` or ``ambiguous``."""
+    """Classify a ``/`` as ``regex``, ``division`` or ``ambiguous``.
+
+    The classification is the standard one every JavaScript lexer uses: a
+    ``/`` in *expression* position opens a regular-expression literal, and a
+    ``/`` after a *value* is division. ``prev`` is the offset of the last
+    significant character (whitespace and comments are not significant).
+
+    ``)``, ``]`` and ``}`` are reported ``ambiguous`` rather than guessed at.
+    They end a value (``(a + b) / 2``) but also end a control head or a block
+    (``if (ok) /x/.test(s)``), and nothing local decides which. The caller
+    refuses when -- and only when -- the two readings would actually disagree
+    about the structure of the rest of the file.
+    """
     if prev < 0:
         return "regex"
     ch = source[prev]
@@ -912,7 +906,25 @@ def _slash_context(source: str, prev: int) -> str:
 
 
 def _mask(source: str) -> _Masked:
-    """Blank comment, string and regex *contents*, preserving every offset."""
+    """Blank comment, string and regex *contents*, preserving every offset.
+
+    The returned text has exactly the same length and the same newline
+    positions as ``source``, so an index computed on the mask indexes the
+    original. Delimiters survive so a later pass can still tell that a value is
+    a string; the bytes between them do not, so no brace, paren, comma, quote
+    or slash inside a prompt, a comment or a pattern is ever counted as
+    structure.
+
+    ``${...}`` substitutions inside a template literal re-enter code mode, with
+    their own brace depth, so a nested template cannot terminate the outer scan
+    early. The ``${`` and its matching ``}`` are themselves blanked, which
+    keeps brace balance intact for the caller.
+
+    Anything the walk cannot resolve is recorded in ``desyncs`` instead of
+    being guessed at. The caller turns a non-empty ``desyncs`` into a refusal
+    of the entire script: a mask that desynchronised does not lose one
+    construct, it reclassifies every byte after it.
+    """
     out = list(source)
     n = len(source)
     i = 0
@@ -1003,7 +1015,12 @@ def _mask(source: str) -> _Masked:
 def _mask_slash(
     source: str, out: list[str], i: int, prev: int, desyncs: list[_Desync]
 ) -> int:
-    """Handle one ``/`` that is neither ``//`` nor ``/*``."""
+    """Handle one ``/`` that is neither ``//`` nor ``/*``.
+
+    Returns the offset to continue the walk at. Division advances one
+    character and changes nothing; a regular-expression literal has its body
+    blanked between surviving delimiters, exactly like a string.
+    """
     context = _slash_context(source, prev)
     if context == "division":
         return i + 1
@@ -1055,7 +1072,12 @@ def _line_of(source: str, offset: int) -> int:
 
 
 def _split_arguments(masked: str, open_paren: int) -> list[tuple[int, int]] | None:
-    """Split a call's argument list into ``(start, end)`` spans."""
+    """Split a call's argument list into ``(start, end)`` spans.
+
+    ``open_paren`` indexes the ``(`` of the call. Returns ``None`` when the
+    bracket scan cannot be resolved, which the caller turns into a finding --
+    an unparseable call is refused, never assumed clean.
+    """
     n = len(masked)
     depth = 0
     stack: list[str] = []
@@ -1083,7 +1105,13 @@ def _split_arguments(masked: str, open_paren: int) -> list[tuple[int, int]] | No
 
 
 def _string_literal(source: str, masked: str, start: int, end: int) -> str | None:
-    """Return the text of a single plain string literal, else ``None``."""
+    """Return the text of a single plain string literal, else ``None``.
+
+    ``None`` means "not statically knowable": an identifier, a concatenation
+    (``'a' + b``), a template carrying a ``${}`` substitution, or anything
+    carrying an escape. Every one of those is a value the guard refuses to
+    guess at.
+    """
     fragment = masked[start:end]
     lead = len(fragment) - len(fragment.lstrip())
     trail = len(fragment) - len(fragment.rstrip())
@@ -1116,7 +1144,12 @@ class _Property:
 def _object_properties(
     masked: str, open_brace: int, close_brace: int
 ) -> tuple[list[_Property], bool]:
-    """Top-level ``key:"""
+    """Top-level ``key: value`` pairs of an object literal, plus a spread flag.
+
+    The spread flag matters: ``{ ...base, label: 'x' }`` may or may not carry a
+    ``model``, and nothing static can tell. The caller refuses rather than
+    guessing.
+    """
     props: list[_Property] = []
     has_spread = False
     i = open_brace + 1
@@ -1190,7 +1223,11 @@ def _label_text(source: str, masked: str, props: list[_Property]) -> str:
 
 
 def _source_snippet(source: str, offset: int, *, width: int = 60) -> str:
-    """The source line containing ``offset``, squeezed and trimmed."""
+    """The source line containing ``offset``, squeezed and trimmed.
+
+    Used as the label of a finding that has no options object to read a
+    ``label:`` out of, so the refusal still names the line it is about.
+    """
     line_start = source.rfind("\n", 0, offset) + 1
     line_end = source.find("\n", offset)
     if line_end == -1:
@@ -1201,7 +1238,14 @@ def _source_snippet(source: str, offset: int, *, width: int = 60) -> str:
 
 @dataclass(frozen=True, slots=True)
 class _Reference:
-    """One occurrence of the bare global ``agent`` identifier in masked code."""
+    """One occurrence of the bare global ``agent`` identifier in masked code.
+
+    ``open_paren`` is the offset of the ``(`` that calls it, or ``None`` when
+    the helper is referenced without being called -- bound to another name,
+    passed as a value, destructured. That form is invisible to a scanner that
+    only looks for ``agent(``, which is how ``const a = agent; a('t', {...})``
+    dispatched an unmodelled background agent past the shipped guard.
+    """
 
     name_start: int
     name_end: int
@@ -1209,7 +1253,11 @@ class _Reference:
 
 
 def _agent_references(masked: str) -> list[_Reference]:
-    """Every use of the bare global ``agent`` identifier, called or not."""
+    """Every use of the bare global ``agent`` identifier, called or not.
+
+    ``subagent(``, ``x.agent(`` and ``agents`` are excluded: the first two are
+    a different callable and the third a different identifier.
+    """
     references: list[_Reference] = []
     for match in _AGENT_IDENT.finditer(masked):
         start = match.start()
@@ -1234,41 +1282,45 @@ def check_workflow_script(
     filename: str = "<workflow script>",
     routing: Routing | None = None,
 ) -> list[Finding]:
-    """Refusal-worthy facts about every ``agent()`` call in a workflow script."""
+    """Refusal-worthy facts about every ``agent()`` call in a workflow script.
+
+    An empty list means every call named an allowed model explicitly. Anything
+    else is a block. With ``routing`` supplied, every call must also carry a
+    ROUTE line in its prompt or label that the contract accepts.
+    """
+    findings: list[Finding] = []
+
+    def add(line: int, label: str, reason: str) -> None:
+        findings.append(Finding(file=filename, line=line, label=label, reason=reason))
+
     scan = _mask(source)
     if scan.desyncs:
         desync = scan.desyncs[0]
-        return [
-            Finding(
-                file=filename,
-                line=_line_of(source, desync.offset),
-                label="<unparsed source>",
-                reason=(
-                    f"{desync.reason}. A desynchronised scan does not lose one "
-                    "construct, it silently reclassifies every byte after it -- "
-                    "an agent( call among them -- so the whole script is "
-                    "refused rather than scanned"
-                ),
-            )
-        ]
+        add(
+            _line_of(source, desync.offset),
+            "<unparsed source>",
+            (
+                f"{desync.reason}. A desynchronised scan does not lose one "
+                "construct, it silently reclassifies every byte after it -- "
+                "an agent( call among them -- so the whole script is "
+                "refused rather than scanned"
+            ),
+        )
+        return findings
     masked = scan.text
-    findings: list[Finding] = []
 
     for reference in _agent_references(masked):
         if reference.open_paren is None:
-            findings.append(
-                Finding(
-                    file=filename,
-                    line=_line_of(source, reference.name_start),
-                    label=_source_snippet(source, reference.name_start),
-                    reason=(
-                        "the agent() helper is referenced here without being "
-                        "called -- bound to another name, passed as a value, or "
-                        "destructured. Every dispatch made through that binding "
-                        "is invisible to this guard, so the model it runs on "
-                        "cannot be verified before it runs"
-                    ),
-                )
+            add(
+                _line_of(source, reference.name_start),
+                _source_snippet(source, reference.name_start),
+                (
+                    "the agent() helper is referenced here without being "
+                    "called -- bound to another name, passed as a value, or "
+                    "destructured. Every dispatch made through that binding "
+                    "is invisible to this guard, so the model it runs on "
+                    "cannot be verified before it runs"
+                ),
             )
             continue
 
@@ -1276,31 +1328,25 @@ def check_workflow_script(
         line = _line_of(source, open_paren)
         spans = _split_arguments(masked, open_paren)
         if spans is None:
-            findings.append(
-                Finding(
-                    file=filename,
-                    line=line,
-                    label="<unparsed>",
-                    reason=(
-                        "the argument list of this agent( call could not be "
-                        "resolved: its brackets do not balance. The guard "
-                        "fails closed rather than assume a model was chosen"
-                    ),
-                )
+            add(
+                line,
+                "<unparsed>",
+                (
+                    "the argument list of this agent( call could not be "
+                    "resolved: its brackets do not balance. The guard "
+                    "fails closed rather than assume a model was chosen"
+                ),
             )
             continue
 
         if len(spans) < 2:
-            findings.append(
-                Finding(
-                    file=filename,
-                    line=line,
-                    label="<no label>",
-                    reason=(
-                        "agent() was called with no options object, so no model "
-                        "was chosen; the agent inherits the parent session's model"
-                    ),
-                )
+            add(
+                line,
+                "<no label>",
+                (
+                    "agent() was called with no options object, so no model "
+                    "was chosen; the agent inherits the parent session's model"
+                ),
             )
             continue
 
@@ -1310,31 +1356,25 @@ def check_workflow_script(
         brace = opt_start + lead
         if brace >= opt_end or masked[brace] != "{":
             expr = " ".join(source[opt_start:opt_end].split())[:80]
-            findings.append(
-                Finding(
-                    file=filename,
-                    line=line,
-                    label="<no label>",
-                    reason=(
-                        f"the options argument is {expr!r}, not an object "
-                        "literal, so model: cannot be verified before dispatch"
-                    ),
-                )
+            add(
+                line,
+                "<no label>",
+                (
+                    f"the options argument is {expr!r}, not an object "
+                    "literal, so model: cannot be verified before dispatch"
+                ),
             )
             continue
 
         close = _matching_brace(masked, brace, opt_end)
         if close is None:
-            findings.append(
-                Finding(
-                    file=filename,
-                    line=line,
-                    label="<unparsed>",
-                    reason=(
-                        "the options object of this agent( call is unbalanced "
-                        "and could not be parsed; the guard fails closed"
-                    ),
-                )
+            add(
+                line,
+                "<unparsed>",
+                (
+                    "the options object of this agent( call is unbalanced "
+                    "and could not be parsed; the guard fails closed"
+                ),
             )
             continue
 
@@ -1362,50 +1402,40 @@ def check_workflow_script(
         literal = _string_literal(source, masked, prop.value_start, prop.value_end)
         if literal is None:
             expr = " ".join(source[prop.value_start : prop.value_end].split())[:80]
-            findings.append(
-                Finding(
-                    file=filename,
-                    line=line,
-                    label=label,
-                    reason=(
-                        f"model: is {expr!r}, not a quoted string literal, so "
-                        "its value cannot be verified before dispatch"
-                    ),
-                )
+            add(
+                line,
+                label,
+                (
+                    f"model: is {expr!r}, not a quoted string literal, so "
+                    "its value cannot be verified before dispatch"
+                ),
             )
             continue
 
         if literal not in allowlist:
-            findings.append(
-                Finding(
-                    file=filename,
-                    line=line,
-                    label=label,
-                    reason=(
-                        f"model: {literal!r} is not an allowed background model "
-                        f"(allowed: {_allowed(allowlist)})"
-                        f"{_removed_note(literal)}"
-                    ),
-                )
+            add(
+                line,
+                label,
+                (
+                    f"model: {literal!r} is not an allowed background model "
+                    f"(allowed: {_allowed(allowlist)})"
+                    f"{_removed_note(literal)}"
+                ),
             )
             continue
 
-        label_prop = [prop for prop in props if prop.key == "label"]
-        prompt, readable = _lab_prompt(source, masked, spans[0])
-        route_text = prompt + "".join(
-            source[prop.value_start : prop.value_end] for prop in label_prop
+        label_text = "".join(
+            source[p.value_start : p.value_end] for p in props if p.key == "label"
         )
-        lab = _lab_host_work_problem(route_text, readable)
-        if lab is not None:
-            findings.append(Finding(file=filename, line=line, label=label, reason=lab))
-            continue
-
+        problem = None
         if routing is not None:
+            route_text = source[spans[0][0] : spans[0][1]] + label_text
             problem = _route_problem(routing, route_text, literal)
-            if problem is not None:
-                findings.append(
-                    Finding(file=filename, line=line, label=label, reason=problem)
-                )
+        if problem is None:
+            text, lit, open_names = _lab().expand(source, masked, spans[0])
+            problem = _lab().problem(text + label_text, lit + label_text, open_names)
+        if problem is not None:
+            add(line, label, problem)
 
     return findings
 
@@ -1438,7 +1468,13 @@ def check_agent_input(
     *,
     routing: Routing | None = None,
 ) -> list[Finding]:
-    """Refusal-worthy facts about a single ``Agent`` tool call."""
+    """Refusal-worthy facts about a single ``Agent`` tool call.
+
+    ``subagent_type: "fork"`` is refused outright. A fork resumes the parent's
+    conversation and therefore always runs on the parent's model; there is no
+    value of ``model`` that makes the choice explicit, so the only honest
+    verdict is that a fork cannot be used for background work under this rule.
+    """
     subagent_type = tool_input.get("subagent_type")
     description = tool_input.get("description")
     label = (
@@ -1451,64 +1487,42 @@ def check_agent_input(
         )
     )
 
+    def refuse(reason: str) -> list[Finding]:
+        return [Finding(file=_AGENT_TOOL_FILE, line=0, label=label, reason=reason)]
+
     if isinstance(subagent_type, str) and subagent_type.strip() == "fork":
-        return [
-            Finding(
-                file=_AGENT_TOOL_FILE,
-                line=0,
-                label=label,
-                reason=(
-                    "subagent_type 'fork' always inherits the parent session's "
-                    "model, so the background model can never be chosen "
-                    "explicitly. Dispatch a normal subagent with an explicit "
-                    "model instead"
-                ),
-            )
-        ]
+        return refuse(
+            "subagent_type 'fork' always inherits the parent session's "
+            "model, so the background model can never be chosen "
+            "explicitly. Dispatch a normal subagent with an explicit "
+            "model instead"
+        )
 
     model = tool_input.get("model")
     if not isinstance(model, str) or not model.strip():
-        return [
-            Finding(
-                file=_AGENT_TOOL_FILE,
-                line=0,
-                label=label,
-                reason=(
-                    "the Agent call declares no model, so it inherits the "
-                    "parent session's model"
-                ),
-            )
-        ]
+        return refuse(
+            "the Agent call declares no model, so it inherits the "
+            "parent session's model"
+        )
 
     if model.strip() not in allowlist:
-        return [
-            Finding(
-                file=_AGENT_TOOL_FILE,
-                line=0,
-                label=label,
-                reason=(
-                    f"model {model.strip()!r} is not an allowed background model "
-                    f"(allowed: {_allowed(allowlist)})"
-                    f"{_removed_note(model)}"
-                ),
-            )
-        ]
+        return refuse(
+            f"model {model.strip()!r} is not an allowed background model "
+            f"(allowed: {_allowed(allowlist)})"
+            f"{_removed_note(model)}"
+        )
 
     route_text = "\n".join(
         value
         for value in (tool_input.get("prompt"), description)
         if isinstance(value, str)
     )
-    lab = _lab_host_work_problem(route_text)
-    if lab is not None:
-        return [Finding(file=_AGENT_TOOL_FILE, line=0, label=label, reason=lab)]
-
+    problem = None
     if routing is not None:
         problem = _route_problem(routing, route_text, model.strip())
-        if problem is not None:
-            return [Finding(file=_AGENT_TOOL_FILE, line=0, label=label, reason=problem)]
-
-    return []
+    if problem is None:
+        problem = _lab().problem(route_text, route_text, [])
+    return [] if problem is None else refuse(problem)
 
 
 # ---------------------------------------------------------------------------
@@ -1533,14 +1547,7 @@ def render_block_reason(findings: list[Finding], allowlist: frozenset[str]) -> s
             "",
             FIX_LINE,
             ROUTE_FIX_LINE,
-            *(
-                [LAB_HOST_FIX_LINE]
-                if any(
-                    "lab host" in f.reason or "cannot be read" in f.reason
-                    for f in findings
-                )
-                else []
-            ),
+            *_lab().fix_lines([f.reason for f in findings]),
             f"Allowed models: {_allowed(allowlist)} "
             f"(config: {DEFAULT_ALLOWLIST_PATH}).",
             "To disable this guard deliberately: "
@@ -1558,7 +1565,19 @@ def _block(reason: str) -> int:
 def _resolve_script_sources(
     tool_input: dict[str, object],
 ) -> list[tuple[str, str]]:
-    """Every script body this Workflow call could execute, as (name, text)."""
+    """Every script body this Workflow call could execute, as (name, text).
+
+    Both ``script`` and ``scriptPath`` are read when both are present. The
+    shipped guard preferred the inline ``script`` and never opened the path,
+    so a payload carrying a clean inline script alongside a ``scriptPath``
+    whose ``agent()`` calls name no model passed. Which of the two the harness
+    would actually run is not knowable from inside a PreToolUse hook, and a
+    guard does not need to know: it checks every body the call carries, and
+    refuses if any of them is unverifiable.
+
+    Raises on anything unreadable. The caller converts that into a block: a
+    script the guard cannot read is a script whose model choices are unknown.
+    """
     sources: list[tuple[str, str]] = []
 
     script = tool_input.get("script")
@@ -1582,7 +1601,12 @@ def _resolve_script_sources(
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Hook entry point."""
+    """Hook entry point. Reads the PreToolUse JSON on stdin.
+
+    Exit codes: ``0`` allow, ``3`` block (payload on stdout), ``1`` the guard
+    itself could not decide. The shell wrapper treats ``1`` as a block too --
+    an undecidable model choice is refused, never assumed.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--allowlist",
