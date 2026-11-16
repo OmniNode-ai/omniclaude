@@ -313,3 +313,104 @@ def test_delegation_switch_onex_hooks_cli_round_trip(tmp_path: Path) -> None:
         for reason in ("failed", "timed_out", "no_onex", "no_answer")
     )
     assert routed or "WARN: runner exited" in on_log, on_log
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("history", ["accepted", "empty", "malformed"])
+def test_paused_installed_hook_preserves_context_without_delegation(tmp_path, history):
+    """OFF must retain context delivery; deleting it loses an accepted answer.
+
+    The real installer and installed command run. Empty/corrupt history is
+    silent, delivery drains once, and full uninstall removes the context hook.
+    """
+    home = _install(tmp_path)
+    env, project = _customer_env(tmp_path, home)
+    env["ONEX_HOOKS_MASK"] = "0"
+    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[3] / "omnimarket/src")
+    state = Path(env["ONEX_STATE_DIR"])
+    seed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from omnimarket.nodes.node_hook_delegate_effect.handlers.handler_prompt_delegate import HandlerPromptDelegate as H; H._record('history-off', 'Earlier question', 'Accepted answer marker', 'fixture-model', 'history-run-marker')",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert seed.returncode == 0, seed.stderr
+    saved = next((state / "claude_prompt_history").glob("*.json"))
+    if history == "empty":
+        saved.write_text("[]")
+    elif history == "malformed":
+        saved.write_text("not JSON")
+    paused = subprocess.run(
+        ["/bin/bash", str(_INSTALLER), "--pause", "--python", sys.executable],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert paused.returncode == 0, paused.stdout + paused.stderr
+    settings = home / ".claude/settings.json"
+    current = json.loads(settings.read_text())
+    commands = [
+        h["command"]
+        for g in current.get("hooks", {}).get("UserPromptSubmit", [])
+        for h in g["hooks"]
+    ]
+    assert len(commands) == 1, current
+    assert "pre_tool_use_delegation.sh" not in settings.read_text()
+    assert "post_tool_use_cost_accounting.sh" not in settings.read_text()
+    payload = json.dumps(
+        {
+            "hook_event_name": "UserPromptSubmit",
+            "session_id": "history-off",
+            "prompt": "Continue working",
+        }
+    )
+
+    def run_context():
+        return subprocess.run(
+            ["/bin/bash", "-c", commands[0]],
+            input=payload,
+            env=env,
+            cwd=project,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=30,
+        )
+
+    result = run_context()
+    assert result.returncode == 0, result.stderr
+    if history == "accepted":
+        output = json.loads(result.stdout)
+        assert "decision" not in output
+        context = output["hookSpecificOutput"]["additionalContext"]
+        assert "Accepted answer marker" in context
+        assert "history-run-marker" in context
+        assert "fixture-model" in context
+    else:
+        assert result.stdout.strip() == "", result.stdout
+    assert run_context().stdout.strip() == ""
+    removed = subprocess.run(
+        ["/bin/bash", str(_INSTALLER), "--uninstall", "--python", sys.executable],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert removed.returncode == 0, removed.stdout + removed.stderr
+    assert not settings.exists() or "--history-only" not in settings.read_text()
+    (tmp_path / "off-history-proof.json").write_text(
+        json.dumps(
+            {
+                "status": "passed",
+                "history": history,
+                "context_once": True,
+                "full_uninstall": True,
+            }
+        )
+    )

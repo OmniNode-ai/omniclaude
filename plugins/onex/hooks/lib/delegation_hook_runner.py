@@ -97,18 +97,14 @@ def _sensitive(text: str) -> bool:
     return bool(_gate_why(text))
 
 
-def _strings(value: object) -> list[str]:
-    # Every string a tool input holds, decoded and nested ones included.
-    items = [*value.keys(), *value.values()] if isinstance(value, dict) else value
-    if isinstance(items, list):
-        return [text for item in items for text in _strings(item)]
-    return [value] if isinstance(value, str) else []
-
-
 def main() -> int:
     t0 = time.monotonic()
     # OMN-23413: the answering node; if missing, exit 1 and the .sh passes through
     from omnimarket.nodes.node_hook_delegate_effect import container, models
+
+    if sys.argv[1:] == ["--history-only"]:
+        sys.stdout.write(container.build_prompt_handler().history_hook())
+        return 0
 
     raw = sys.stdin.read()
     try:
@@ -162,7 +158,9 @@ def main() -> int:
     )
     # The gate reads the decoded strings that are sent, not only their JSON form,
     # where a newline is backslash-n and hides a key from a word boundary.
-    why = _gate_why("\n".join([*_strings(tool_input), tool_text]))
+    why = _gate_why(
+        "\n".join([*models.ModelHookDelegateRequest.strings(tool_input), tool_text])
+    )
     if why:
         print(f"not_delegatable:{why}")
         return 0

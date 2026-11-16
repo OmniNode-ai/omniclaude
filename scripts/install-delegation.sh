@@ -59,6 +59,7 @@ LEGACY_INSTALL_BIFROST="${INSTALL_ROOT}/bifrost_delegation.yaml"
 DRY_RUN=true
 APPLY=false
 UNINSTALL=false
+PAUSE=false
 FROM_SOURCE=""
 PYTHON_BIN=""
 ENDPOINT_URL=""
@@ -106,10 +107,11 @@ usage() {
 ${C_BOLD}install-delegation.sh${C_RESET} — install the ONEX delegation feature for Claude Code.
 
 Usage:
-  $0 [--apply | --uninstall] [--from-source <path>] [--python <bin>]
+  $0 [--apply | --pause | --uninstall] [--from-source <path>] [--python <bin>]
 
 Options:
   --apply                 Execute changes (default is dry-run preview).
+  --pause                 Remove delegation hooks, retaining pending-history delivery.
   --uninstall             Restore prior state using the rollback manifest.
   --endpoint-url <url>    LLM endpoint URL to write into the bifrost endpoint
                           overlay (e.g. http://llm.example.com:8000). If omitted
@@ -134,6 +136,7 @@ EOF
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --apply)        APPLY=true; DRY_RUN=false; shift; continue ;;
+    --pause)        PAUSE=true; DRY_RUN=false; shift; continue ;;
     --uninstall)    UNINSTALL=true; DRY_RUN=false; shift; continue ;;
     --from-source)  requirement="a path"; destination=FROM_SOURCE ;;
     --python)       requirement="an interpreter path"; destination=PYTHON_BIN ;;
@@ -151,8 +154,8 @@ while [[ $# -gt 0 ]]; do
   shift 2
 done
 
-if "${APPLY}" && "${UNINSTALL}"; then
-  log_err "--apply and --uninstall are mutually exclusive"
+if { "${APPLY}" && { "${UNINSTALL}" || "${PAUSE}"; }; } || { "${UNINSTALL}" && "${PAUSE}"; }; then
+  log_err "--apply, --pause and --uninstall are mutually exclusive"
   exit 2
 fi
 
@@ -411,7 +414,7 @@ src, dst, plugin_root, python_bin = sys.argv[1:5]
 data = json.loads(pathlib.Path(src).read_text())
 def rewrite(value, key=""):
     if isinstance(value, str):
-        v = value.replace("${CLAUDE_PLUGIN_ROOT}", plugin_root)
+        v = value.replace("${CLAUDE_PLUGIN_ROOT}", plugin_root).replace("${ONEX_DELEGATION_PYTHON}", shlex.quote(python_bin))
         return f"PLUGIN_PYTHON_BIN={shlex.quote(python_bin)} {v}" if key == "command" else v
     if isinstance(value, list):
         return [rewrite(v) for v in value]
@@ -587,57 +590,15 @@ uninstall() {
   fi
   log_step "rolling back via ${ROLLBACK_MANIFEST}"
   resolve_python
-  "${PYTHON_BIN}" - "${ROLLBACK_MANIFEST}" <<'PY'
-import json, pathlib, sys
-manifest = json.loads(pathlib.Path(sys.argv[1]).read_text())
-backup = manifest.get("settings_backup")
-settings = manifest.get("claude_settings")
-hooks_config = manifest.get("installed_hook_config")
-settings_path = pathlib.Path(settings) if settings else None
-if settings_path is None:
-    raise SystemExit("rollback manifest missing claude_settings")
-if not settings_path.exists():
-    if backup and pathlib.Path(backup).exists():
-        settings_path.parent.mkdir(parents=True, exist_ok=True)
-        settings_path.write_text(pathlib.Path(backup).read_text())
-        print(f"restored missing {settings} from {backup}")
-    raise SystemExit(0)
-current = json.loads(settings_path.read_text())
-hook_cfg = {}
-if hooks_config and pathlib.Path(hooks_config).exists():
-    hook_cfg = json.loads(pathlib.Path(hooks_config).read_text()).get("hooks", {})
-delegation_commands = {
-    hook.get("command")
-    for groups in hook_cfg.values()
-    for group in groups
-    for hook in group.get("hooks", [])
-    if hook.get("command")
-}
-hooks = current.get("hooks", {})
-for event in list(hooks):
-    filtered_groups = []
-    for group in hooks.get(event, []):
-        filtered_hooks = [
-            hook for hook in group.get("hooks", [])
-            if hook.get("command") not in delegation_commands
-        ]
-        if filtered_hooks:
-            filtered_groups.append({**group, "hooks": filtered_hooks})
-    if filtered_groups:
-        hooks[event] = filtered_groups
-    else:
-        hooks.pop(event, None)
-if hooks:
-    current["hooks"] = hooks
-else:
-    current.pop("hooks", None)
-if current:
-    settings_path.write_text(json.dumps(current, indent=2) + "\n")
-    print(f"removed delegation hooks from {settings}")
-else:
-    settings_path.unlink()
-    print(f"removed {settings} after clearing installer-managed hooks")
+  "${PYTHON_BIN}" - "${ROLLBACK_MANIFEST}" "${PAUSE}" <<'PY'
+import pathlib, sys
+from omnimarket.nodes.node_onex_setup_effect.handlers.handler_setup_claude import HandlerSetupClaude
+print(HandlerSetupClaude.rollback_hook_registration(pathlib.Path(sys.argv[1]), sys.argv[2] == 'true'))
 PY
+  if "${PAUSE}"; then
+    log_ok "delegation paused; pending-history hook retained"
+    return 0
+  fi
   rm -f "${INSTALL_HOOKS_JSON}"
   rm -rf "${INSTALL_ROOT}/plugin" "${INSTALL_ROOT}/hook-scripts"
   log_ok "removed installed hook config + scripts"
@@ -686,7 +647,7 @@ EOF
 main() {
   print_banner
 
-  if "${UNINSTALL}"; then
+  if "${UNINSTALL}" || "${PAUSE}"; then
     uninstall
     return 0
   fi
