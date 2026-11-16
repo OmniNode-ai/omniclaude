@@ -146,7 +146,9 @@ LAB_HOST_FIX_LINE: Final[str] = (
 _LAB_FIXED: Final = re.compile(r"PLACEMENT:[ \t]*(?:remote-lane|fable-review)\b", re.I)
 _LAB_LOCAL: Final = re.compile(r"LOCAL-ONLY:([^\r\n]*)", re.I)
 _LAB_SPLIT: Final = re.compile(r"\r?\n|\\n")
-_LAB_CMD: Final = re.compile(r"(?<![\w-])(?:ssh|docker|systemctl)(?![\w-])", re.I)
+_LAB_CMD: Final = re.compile(
+    r"(?<![\w-])(?:ssh|scp|sftp|rsync|docker|systemctl)(?![\w-])", re.I
+)
 _LAB_IPV4: Final = re.compile(r"(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w]|\.\d)")
 _LAB_FILLER: Final = frozenset(
     re.findall(
@@ -247,10 +249,8 @@ def _lab_hostnames(env: Mapping[str, str] | None = None) -> set[str]:
         for t in m[1].split()
         if not set(t) & set("*?!")
     }
-    return {n.rsplit("@", 1)[-1].lower() for n in names if n} - {
-        "github.com",
-        "localhost",
-    }
+    names = {n.rsplit("@", 1)[-1].lower() for n in names if n}
+    return names - {"github.com", "localhost"}
 
 
 def _lab_end(masked: str, pos: int) -> int:

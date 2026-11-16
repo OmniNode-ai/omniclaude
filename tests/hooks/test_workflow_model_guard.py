@@ -1358,6 +1358,39 @@ def test_lab_host_work_refused_without_declaration(
 @pytest.mark.parametrize(
     "prompt",
     [
+        "scp h201:/tmp/report.txt . and read it",
+        "rsync -a h202:/data/out ./out then summarise",
+        "sftp me@labbox and fetch the log",
+        "first a thing\\nthen scp ./x h201:/tmp/x",
+    ],
+)
+def test_lab_host_work_copy_commands_to_a_lab_host_refused_and_declaration_admits(
+    lab_table: None, prompt: str
+) -> None:
+    """scp, sftp and rsync reach a lab host the way ssh does: no declared placement, no pass (OMN-24618)."""
+    findings = _lab_check(prompt)
+    assert len(findings) == 1
+    assert "no declared placement" in findings[0].reason
+    assert _lab_check(f"{prompt}\\nPLACEMENT: remote-lane") == []
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "scp ./a me@example.org:/tmp/a",
+        "rsync -a ./src/ ./dst/",
+        "the scp and rsync man pages describe copies",
+    ],
+)
+def test_lab_host_work_copy_commands_not_naming_a_lab_host_untouched(
+    lab_table: None, prompt: str
+) -> None:
+    assert _lab_check(prompt) == []
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
         "ssh h201 ls LOCAL-ONLY:",
         "ssh h201 ls LOCAL-ONLY:   \\nmore",
         "ssh h201 ls LOCAL-ONLY: .",
