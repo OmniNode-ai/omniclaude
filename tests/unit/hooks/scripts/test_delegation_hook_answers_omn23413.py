@@ -126,9 +126,11 @@ def test_no_onex_on_path_passes_the_task_through(tmp_path: Path) -> None:
 
 
 def test_claude_code_waits_long_enough_for_a_delegation() -> None:
-    """H5: the registered hook timeout covers the runner's default limit."""
+    """H5: the registered hook timeout covers the runner's default limit. The
+    one delegation hook is the prompt hook (OMN-23413 Amendment 14a)."""
     registration = json.loads(_REGISTRATION.read_text())
-    hook = registration["hooks"]["PreToolUse"][0]["hooks"][0]
+    hook = registration["hooks"]["UserPromptSubmit"][0]["hooks"][0]
+    assert "pre_tool_use_delegation.sh" in hook["command"]
     script = (
         _REPO / "plugins/onex/hooks/scripts/pre_tool_use_delegation.sh"
     ).read_text()
@@ -175,7 +177,7 @@ def test_reinstalling_updates_an_existing_hook_to_the_current_one(
     assert first.returncode == 0, first.stdout + first.stderr
     settings_path = config / "settings.json"
     settings = json.loads(settings_path.read_text())
-    for group in settings["hooks"]["PreToolUse"]:
+    for group in settings["hooks"]["UserPromptSubmit"]:
         for hook in group["hooks"]:
             hook.pop("timeout", None)  # as an install from before the timeout
     settings_path.write_text(json.dumps(settings))
@@ -183,7 +185,7 @@ def test_reinstalling_updates_an_existing_hook_to_the_current_one(
         install, env=env, capture_output=True, text=True, check=False
     )
     assert again.returncode == 0, again.stdout + again.stderr
-    groups = json.loads(settings_path.read_text())["hooks"]["PreToolUse"]
+    groups = json.loads(settings_path.read_text())["hooks"]["UserPromptSubmit"]
     delegation = [
         hook
         for group in groups

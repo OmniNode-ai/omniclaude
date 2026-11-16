@@ -313,6 +313,9 @@ def _registered_scripts() -> list[Path]:
                 # OMN-23413: skip leading NAME=value assignments before the script
                 while len(words) > 1 and re.fullmatch(r"[A-Za-z_]\w*=\S*", words[0]):
                     words.pop(0)
+                # OMN-23413: the history helper runs under the installer's python
+                if len(words) > 1 and words[0] == "${ONEX_DELEGATION_PYTHON}":
+                    words.pop(0)
                 scripts.append(Path(words[0]))
     return scripts
 
