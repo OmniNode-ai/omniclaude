@@ -744,6 +744,82 @@ def test_force_push_to_a_protected_branch_is_refused_via_a_cd_prefix(
     assert decision.blocked, command
 
 
+#: OMN-24734. The detached push every lane brief gives (the "Push waits for its
+#: hooks" clause of the standing rules block, OMN-24639): python3 starts a new
+#: session, bash runs the script, perl bounds the push and execs git. The script
+#: is ONE quoted argument, so a guard that reads only the words of a simple
+#: command never saw the `git push` inside it: the plain command was refused and
+#: this launch with the same arguments was admitted (measured on omniclaude dev
+#: ac7889091, 2026-11-16).
+WRAPPED_PUSH_LAUNCH = (
+    'python3 -c \'import subprocess,sys;subprocess.Popen(["bash","-c",sys.argv[1]],'
+    "start_new_session=True,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,"
+    "stderr=subprocess.DEVNULL)' "
+    '\'echo $$ > /tmp/lane/push.pid; perl -e "alarm 2400; exec @ARGV" git push {args}'
+    " > /tmp/lane/push.log 2>&1; echo $? > /tmp/lane/push.done'"
+)
+
+#: The other wrappers a push is run under: a shell, a bound, both.
+WRAPPED_FORM = [
+    WRAPPED_PUSH_LAUNCH,
+    "bash -c 'git push {args}'",
+    "sh -c 'echo go; git push {args} > /tmp/lane/push.log 2>&1'",
+    "timeout 300 git push {args}",
+    'perl -e "alarm 2400; exec @ARGV" git push {args}',
+    "bash -c \"bash -c 'git push {args}'\"",
+]
+
+
+@pytest.mark.parametrize("form", WRAPPED_FORM)
+@pytest.mark.parametrize(
+    "args", ["--force origin main", "--force origin dev", "-f origin HEAD:main"]
+)
+def test_wrapped_force_push_to_a_protected_branch_is_refused(
+    form: str, args: str, registry: Path, registry_worktree: Path, policy: Policy
+) -> None:
+    decision = evaluate_bash_command(
+        form.format(args=args), policy, cwd=registry_worktree, registry_root=registry
+    )
+    assert decision.blocked, form.format(args=args)
+    assert TICKET in decision.reason
+
+
+@pytest.mark.parametrize("form", WRAPPED_FORM)
+@pytest.mark.parametrize(
+    "args",
+    [
+        "origin HEAD:lane/my-branch",
+        "--force-with-lease origin HEAD:lane/my-branch",
+        "origin lane-branch",
+    ],
+)
+def test_wrapped_force_push_of_a_lane_branch_stays_allowed(
+    form: str, args: str, registry: Path, registry_worktree: Path, policy: Policy
+) -> None:
+    """Positive control: the wrapper is read, not refused wholesale."""
+    decision = evaluate_bash_command(
+        form.format(args=args), policy, cwd=registry_worktree, registry_root=registry
+    )
+    assert not decision.blocked, (form.format(args=args), decision.reason)
+
+
+def test_wrapped_force_push_matches_the_plain_command_verdict(
+    registry: Path, registry_worktree: Path, policy: Policy
+) -> None:
+    """The plain command and the clause's launch with its arguments agree."""
+    for args in ("--force origin main", "--force origin dev"):
+        plain = evaluate_bash_command(
+            f"git push {args}", policy, cwd=registry_worktree, registry_root=registry
+        )
+        wrapped = evaluate_bash_command(
+            WRAPPED_PUSH_LAUNCH.format(args=args),
+            policy,
+            cwd=registry_worktree,
+            registry_root=registry,
+        )
+        assert plain.blocked and wrapped.blocked, args
+
+
 def test_force_push_to_a_lane_branch_stays_allowed_in_a_worktree(
     registry: Path, registry_worktree: Path, policy: Policy
 ) -> None:

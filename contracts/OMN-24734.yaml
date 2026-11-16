@@ -1,0 +1,37 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-24734
+title: "The shared-tree git guard reads the commands a wrapper runs, so a force push to main or dev inside the push route's launch is refused"
+summary: >
+  handler_git_admission.evaluate_bash_command read only the words of each simple command, so the detached push launch
+  every lane brief gives (python3 start_new_session handing a script to bash, which runs perl alarm exec git push) was
+  admitted with git push --force origin main and with origin dev, while the plain command was refused. The handler now
+  also reads the commands run by bash, sh, zsh, dash and ksh with -c, by python with -c and a script argument, by perl
+  with -e and exec @ARGV, and by timeout, to a depth of four. Cases with the name wrapped_force_push feed the launch to the
+  guard for both refs.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn24734-wrapped-force-push
+    statement: "A force push to main or dev is refused when a wrapper runs it, as when it is typed plain."
+    acceptance:
+      - id: "AC1"
+        statement: |-
+          AC1: the shared-tree git guard refuses the clause's exact launch with git push --force origin main and with git push --force origin dev, with a wrapped_force_push case fed that command, landed before or with the pull request that carries the push route -- falsifier: uv run pytest -k wrapped_force_push -q in the repository that owns the guard, red on omniclaude dev ac7889091 and green on the fix
+evidence_requirements:
+  - kind: tests
+    description: "the wrapped_force_push cases of the shared-tree git guard"
+    command: "uv run pytest tests/hooks/test_shared_tree_git_guard.py -k wrapped_force_push -q -p no:cacheprovider"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn24734-ac1
+    description: "AC1: the 18 refusal cases, the 18 lane-branch controls and the plain-versus-wrapped comparison; red on dev ac7889091 (19 failed), green on the fix"
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_shared_tree_git_guard.py -k wrapped_force_push -q -p no:cacheprovider"
+    binds_ac: ["AC1"]
