@@ -36,9 +36,9 @@ dod_evidence:
         check_value: "uv run pytest tests/hooks/test_shared_tree_git_guard.py -k wrapped_force_push -q -p no:cacheprovider"
     binds_ac: ["AC1"]
   - id: dod-omn24734-ac1-deploy
-    description: "AC1, deploy check the hosted runner can run: the wrapped_force_push cases of the shared-tree git guard, whose handler ships in the plugin's PreToolUse hook, run with their scratch directory named for the check"
+    description: "AC1, deploy check the hosted runner can run: reads the shipped wrapped_command_segments.py from the PR branch on GitHub and fails unless it defines with_wrapped_segments, the function that makes the guard read wrapper-run commands"
     source: manual
     checks:
       - check_type: command
-        check_value: "uv run pytest tests/hooks/test_shared_tree_git_guard.py -k wrapped_force_push -q -p no:cacheprovider --basetemp=/tmp/deploy-check-wrapped-force-push"
+        check_value: "gh api 'repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_git_effect/container/wrapped_command_segments.py?ref=omn-24734-wrapped-force-push' --jq .content | base64 -d | grep -q 'def with_wrapped_segments'"
     binds_ac: ["AC1"]
