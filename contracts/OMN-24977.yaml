@@ -1,0 +1,66 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-24977
+title: "The agent routing contract has a band that allows model haiku for low-score mechanical work, and the agent-model guard accepts a haiku ROUTE in it and refuses it in B3 and above"
+summary: >
+  By RULING 2026-11-16T19:43:11Z the orchestration account runs only sonnet and haiku lanes, but no band of
+  contract_agent_routing.yaml allowed model haiku and agent_model_allowlist.json kept it out. Band B1 (score 0 to 4)
+  now allows model haiku at effort low or medium, the allowlist names haiku, and workflow_model_guard.py no longer
+  prints its haiku-removed note: a haiku ROUTE in B2 and above is refused with the band's own allowed models named.
+  B0 and B1c still dispatch no Claude agent and B2 to B5 are unchanged.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn24977-haiku-band
+    statement: "A haiku agent with a valid band B1 ROUTE passes the guard, and haiku in B2 and above is refused."
+    acceptance:
+      - id: "AC1"
+        statement: |-
+          AC1: contract_agent_routing.yaml allows model haiku in one low-score band (B1, or a new band the contract's own structure fits) with the efforts the harness accepts for haiku, and every other band is unchanged -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -q
+      - id: "AC2"
+        statement: |-
+          AC2: a haiku ROUTE in that band passes the guard, haiku in B3 and above is refused, and opus and fable ROUTE lines behave as before -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -q -k haiku
+      - id: "AC3"
+        statement: |-
+          AC3: the new tests fail red on origin/dev and pass green on the branch -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -q on the base commit and on the branch
+      - id: "AC4"
+        statement: |-
+          AC4: the hook installed from the branch on the Mac through adopt_merged.py install-tree --branch accepts one Workflow agent with a haiku ROUTE, recorded as installed= and observed= in a STATUS row -- falsifier: onex-ledger read of the STATUS row naming installed= and observed=
+evidence_requirements:
+  - kind: tests
+    description: "the guard's focused test file, which pins the allowlist, the band sets and the haiku cases"
+    command: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn24977-ac1
+    description: "AC1: the focused test file pins B1 models {haiku} and efforts {low, medium} and B0, B1c, B2, B3, B4, B5 as before; 146 passed on the branch"
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov"
+    binds_ac: ["AC1"]
+  - id: dod-omn24977-ac2
+    description: "AC2: the haiku cases (B1 pass at low and medium, effort outside the set refused, B2 to B5 refused naming the band's models, score above the band refused, hard floor refused, the registered hook exits 0 for B1 and 2 for B3) and the unchanged opus, fable and sonnet cases"
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k haiku"
+    binds_ac: ["AC2"]
+  - id: dod-omn24977-ac3
+    description: "AC3: 22 tests failed on origin/dev d3d5bbe84 with the new test file (the ids are in the PR body), and the same file passes on the branch"
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -p no:randomly"
+    binds_ac: ["AC3"]
+  - id: dod-omn24977-ac4
+    description: "AC4: the STATUS row naming installed= and observed= is written after the branch install and cited in a PR comment that names the head; this check pins what the installed hook depends on in the tree, the haiku entry of the B1 band and of the allowlist, which are absent at the merge base"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "grep -q '\"haiku\"' plugins/onex/hooks/config/agent_model_allowlist.json && grep -q 'models: \\[\"haiku\"\\]' plugins/onex/hooks/config/contract_agent_routing.yaml"
+    binds_ac: ["AC4"]
