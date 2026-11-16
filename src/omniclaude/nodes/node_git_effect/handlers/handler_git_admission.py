@@ -159,6 +159,24 @@ from pathlib import Path
 from typing import Final
 
 from omniclaude.nodes.node_git_effect.container import container_git_admission
+from omniclaude.nodes.node_git_effect.container.wrapped_command_segments import (
+    ASSIGNMENT as _ASSIGNMENT,
+)
+from omniclaude.nodes.node_git_effect.container.wrapped_command_segments import (
+    WRAPPERS as _WRAPPERS,
+)
+from omniclaude.nodes.node_git_effect.container.wrapped_command_segments import (
+    drop_timeout as _drop_timeout,
+)
+from omniclaude.nodes.node_git_effect.container.wrapped_command_segments import (
+    peel_grouping as _peel_grouping,
+)
+from omniclaude.nodes.node_git_effect.container.wrapped_command_segments import (
+    strip_wrappers as _strip_wrappers,
+)
+from omniclaude.nodes.node_git_effect.container.wrapped_command_segments import (
+    with_wrapped_segments,
+)
 from omniclaude.nodes.node_git_effect.enums.enum_quote_kind import EnumQuoteKind
 from omniclaude.nodes.node_git_effect.models.model_git_admission import (
     ModelGitAdmissionRequest,
@@ -249,26 +267,6 @@ TICKET: Final[str] = "OMN-18798"
 _SEPARATORS: Final[frozenset[str]] = frozenset(
     {";", ";;", "&", "&&", "|", "||", "|&", "\n"}
 )
-
-#: Wrapper programs stripped before a segment's program is read, so
-#: `sudo git reset --hard` is still a git reset.
-_WRAPPERS: Final[frozenset[str]] = frozenset(
-    {"sudo", "env", "command", "time", "nohup", "nice", "doas"}
-)
-
-#: Shell reserved words that may stand in front of a simple command, so the
-#: command's own first word is not its program (OMN-18927). `do` and `{` were
-#: already peeled for a loop body (OMN-19380); the rest head a condition
-#: (`if`, `elif`, `while`, `until`), a branch body (`then`, `else`) or negate
-#: the command that follows (`!`). Left in place a segment's program reads as
-#: the keyword, `_parse_git` returns None, and the git call inside a compound
-#: command is never judged at all -- `if true; then git reset --hard
-#: origin/main; fi` was admitted in the shared registry clone.
-_LEADING_KEYWORDS: Final[frozenset[str]] = frozenset(
-    {"{", "!", "do", "then", "else", "elif", "if", "while", "until"}
-)
-
-_ASSIGNMENT: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 
 #: git global flags that consume the NEXT token as a value, distinct from
 #: `-C`, which this guard reads out separately as the target directory.
@@ -468,20 +466,6 @@ def _joined_segments(command: str) -> list[tuple[list[str], str]]:
 def _segments(command: str) -> list[list[str]]:
     """The simple commands of ``command``, each as its dequoted words."""
     return [segment for segment, _ in _joined_segments(command)]
-
-
-def _strip_wrappers(tokens: list[str]) -> list[str]:
-    result = list(tokens)
-    while result:
-        head = result[0]
-        if _ASSIGNMENT.match(head):
-            result = result[1:]
-            continue
-        if os.path.basename(head) in _WRAPPERS:
-            result = result[1:]
-            continue
-        break
-    return result
 
 
 @dataclass(frozen=True)
@@ -1892,44 +1876,6 @@ def _doubled_root_refusal(
     return None
 
 
-def _peel_grouping(segment: list[str]) -> tuple[list[str], int, int]:
-    """Strip subshell and brace grouping from one segment (OMN-19852).
-
-    Returns ``(tokens, opened, closed)``: the segment without its leading
-    ``(`` / ``{`` and its unmatched trailing ``)`` / ``}``, how many subshells
-    it opens (each ``(`` keeps a directory change from leaking out) and how
-    many it closes. A ``$(`` substitution balances itself and is left alone.
-    """
-    tokens = list(segment)
-    opened = 0
-    while tokens:
-        head = tokens[0]
-        if head in _LEADING_KEYWORDS:
-            # OMN-19380: a loop body begins with do before its first command.
-            # OMN-18927: so does every other reserved word that may precede a
-            # simple command, and a segment still wearing one is read as a
-            # command named `then` rather than as the git call it carries.
-            tokens = tokens[1:]
-        elif head.startswith("(") and not head.startswith("$("):
-            opened += 1
-            tokens[0] = head[1:]
-            if not tokens[0]:
-                tokens = tokens[1:]
-        else:
-            break
-    closed = 0
-    balance = sum(t.count("(") - t.count(")") for t in tokens)
-    while tokens and balance < 0 and tokens[-1].endswith(")"):
-        tokens[-1] = tokens[-1][:-1]
-        closed += 1
-        balance += 1
-        if not tokens[-1]:
-            tokens.pop()
-    while tokens and tokens[-1] == "}":
-        tokens.pop()
-    return tokens, opened, closed
-
-
 def _track_assignments(segment: list[str], scope: Scope) -> None:
     """Record ``NAME=value`` in ``scope`` when the value is fully resolvable.
 
@@ -2031,17 +1977,6 @@ _CONFIG_SECTION: Final[re.Pattern[str]] = re.compile(
 _GITHUB_SLUG: Final[re.Pattern[str]] = re.compile(
     r"github\.com[:/]+([^/\s:]+)/([^/\s]+?)(?:\.git)?/*$", re.I
 )
-
-
-def _drop_timeout(tokens: list[str]) -> list[str]:
-    """``timeout [opts] DURATION cmd...`` as ``cmd...``; anything else unchanged."""
-    words = _strip_wrappers(tokens)
-    if not words or os.path.basename(words[0]) != "timeout":
-        return tokens
-    rest = words[1:]
-    while rest and rest[0].startswith("-"):
-        rest = rest[1:]
-    return rest[1:]
 
 
 def _git_common_dir(start: Path) -> tuple[Path, Path | None] | None:
@@ -2414,6 +2349,7 @@ def evaluate_bash_command(
             notes=("untokenisable command naming no refused git verb",),
         )
 
+    segments = with_wrapped_segments(segments, _joined_segments)
     doubled = _doubled_root_refusal(command, policy, cwd, registry_root)
     if doubled is not None:
         return Decision(
