@@ -154,8 +154,8 @@ set, a score that is not the sum of its dims, a floor-triggered band below B4, a
 the one the score implies are all refused. Bands B0 and B1c dispatch no Claude agent, so an
 `agent()` call carrying one is refused. **Band B1 allows model `haiku` only, at effort `low` or
 `medium`** (score 0 to 4, low-score mechanical work: run one script and return its output, post a
-given text, read a file and list fields); Haiku 5.5 accepts all five efforts and Haiku 4.5 none, and
-the band sets only the two that mechanical work needs. A haiku ROUTE in B2 and above is refused with
+given text, read a file and list fields); the band sets only the two efforts that mechanical work
+needs (the lab harness admitted both; no completed haiku run at either effort is recorded). A haiku ROUTE in B2 and above is refused with
 the band's own allowed models named ("band B3 allows only: sonnet"), and so is a haiku ROUTE whose
 score implies B2 or above but claims B1.
 

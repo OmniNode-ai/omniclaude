@@ -37,7 +37,7 @@ emergency_bypass:
   follow_up_ticket_id: ""
 dod_evidence:
   - id: dod-omn24977-ac1
-    description: "AC1: the focused test file pins B1 models {haiku} and efforts {low, medium} and B0, B1c, B2, B3, B4, B5 as before; 154 passed in the focused file on a lab host"
+    description: "AC1: the focused test file pins B1 models {haiku} and efforts {low, medium} and B0, B1c, B2, B3, B4, B5 as before; 156 passed in the focused file at the head of the branch (re-run 2026-11-17, OMN-25166)"
     source: manual
     checks:
       - check_type: test_passes
@@ -51,7 +51,7 @@ dod_evidence:
         check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k haiku"
     binds_ac: ["AC2"]
   - id: dod-omn24977-ac3
-    description: "AC3: the 154-test file of this head run against base d3d5bbe8419ffa6d14e5e631ed33b4585ac70d96 on a lab host gave 31 failed and 123 passed, and the same file passes on the branch (154 passed)"
+    description: "AC3: the 156-test file of this head run against base d3d5bbe8419ffa6d14e5e631ed33b4585ac70d96 gave 33 failed and 123 passed, and the same file passes on the branch (156 passed); both counts re-run 2026-11-17 (OMN-25166), the base run on a copy of the base tree with the branch's test file"
     source: manual
     checks:
       - check_type: test_passes
@@ -59,12 +59,16 @@ dod_evidence:
     binds_ac: ["AC3"]
   - id: dod-omn24977-ac4
     description: >-
-      AC4: read the fin3287-2335 STATUS row with installed=<lab host>:<current HEAD>,
-      proof=fin3287-2335-b1-haiku-stale-clone and the observed acceptance of one
-      Workflow B1 haiku agent while OMNI_HOME names a clone without haiku.
-      This is the lab substitute authorized for this lane; the Mac install is
-      still pending for the orchestrator. A config grep is not install evidence.
-      The launching host writes the row after committing and pushing this tree.
+      AC4: read a STATUS row of lane fix3287-0135-s with installed=<lab host>:<current HEAD>,
+      proof=fix3287-0135-s-b1-haiku-stale-clone and the observed acceptance of one
+      Workflow B1 haiku agent while OMNI_HOME names a full hooks clone without haiku.
+      The criterion names the Mac install through adopt_merged.py install-tree. That install
+      was not made: this lane runs on a lab host and could not reach the Mac. The lab install
+      is the one the brief of lane fix3287-0135-s (OMN-25166, section 3a.11) orders for a PR that
+      changes a hook ("install the branch revision on the lab through the declared installer");
+      it substitutes for the Mac install under that order only, and the Mac install stays open
+      for the orchestrator. A config grep is not install evidence. The lane writes the row after
+      pushing this tree and installing it.
     source: manual
     execution_scope: local_done_gate
     status: pending
@@ -73,9 +77,9 @@ dod_evidence:
         check_value: |-
           set -o pipefail
           head=$(git rev-parse HEAD)
-          python3 "${OMNI_PLUGIN_ROOT:?}/skills/lane-brief/scripts/lane_brief.py" grep -E "installed=[a-z0-9]+:${head}" \
-            | grep -F ' | STATUS | ' | grep -F 'lane=fin3287-2335' \
-            | grep -F 'proof=fin3287-2335-b1-haiku-stale-clone' \
+          python3 "${OMNI_PLUGIN_ROOT:?}/skills/lane-brief/scripts/lane_brief.py" grep -E "installed=[A-Za-z0-9._-]+:${head}" \
+            | grep -F ' | STATUS | ' | grep -F 'lane=fix3287-0135-s' \
+            | grep -F 'proof=fix3287-0135-s-b1-haiku-stale-clone' \
             | grep -F 'observed=Workflow B1 model=haiku effort=low exit=0 stdout=empty stale_clone_without_haiku=true' \
             | grep -q .
     binds_ac: ["AC4"]

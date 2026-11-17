@@ -2305,24 +2305,82 @@ def _haiku_payload(tool_name: str, route: str | None) -> dict[str, Any]:
     return {"tool_name": tool_name, "tool_input": tool_input}
 
 
-def test_registered_hook_uses_installed_policy_with_stale_clone(tmp_path: Path) -> None:
-    hook = _copied_hook(tmp_path)
+def _stale_clone(tmp_path: Path) -> Path:
+    """A registry root whose omniclaude clone is a full hooks tree without haiku.
+
+    The layout is the one the hook looks up: ``scripts/`` beside ``lib/`` and
+    ``config/`` under ``plugins/onex/hooks/``, inside a git checkout (``.git``).
+    The allowlist and the routing contract both lack haiku, so any run that
+    consults this clone for its policy, its guard module or its script refuses a
+    haiku call.
+    """
     registry_root = tmp_path / "stale-registry"
-    config = registry_root / "omniclaude" / "plugins" / "onex" / "hooks" / "config"
-    config.mkdir(parents=True)
+    clone = registry_root / "omniclaude"
+    hooks = clone / "plugins" / "onex" / "hooks"
+    shutil.copytree(_HOOKS_DIR, hooks, ignore=shutil.ignore_patterns("__pycache__"))
+    # A bare-minimum .git skeleton: the hook never runs git on the clone, and a
+    # git subprocess here would inherit a hook's GIT_DIR (OMN-18434).
+    git_dir = clone / ".git"
+    for sub in ("objects", "refs/heads"):
+        (git_dir / sub).mkdir(parents=True)
+    (git_dir / "HEAD").write_text("ref: refs/heads/dev\n", encoding="utf-8")
+    assert (clone / ".git").exists()
+    config = hooks / "config"
     (config / "agent_model_allowlist.json").write_text(
         json.dumps({"allowed_models": ["sonnet", "opus", "fable"]}), encoding="utf-8"
     )
-    contract = _GUARD.DEFAULT_ROUTING_CONTRACT_PATH.read_text(encoding="utf-8")
-    (config / "contract_agent_routing.yaml").write_text(
-        contract.replace('models: ["haiku"]', "models: []"), encoding="utf-8"
+    contract = config / "contract_agent_routing.yaml"
+    original = contract.read_text(encoding="utf-8")
+    stale = original.replace('models: ["haiku"]', "models: []")
+    assert stale != original, "the stale clone must differ from the shipped contract"
+    contract.write_text(stale, encoding="utf-8")
+    for part in ("lib", "scripts", "config"):
+        assert (hooks / part).is_dir(), part
+    return registry_root
+
+
+def _clone_hook(registry_root: Path) -> Path:
+    return (
+        registry_root
+        / "omniclaude"
+        / "plugins"
+        / "onex"
+        / "hooks"
+        / "scripts"
+        / _HOOK_SCRIPT.name
     )
+
+
+def _replace_once(path: Path, old: str, new: str) -> None:
+    """Rewrite one line of a copied file, failing when the text is not there."""
+    text = path.read_text(encoding="utf-8")
+    assert old in text, f"{old!r} not found in {path.name}"
+    path.write_text(text.replace(old, new), encoding="utf-8")
+
+
+def test_registered_hook_uses_installed_policy_with_stale_clone(tmp_path: Path) -> None:
+    hook = _copied_hook(tmp_path)
+    registry_root = _stale_clone(tmp_path)
     payload = _haiku_payload("Workflow", _ROUTE_B1_HAIKU)
     result = _run_hook(payload, tmp_path, hook_script=hook, registry_root=registry_root)
     assert result.returncode == 0, result.stdout + result.stderr
     assert result.stdout == ""
-    # Positive control: this exact loaded tree's policy decides, even with the
-    # same stale clone and the same payload. A disabled hook cannot pass it.
+    # Control 1: the same payload through the clone's own full hooks tree is
+    # refused, so the clone really is stale and a hook that ran from it would
+    # exit 2 here instead of 0.
+    from_clone = _run_hook(
+        payload,
+        tmp_path,
+        hook_script=_clone_hook(registry_root),
+        registry_root=registry_root,
+    )
+    assert from_clone.returncode == 2, from_clone.stdout + from_clone.stderr
+    assert (
+        "model: 'haiku' is not an allowed background model"
+        in json.loads(from_clone.stdout)["reason"]
+    )
+    # Control 2: this exact loaded tree's policy decides, even with the same
+    # stale clone and the same payload. A disabled hook cannot pass it.
     installed_allowlist = hook.parents[1] / "config" / "agent_model_allowlist.json"
     installed_allowlist.write_text(
         json.dumps({"allowed_models": ["sonnet", "opus", "fable"]}), encoding="utf-8"
@@ -2335,6 +2393,45 @@ def test_registered_hook_uses_installed_policy_with_stale_clone(tmp_path: Path) 
         "model: 'haiku' is not an allowed background model"
         in json.loads(refused.stdout)["reason"]
     )
+
+
+@pytest.mark.parametrize("consulted", ["guard_module", "config_files"])
+def test_stale_clone_test_goes_red_when_the_clone_is_consulted(
+    consulted: str, tmp_path: Path
+) -> None:
+    """Each way a hook could read the clone makes the stale-clone payload refuse.
+
+    The installed tree is rewritten so the named lookup goes through
+    ``OMNI_HOME``; the payload that the real hook passes is then refused. This
+    is the red half of ``..._with_stale_clone``: a regression that reads the
+    clone, by either route, fails that test with exit 2 instead of 0.
+    """
+    hook = _copied_hook(tmp_path)
+    registry_root = _stale_clone(tmp_path)
+    clone_hooks = "${OMNI_HOME}/omniclaude/plugins/onex/hooks"
+    if consulted == "guard_module":
+        _replace_once(
+            hook,
+            'GUARD_PY="${SCRIPT_DIR}/../lib/workflow_model_guard.py"',
+            f'GUARD_PY="{clone_hooks}/lib/workflow_model_guard.py"',
+        )
+    else:
+        guard = hook.parents[1] / "lib" / "workflow_model_guard.py"
+        for name in ("agent_model_allowlist.json", "contract_agent_routing.yaml"):
+            _replace_once(
+                guard,
+                f'Path(__file__).resolve().parent.parent / "config" / "{name}"',
+                'Path(__import__("os").environ["OMNI_HOME"]) / "omniclaude" '
+                f'/ "plugins" / "onex" / "hooks" / "config" / "{name}"',
+            )
+    result = _run_hook(
+        _haiku_payload("Workflow", _ROUTE_B1_HAIKU),
+        tmp_path,
+        hook_script=hook,
+        registry_root=registry_root,
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "is not an allowed background model" in json.loads(result.stdout)["reason"]
 
 
 @pytest.mark.parametrize("tool_name", ["Workflow", "Agent"])
@@ -2398,6 +2495,34 @@ def test_band_table_pinned() -> None:
         data["bands"]["B1"]["destination"]
         == "Haiku lane, or onex delegate for pure text"
     )
+    # The guard decides from its own parser, not PyYAML, so pin what that parser
+    # reads: score ranges, timeouts, max_concurrent and destination, per band.
+    parsed = _GUARD.load_routing()
+    expected_parsed = {
+        "B0": (None, None, 300, None, "landing controller / deterministic node"),
+        "B1": (0, 4, 240, None, "Haiku lane, or onex delegate for pure text"),
+        "B1c": (0, 4, 240, None, "Jev (node_typed_decision_effect)"),
+        "B2": (5, 8, 1800, 4, "Codex drafts, Sonnet lane verifies"),
+        "B3": (9, 13, 3600, 15, "Sonnet lane"),
+        "B4": (14, 17, 7200, 5, "Opus lane"),
+        "B5": (18, 21, 10800, 5, "Opus lane plus adversarial verify lane"),
+    }
+    assert {
+        name: (
+            band.score_min,
+            band.score_max,
+            band.timeout_s,
+            band.max_concurrent,
+            band.destination,
+        )
+        for name, band in parsed.bands.items()
+    } == expected_parsed
+    assert {
+        name: (band.models, band.efforts) for name, band in parsed.bands.items()
+    } == {
+        name: (frozenset(models), frozenset(efforts))
+        for name, (models, efforts, *_rest) in expected.items()
+    }
     no_agent_route = (
         "ROUTE: band=B1c score=0 dims=S0A0R0V0N0C0J0 dest=node model=haiku effort=low"
     )

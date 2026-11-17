@@ -1,0 +1,93 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-25166
+title: "Review findings 1 to 3 on omniclaude#3287 are fixed or argued: the guard's config lookup is proven by a test that fails when the stale clone is read, and the install and Lab proof are bound to the new head"
+summary: >
+  The agent-model guard script and the guard module read lib/ and config/ from their own installed tree and never from
+  OMNI_HOME. The stale-clone hook test now builds a full hooks tree without haiku (lib/, scripts/, config/, .git), and two
+  mutants of the installed tree that consult it are refused. The band pin is also read through the guard's own parser, the
+  installed= pattern accepts a hostname with a hyphen, a dot or a capital, and the pass counts are re-run.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn25166-stale-clone-proof
+    statement: "The installed hook decides from its own tree, a test proves it against a full stale clone, and the install and Lab proof name the new head."
+    acceptance:
+      - id: "AC1"
+        statement: |-
+          AC1: the lane reads how pre_tool_use_agent_model_guard.sh and workflow_model_guard.py locate lib/ and config/, and either changes any OMNI_HOME read to the installed tree or records in a pull request comment that neither consults OMNI_HOME and explains the refusal that was reported
+      - id: "AC2"
+        statement: |-
+          AC2: the stale-clone hook test builds a full hooks tree without haiku in the layout the hook looks up (lib/, scripts/, config/, .git) and goes red when that clone is consulted, shown by a run that fails against the old lookup and passes on the fix
+      - id: "AC3"
+        statement: |-
+          AC3: the Mac install of the new head through adopt_merged.py install-tree is recorded in a STATUS row carrying installed=<host>:<new head sha> and observed= of one accepted haiku Workflow agent read from the installed hook, or OMN-24977 AC4 is amended with the authorisation for a lab host, and the contract installed= pattern accepts a hostname with a hyphen, a dot or a capital
+      - id: "AC4"
+        statement: |-
+          AC4: the non-blocking findings 4 to 9 are fixed or argued in a pull request comment, with the band pin also read through the guard's own parser (score ranges, timeouts, max_concurrent, destination), the replace in the haiku-removed test asserting the text changed, and the Haiku effort claim and the pass counts recorded from a re-run on base and on this head
+      - id: "AC5"
+        statement: |-
+          AC5: the required suites pass on a lab host at the new head (run in named parts when a whole suite times out), the head is pushed to the pull request's own branch, and a pull request comment starts with Lab: head= followed by the new head sha
+evidence_requirements:
+  - kind: tests
+    description: "the guard focused test file"
+    command: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn25166-ac1
+    description: "AC1: the lane reads how pre_tool_use_agent_model_guard.sh and workflow_model_guard.py locate lib/ and config/, and either changes any OMNI_HOME read to the installed tree or records in a pull request comment that neither consults OMNI_HOME and explains the refusal that was reported"
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k stale_clone"
+    binds_ac: ["AC1"]
+  - id: dod-omn25166-ac2
+    description: "AC2: the stale-clone hook test builds a full hooks tree without haiku in the layout the hook looks up (lib/, scripts/, config/, .git) and goes red when that clone is consulted, shown by a run that fails against the old lookup and passes on the fix"
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k stale_clone"
+    binds_ac: ["AC2"]
+  - id: dod-omn25166-ac3
+    description: "AC3: the Mac install of the new head through adopt_merged.py install-tree is recorded in a STATUS row carrying installed=<host>:<new head sha> and observed= of one accepted haiku Workflow agent read from the installed hook, or OMN-24977 AC4 is amended with the authorisation for a lab host, and the contract installed= pattern accepts a hostname with a hyphen, a dot or a capital"
+    source: manual
+    execution_scope: local_done_gate
+    status: pending
+    checks:
+      - check_type: command
+        check_value: |-
+          set -o pipefail
+          head=$(git rev-parse HEAD)
+          python3 "${OMNI_PLUGIN_ROOT:?}/skills/lane-brief/scripts/lane_brief.py" grep -E "installed=[A-Za-z0-9._-]+:${head}" \
+            | grep -F ' | STATUS | ' | grep -F 'lane=fix3287-0135-s' \
+            | grep -F 'proof=fix3287-0135-s-b1-haiku-stale-clone' \
+            | grep -F 'observed=Workflow B1 model=haiku effort=low exit=0 stdout=empty stale_clone_without_haiku=true' \
+            | grep -q .
+    binds_ac: ["AC3"]
+  - id: dod-omn25166-ac4
+    description: "AC4: the non-blocking findings 4 to 9 are fixed or argued in a pull request comment, with the band pin also read through the guard's own parser (score ranges, timeouts, max_concurrent, destination), the replace in the haiku-removed test asserting the text changed, and the Haiku effort claim and the pass counts recorded from a re-run on base and on this head"
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k band_table_pinned"
+    binds_ac: ["AC4"]
+  - id: dod-omn25166-ac5
+    description: "AC5: the required suites pass on a lab host at the new head (run in named parts when a whole suite times out), the head is pushed to the pull request's own branch, and a pull request comment starts with Lab: head= followed by the new head sha"
+    source: manual
+    execution_scope: local_done_gate
+    status: pending
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov"
+      - check_type: command
+        check_value: |-
+          set -o pipefail
+          head=$(git rev-parse HEAD)
+          test "$(git rev-parse origin/omn-24977-haiku-band-routing-contract)" = "$head"
+          gh api "repos/OmniNode-ai/omniclaude/issues/3287/comments" --paginate --jq '.[].body' \
+            | grep -E "^Lab: head=${head}" | grep -q .
+    binds_ac: ["AC5"]
