@@ -3,7 +3,7 @@
     "OMN-17499. The set of models a BACKGROUND agent may run on.",
     "",
     "Read by plugins/onex/hooks/lib/workflow_model_guard.py, which is invoked by",
-    "the pre_tool_use_agent_model_guard.sh PreToolUse hook. The list lives here,",
+    "the pre_tool_use_agent_model_guard.sh PreToolUse hook, from its own tree (OMNI_HOME may name an older clone and does not select this policy). The list lives here,",
     "not in the checker, so changing policy is a config edit rather than a code",
     "change -- and so the policy is visible in one place instead of inferred from",
     "a Python literal.",
