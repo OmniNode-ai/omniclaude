@@ -43,7 +43,17 @@ dod_evidence:
     source: manual
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k stale_clone"
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k 'stale_clone or never_read_the_registry_clone'"
+      - check_type: command
+        check_value: |-
+          set -o pipefail
+          head=$(git rev-parse HEAD)
+          if grep -n OMNI_HOME plugins/onex/hooks/scripts/pre_tool_use_agent_model_guard.sh \
+            plugins/onex/hooks/lib/workflow_model_guard.py plugins/onex/hooks/hooks.json; then
+            exit 1
+          fi
+          gh api "repos/OmniNode-ai/omniclaude/issues/3287/comments" --paginate --jq '.[].body' \
+            | grep -E "^OMNI_HOME: head=${head}" | grep -q .
     binds_ac: ["AC1"]
   - id: dod-omn25166-ac2
     description: "AC2: the stale-clone hook test builds a full hooks tree without haiku in the layout the hook looks up (lib/, scripts/, config/, .git) and goes red when that clone is consulted, shown by a run that fails against the old lookup and passes on the fix"
@@ -63,8 +73,8 @@ dod_evidence:
           set -o pipefail
           head=$(git rev-parse HEAD)
           python3 "${OMNI_PLUGIN_ROOT:?}/skills/lane-brief/scripts/lane_brief.py" grep -E "installed=[A-Za-z0-9._-]+:${head}" \
-            | grep -F ' | STATUS | ' | grep -F 'lane=fix3287-0135-s' \
-            | grep -F 'proof=fix3287-0135-s-b1-haiku-stale-clone' \
+            | grep -F ' | STATUS | ' \
+            | grep -E 'proof=[A-Za-z0-9._-]*b1-haiku-stale-clone' \
             | grep -F 'observed=Workflow B1 model=haiku effort=low exit=0 stdout=empty stale_clone_without_haiku=true' \
             | grep -q .
     binds_ac: ["AC3"]
@@ -79,7 +89,6 @@ dod_evidence:
     description: "AC5: the required suites pass on a lab host at the new head (run in named parts when a whole suite times out), the head is pushed to the pull request's own branch, and a pull request comment starts with Lab: head= followed by the new head sha"
     source: manual
     execution_scope: local_done_gate
-    status: pending
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov"

@@ -2305,8 +2305,12 @@ def _haiku_payload(tool_name: str, route: str | None) -> dict[str, Any]:
     return {"tool_name": tool_name, "tool_input": tool_input}
 
 
-def _stale_clone(tmp_path: Path) -> Path:
+def _stale_clone(tmp_path: Path, *, allowlist_has_haiku: bool = False) -> Path:
     """A registry root whose omniclaude clone is a full hooks tree without haiku.
+
+    ``allowlist_has_haiku`` keeps haiku in the clone's allowlist, so only its
+    routing contract is stale: a run that consults the clone's contract is then
+    refused by the band table alone, never by the allowlist.
 
     The layout is the one the hook looks up: ``scripts/`` beside ``lib/`` and
     ``config/`` under ``plugins/onex/hooks/``, inside a git checkout (``.git``).
@@ -2326,9 +2330,11 @@ def _stale_clone(tmp_path: Path) -> Path:
     (git_dir / "HEAD").write_text("ref: refs/heads/dev\n", encoding="utf-8")
     assert (clone / ".git").exists()
     config = hooks / "config"
-    (config / "agent_model_allowlist.json").write_text(
-        json.dumps({"allowed_models": ["sonnet", "opus", "fable"]}), encoding="utf-8"
-    )
+    if not allowlist_has_haiku:
+        (config / "agent_model_allowlist.json").write_text(
+            json.dumps({"allowed_models": ["sonnet", "opus", "fable"]}),
+            encoding="utf-8",
+        )
     contract = config / "contract_agent_routing.yaml"
     original = contract.read_text(encoding="utf-8")
     stale = original.replace('models: ["haiku"]', "models: []")
@@ -2395,35 +2401,57 @@ def test_registered_hook_uses_installed_policy_with_stale_clone(tmp_path: Path) 
     )
 
 
-@pytest.mark.parametrize("consulted", ["guard_module", "config_files"])
+def _consult_clone_for(guard: Path, names: tuple[str, ...]) -> None:
+    """Point the named config files of an installed guard module at OMNI_HOME."""
+    for name in names:
+        _replace_once(
+            guard,
+            f'Path(__file__).resolve().parent.parent / "config" / "{name}"',
+            'Path(__import__("os").environ["OMNI_HOME"]) / "omniclaude" '
+            f'/ "plugins" / "onex" / "hooks" / "config" / "{name}"',
+        )
+
+
+@pytest.mark.parametrize(
+    ("consulted", "reason_text"),
+    [
+        ("guard_module", "is not an allowed background model"),
+        ("config_files", "is not an allowed background model"),
+        # The clone's allowlist keeps haiku, so only the stale routing contract
+        # (band B1 with ``models: []``) can refuse this call. A hook that read
+        # the allowlist from its own tree and the contract from the clone is
+        # the one lookup the two allowlist mutants cannot see.
+        ("routing_contract_only", "band B1"),
+    ],
+)
 def test_stale_clone_test_goes_red_when_the_clone_is_consulted(
-    consulted: str, tmp_path: Path
+    consulted: str, reason_text: str, tmp_path: Path
 ) -> None:
     """Each way a hook could read the clone makes the stale-clone payload refuse.
 
     The installed tree is rewritten so the named lookup goes through
     ``OMNI_HOME``; the payload that the real hook passes is then refused. This
     is the red half of ``..._with_stale_clone``: a regression that reads the
-    clone, by either route, fails that test with exit 2 instead of 0.
+    clone, by any route, fails that test with exit 2 instead of 0.
     """
     hook = _copied_hook(tmp_path)
-    registry_root = _stale_clone(tmp_path)
+    registry_root = _stale_clone(
+        tmp_path, allowlist_has_haiku=consulted == "routing_contract_only"
+    )
     clone_hooks = "${OMNI_HOME}/omniclaude/plugins/onex/hooks"
+    guard = hook.parents[1] / "lib" / "workflow_model_guard.py"
     if consulted == "guard_module":
         _replace_once(
             hook,
             'GUARD_PY="${SCRIPT_DIR}/../lib/workflow_model_guard.py"',
             f'GUARD_PY="{clone_hooks}/lib/workflow_model_guard.py"',
         )
+    elif consulted == "config_files":
+        _consult_clone_for(
+            guard, ("agent_model_allowlist.json", "contract_agent_routing.yaml")
+        )
     else:
-        guard = hook.parents[1] / "lib" / "workflow_model_guard.py"
-        for name in ("agent_model_allowlist.json", "contract_agent_routing.yaml"):
-            _replace_once(
-                guard,
-                f'Path(__file__).resolve().parent.parent / "config" / "{name}"',
-                'Path(__import__("os").environ["OMNI_HOME"]) / "omniclaude" '
-                f'/ "plugins" / "onex" / "hooks" / "config" / "{name}"',
-            )
+        _consult_clone_for(guard, ("contract_agent_routing.yaml",))
     result = _run_hook(
         _haiku_payload("Workflow", _ROUTE_B1_HAIKU),
         tmp_path,
@@ -2431,7 +2459,165 @@ def test_stale_clone_test_goes_red_when_the_clone_is_consulted(
         registry_root=registry_root,
     )
     assert result.returncode == 2, result.stdout + result.stderr
-    assert "is not an allowed background model" in json.loads(result.stdout)["reason"]
+    reason = json.loads(result.stdout)["reason"]
+    assert reason_text in reason, reason
+    if consulted == "routing_contract_only":
+        # The allowlist is not what refused it.
+        assert "is not an allowed background model" not in reason, reason
+
+
+_SCRIPTS_DIR = _HOOKS_DIR / "scripts"
+_LIB_DIR = _HOOKS_DIR / "lib"
+#: A shell file the hook script loads: ``source``/``. "<dir var>/<name>.sh"`` or the
+#: ``_PATH="<dir var>/../lib/<name>.sh"`` assignment hook-gate.sh makes for its bit table.
+_SOURCED_SH = re.compile(
+    r'(?:^\s*(?:source|\.)\s+|_BITS_PATH=)"[^"\n]*?/([A-Za-z0-9_.-]+\.sh)"',
+    re.MULTILINE,
+)
+#: The only sourced files that read OMNI_HOME, and the one thing each reads it for.
+#: Neither reads lib/ or config/ policy: onex-paths.sh derives ONEX_STATE_DIR (log
+#: and state), hook_refusal.sh lists interpreters the refusal recorder may run
+#: under, after the decision has been made.
+_OMNI_HOME_READERS: Final[frozenset[str]] = frozenset(
+    {"onex-paths.sh", "hook_refusal.sh"}
+)
+
+
+def _sourced_closure(entry: Path) -> dict[str, Path]:
+    """Every shell file ``entry`` loads, directly or through a file it loads."""
+    found: dict[str, Path] = {}
+    pending = [entry]
+    while pending:
+        text = pending.pop().read_text(encoding="utf-8")
+        for name in _SOURCED_SH.findall(text):
+            if name in found:
+                continue
+            matches = [
+                d / name for d in (_SCRIPTS_DIR, _LIB_DIR) if (d / name).is_file()
+            ]
+            assert len(matches) == 1, f"{name} did not resolve to one file: {matches}"
+            found[name] = matches[0]
+            pending.append(matches[0])
+    return found
+
+
+def _uncommented_lines(path: Path, needle: str) -> list[str]:
+    return [
+        line.strip()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if needle in line and not line.lstrip().startswith("#")
+    ]
+
+
+def test_hook_policy_lookups_never_read_the_registry_clone() -> None:
+    """OMN-25166 AC1: no lookup of lib/ or config/ goes through OMNI_HOME.
+
+    The hook script, the guard module and the registered hooks.json command carry
+    no OMNI_HOME at all. Of the files the script sources, exactly two read it, one
+    for the ONEX_STATE_DIR path and one for a refusal-recorder interpreter; a
+    third reader, or either of those two reading a config/lib path, fails here.
+    """
+    assert "OMNI_HOME" not in _HOOK_SCRIPT.read_text(encoding="utf-8")
+    assert "OMNI_HOME" not in (_LIB_DIR / "workflow_model_guard.py").read_text(
+        encoding="utf-8"
+    )
+    hooks_json = _HOOKS_JSON.read_text(encoding="utf-8")
+    assert "OMNI_HOME" not in hooks_json
+    assert _registered_command().startswith("${CLAUDE_PLUGIN_ROOT}/hooks/scripts/")
+    closure = _sourced_closure(_HOOK_SCRIPT)
+    # Positive control: the walk reaches the files the hook really loads.
+    assert {
+        "error-guard.sh",
+        "hook-gate.sh",
+        "alert-channel.sh",
+        "hook_refusal.sh",
+        "onex-paths.sh",
+        "repo_guard.sh",
+        "hook_bits.sh",
+    } <= set(closure)
+    readers = {
+        name for name, path in closure.items() if "OMNI_HOME" in path.read_text("utf-8")
+    }
+    assert readers == _OMNI_HOME_READERS, readers
+    for name in sorted(readers):
+        for line in _uncommented_lines(closure[name], "OMNI_HOME"):
+            for policy_path in (
+                "config",
+                "workflow_model_guard",
+                "allowlist",
+                "routing",
+            ):
+                assert policy_path not in line, f"{name}: {line}"
+
+
+_CONTRACT_FILES: Final[tuple[str, ...]] = ("OMN-24977", "OMN-25097", "OMN-25166")
+
+
+def _dod_entries(ticket: str) -> list[dict[str, Any]]:
+    contract = yaml.safe_load(
+        (_REPO_ROOT / "contracts" / f"{ticket}.yaml").read_text(encoding="utf-8")
+    )
+    return list(contract["dod_evidence"])
+
+
+@pytest.mark.parametrize("ticket", _CONTRACT_FILES)
+def test_install_proof_checks_name_no_closed_lane(ticket: str) -> None:
+    """A check that only a lane that has ended could satisfy can never pass.
+
+    The installed= row is read for any lane that records the proof, host-bound by
+    the ``installed=<host>:<head>`` cell, not by the name of the lane that wrote it.
+    """
+    commands = [
+        check["check_value"]
+        for entry in _dod_entries(ticket)
+        for check in entry["checks"]
+        if check["check_type"] == "command" and "installed=" in check["check_value"]
+    ]
+    assert commands, ticket
+    for command in commands:
+        assert "lane=fix3287-0135-s" not in command, ticket
+        assert "fix3287-0135-s-b1" not in command, ticket
+        assert "installed=[A-Za-z0-9._-]+:${head}" in command, ticket
+
+
+def test_omn25166_ac1_is_bound_to_the_omni_home_comment() -> None:
+    """The AC1 entry is bound to the pull request comment, not to pytest alone.
+
+    It greps the files the comment names and then reads the comment at the head.
+    """
+    entry = next(e for e in _dod_entries("OMN-25166") if e["binds_ac"] == ["AC1"])
+    kinds = [check["check_type"] for check in entry["checks"]]
+    assert kinds.count("test_passes") == 1
+    commands = [
+        c["check_value"] for c in entry["checks"] if c["check_type"] == "command"
+    ]
+    assert len(commands) == 1, entry["id"]
+    command = commands[0]
+    for named in (
+        "pre_tool_use_agent_model_guard.sh",
+        "workflow_model_guard.py",
+        "hooks.json",
+    ):
+        assert named in command, named
+    assert "OMNI_HOME: head=${head}" in command
+    assert "issues/3287/comments" in command
+
+
+@pytest.mark.parametrize("ticket", _CONTRACT_FILES)
+def test_lab_comment_entries_are_not_left_pending(ticket: str) -> None:
+    """The Lab-comment entries are read at the live head when the done gate runs.
+
+    ``status: pending`` marks an entry whose proof does not exist yet. The Lab
+    comment is bound to the head by its own check, so only the install-proof entry
+    may stay pending, and only while no installed= row exists.
+    """
+    for entry in _dod_entries(ticket):
+        commands = " ".join(
+            c["check_value"] for c in entry["checks"] if c["check_type"] == "command"
+        )
+        if "installed=" in commands:
+            continue
+        assert entry.get("status") != "pending", entry["id"]
 
 
 @pytest.mark.parametrize("tool_name", ["Workflow", "Agent"])

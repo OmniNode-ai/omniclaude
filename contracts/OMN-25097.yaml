@@ -72,8 +72,8 @@ dod_evidence:
           set -o pipefail
           head=$(git rev-parse HEAD)
           python3 "${OMNI_PLUGIN_ROOT:?}/skills/lane-brief/scripts/lane_brief.py" grep -E "installed=[A-Za-z0-9._-]+:${head}" \
-            | grep -F ' | STATUS | ' | grep -F 'lane=fix3287-0135-s' \
-            | grep -F 'proof=fix3287-0135-s-b1-haiku-stale-clone' \
+            | grep -F ' | STATUS | ' \
+            | grep -E 'proof=[A-Za-z0-9._-]*b1-haiku-stale-clone' \
             | grep -F 'observed=Workflow B1 model=haiku effort=low exit=0 stdout=empty stale_clone_without_haiku=true' \
             | grep -q .
     binds_ac: ["AC4"]
@@ -88,7 +88,6 @@ dod_evidence:
     description: "AC6: the focused suite passes on a lab host at the new head, the head is pushed to the pull request's own branch, and a pull request comment starts with Lab: head= and the new head sha"
     source: manual
     execution_scope: local_done_gate
-    status: pending
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov"
