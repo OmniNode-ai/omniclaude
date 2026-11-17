@@ -71,11 +71,16 @@ dod_evidence:
         check_value: |-
           set -o pipefail
           head=$(git rev-parse HEAD)
-          python3 "${OMNI_PLUGIN_ROOT:?}/skills/lane-brief/scripts/lane_brief.py" grep -E "installed=[A-Za-z0-9._-]+:${head}" \
+          rows=$(python3 "${OMNI_PLUGIN_ROOT:?}/skills/lane-brief/scripts/lane_brief.py" grep -E 'installed=[A-Za-z0-9._-]+:[0-9a-f]{40}' \
             | grep -F ' | STATUS | ' \
             | grep -E 'proof=[A-Za-z0-9._-]*b1-haiku-stale-clone' \
-            | grep -F 'observed=Workflow B1 model=haiku effort=low exit=0 stdout=empty stale_clone_without_haiku=true' \
-            | grep -q .
+            | grep -F 'observed=Workflow B1 model=haiku effort=low exit=0 stdout=empty stale_clone_without_haiku=true' || true)
+          for sha in $(printf '%s\n' "$rows" | grep -oE 'installed=[A-Za-z0-9._-]+:[0-9a-f]{40}' | sed 's/^.*://' | sort -u); do
+            if git merge-base --is-ancestor "$sha" "$head" && git diff --quiet "$sha" "$head" -- plugins/onex; then
+              exit 0
+            fi
+          done
+          exit 1
     binds_ac: ["AC4"]
   - id: dod-omn25097-ac5
     description: "AC5: the band table (models, efforts, score ranges, timeouts, max_concurrent, the B1 destination) and the B1 to B5 guard message are pinned"
@@ -96,6 +101,7 @@ dod_evidence:
           set -o pipefail
           head=$(git rev-parse HEAD)
           test "$(git rev-parse origin/omn-24977-haiku-band-routing-contract)" = "$head"
-          gh api "repos/OmniNode-ai/omniclaude/issues/3287/comments" --paginate --jq '.[].body' \
-            | grep -E "^Lab: head=${head}" | grep -q .
+          gh api "repos/OmniNode-ai/omniclaude/issues/3287/comments" --paginate \
+            --jq ".[].body | select(startswith(\"Lab: head=${head}\") and contains(\"tests/hooks/test_workflow_model_guard.py\"))" \
+            | grep -q .
     binds_ac: ["AC6"]

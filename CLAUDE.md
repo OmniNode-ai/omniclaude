@@ -155,7 +155,7 @@ the one the score implies are all refused. Bands B0 and B1c dispatch no Claude a
 `agent()` call carrying one is refused. **Band B1 allows model `haiku` only, at effort `low` or
 `medium`** (score 0 to 4, low-score mechanical work: run one script and return its output, post a
 given text, read a file and list fields); the band sets only the two efforts that mechanical work
-needs (the lab harness admitted both; no completed haiku run at either effort is recorded). A haiku ROUTE in B2 and above is refused with
+needs (the lab harness admitted both; a retry on 2026-11-17 reached the account weekly-limit refusal again, so no completed haiku run at either effort is recorded). A haiku ROUTE in B2 and above is refused with
 the band's own allowed models named ("band B3 allows only: sonnet"), and so is a haiku ROUTE whose
 score implies B2 or above but claims B1.
 

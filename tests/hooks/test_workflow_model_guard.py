@@ -43,6 +43,9 @@ from typing import Any, Final
 
 import pytest
 import yaml
+from omnibase_core.validators.no_unguarded_git_subprocess import (
+    scrub_git_location_env,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -2421,7 +2424,7 @@ def _consult_clone_for(guard: Path, names: tuple[str, ...]) -> None:
         # (band B1 with ``models: []``) can refuse this call. A hook that read
         # the allowlist from its own tree and the contract from the clone is
         # the one lookup the two allowlist mutants cannot see.
-        ("routing_contract_only", "band B1"),
+        ("routing_contract_only", "band B1 dispatches no Claude agent"),
     ],
 )
 def test_stale_clone_test_goes_red_when_the_clone_is_consulted(
@@ -2501,12 +2504,74 @@ def _sourced_closure(entry: Path) -> dict[str, Path]:
     return found
 
 
-def _uncommented_lines(path: Path, needle: str) -> list[str]:
+#: Words that make a shell line a lookup of policy (config/, the guard module, the
+#: allowlist, the routing contract) rather than of state or a log path.
+_POLICY_WORDS: Final[tuple[str, ...]] = (
+    "config",
+    "workflow_model_guard",
+    "allowlist",
+    "routing",
+)
+_SHELL_ASSIGN = re.compile(
+    r"^(?:export\s+|local\s+|readonly\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$"
+)
+
+
+def _code_lines(text: str) -> list[str]:
     return [
         line.strip()
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if needle in line and not line.lstrip().startswith("#")
+        for line in text.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
     ]
+
+
+def _mentions(line: str, names: set[str]) -> bool:
+    return any(re.search(rf"\b{re.escape(name)}\b", line) for name in names)
+
+
+def _omni_home_policy_reads(text: str, *, follow_variables: bool = True) -> list[str]:
+    """Code lines that put a policy path on ``OMNI_HOME``.
+
+    With ``follow_variables`` a variable assigned from ``OMNI_HOME`` (or from such
+    a variable) is followed to a fixed point, so ``root="${OMNI_HOME}/x"`` then
+    ``. "$root/config/y"`` is found; the single-line scan misses that join.
+    """
+    lines = _code_lines(text)
+    tainted = {"OMNI_HOME"}
+    while follow_variables:
+        grew = False
+        for line in lines:
+            match = _SHELL_ASSIGN.match(line)
+            if match and match[1] not in tainted and _mentions(match[2], tainted):
+                tainted.add(match[1])
+                grew = True
+        if not grew:
+            break
+    return [
+        line
+        for line in lines
+        if _mentions(line, tainted) and any(word in line for word in _POLICY_WORDS)
+    ]
+
+
+def test_omni_home_policy_scan_follows_a_variable_joined_to_config() -> None:
+    """The single-line scan misses a path built from OMNI_HOME over two lines."""
+    joined = (
+        'root="${OMNI_HOME}/omniclaude"\n'
+        'hooks="$root/plugins/onex/hooks"\n'
+        '# comment: "$hooks/config" is only prose\n'
+        '. "${hooks}/config/agent_model_allowlist.json"\n'
+    )
+    assert _omni_home_policy_reads(joined, follow_variables=False) == []
+    assert _omni_home_policy_reads(joined) == [
+        '. "${hooks}/config/agent_model_allowlist.json"'
+    ]
+    state_only = (
+        'state="${OMNI_HOME}/.onex_state"\n'
+        'log="$state/hooks.log"\n'
+        'interp="${OMNI_HOME}/omniclaude/.venv/bin/python"\n'
+    )
+    assert _omni_home_policy_reads(state_only) == []
 
 
 def test_hook_policy_lookups_never_read_the_registry_clone() -> None:
@@ -2540,17 +2605,16 @@ def test_hook_policy_lookups_never_read_the_registry_clone() -> None:
     }
     assert readers == _OMNI_HOME_READERS, readers
     for name in sorted(readers):
-        for line in _uncommented_lines(closure[name], "OMNI_HOME"):
-            for policy_path in (
-                "config",
-                "workflow_model_guard",
-                "allowlist",
-                "routing",
-            ):
-                assert policy_path not in line, f"{name}: {line}"
+        assert _omni_home_policy_reads(closure[name].read_text("utf-8")) == [], name
 
 
-_CONTRACT_FILES: Final[tuple[str, ...]] = ("OMN-24977", "OMN-25097", "OMN-25166")
+_CONTRACT_FILES: Final[tuple[str, ...]] = (
+    "OMN-24977",
+    "OMN-25097",
+    "OMN-25166",
+    "OMN-25193",
+    "OMN-25213",
+)
 
 
 def _dod_entries(ticket: str) -> list[dict[str, Any]]:
@@ -2575,9 +2639,11 @@ def test_install_proof_checks_name_no_closed_lane(ticket: str) -> None:
     ]
     assert commands, ticket
     for command in commands:
-        assert "lane=fix3287-0135-s" not in command, ticket
-        assert "fix3287-0135-s-b1" not in command, ticket
-        assert "installed=[A-Za-z0-9._-]+:${head}" in command, ticket
+        # No lane= cell and no lane-shaped name of any kind: the row is read for
+        # whoever installs, not for one lane that has ended.
+        assert not re.search(r"\blane=", command), ticket
+        assert not re.search(r"\bfix\d{3,}", command), ticket
+        assert "installed=[A-Za-z0-9._-]+:[0-9a-f]{40}" in command, ticket
 
 
 def test_omn25166_ac1_is_bound_to_the_omni_home_comment() -> None:
@@ -2599,8 +2665,245 @@ def test_omn25166_ac1_is_bound_to_the_omni_home_comment() -> None:
         "hooks.json",
     ):
         assert named in command, named
-    assert "OMNI_HOME: head=${head}" in command
     assert "issues/3287/comments" in command
+    _assert_comment_is_bound(command, "OMNI_HOME: head=", _OMNI_HOME_COMMENT_TOKENS)
+
+
+#: What a pull request comment must show before the check reads it as the proof,
+#: beyond its first line: the grep, the two sourced readers, the refusal explained.
+_OMNI_HOME_COMMENT_TOKENS: Final[tuple[str, ...]] = (
+    "grep -n OMNI_HOME",
+    "onex-paths.sh",
+    "hook_refusal.sh",
+    "is not an allowed background model",
+)
+_LAB_COMMENT_TOKENS: Final[tuple[str, ...]] = (
+    "tests/hooks/test_workflow_model_guard.py",
+)
+_BRANCH_TIP_CHECK: Final[str] = (
+    'test "$(git rev-parse origin/omn-24977-haiku-band-routing-contract)" = "$head"'
+)
+
+
+def _commands(ticket: str, needle: str) -> list[str]:
+    return [
+        check["check_value"]
+        for entry in _dod_entries(ticket)
+        for check in entry["checks"]
+        if check["check_type"] == "command" and needle in check["check_value"]
+    ]
+
+
+def _assert_comment_is_bound(
+    command: str, prefix: str, tokens: tuple[str, ...]
+) -> None:
+    """The jq filter selects a comment by its first line AND by what it shows."""
+    assert f'startswith(\\"{prefix}${{head}}\\")' in command, command
+    for token in tokens:
+        assert f'contains(\\"{token}\\")' in command, (token, command)
+
+
+@pytest.mark.parametrize("ticket", _CONTRACT_FILES)
+def test_omni_home_and_lab_comment_checks_read_what_the_comment_shows(
+    ticket: str,
+) -> None:
+    """A prefix match alone accepts an empty comment; the check also reads its body.
+
+    The OMNI_HOME comment must show the grep, name the two sourced readers and
+    explain the refusal; the Lab comment must name the suite that ran, and every
+    Lab check also requires the branch tip to be the head the comment names.
+    """
+    omni = _commands(ticket, "OMNI_HOME: head=")
+    lab = _commands(ticket, "Lab: head=")
+    for command in omni:
+        _assert_comment_is_bound(command, "OMNI_HOME: head=", _OMNI_HOME_COMMENT_TOKENS)
+    for command in lab:
+        _assert_comment_is_bound(command, "Lab: head=", _LAB_COMMENT_TOKENS)
+        assert _BRANCH_TIP_CHECK in command, ticket
+    if ticket != "OMN-24977":
+        assert lab, ticket
+
+
+def _grep_prefix(command: str) -> str:
+    """The part of a contract check that greps OMNI_HOME, before it reads comments."""
+    lines = command.splitlines()
+    cut = next(i for i, line in enumerate(lines) if line.lstrip().startswith("gh api"))
+    return "\n".join(lines[:cut])
+
+
+_OMNI_HOME_GREP_FILES: Final[tuple[str, ...]] = (
+    "plugins/onex/hooks/scripts/pre_tool_use_agent_model_guard.sh",
+    "plugins/onex/hooks/lib/workflow_model_guard.py",
+    "plugins/onex/hooks/hooks.json",
+)
+
+
+def _run_bash(command: str, cwd: Path, env: dict[str, str] | None = None) -> int:
+    return subprocess.run(
+        ["bash", "-c", command],
+        cwd=cwd,
+        env={**scrub_git_location_env(os.environ), **(env or {})},
+        capture_output=True,
+        text=True,
+        timeout=_TIMEOUT_S,
+        check=False,
+    ).returncode
+
+
+@pytest.mark.parametrize(
+    ("ticket", "entry_ac"), [("OMN-25166", "AC1"), ("OMN-25193", "AC2")]
+)
+def test_omni_home_grep_check_requires_exit_one_not_exit_two(
+    ticket: str, entry_ac: str, tmp_path: Path
+) -> None:
+    """grep exits 1 for no match and 2 for a missing file; only 1 is clean.
+
+    Run the grep half of the real contract command four ways: on this tree (clean,
+    exit 0), on a tree whose three files are clean, on a tree whose files hold
+    OMNI_HOME, and on an empty tree where grep itself fails with 2.
+    """
+    entry = next(e for e in _dod_entries(ticket) if e["binds_ac"] == [entry_ac])
+    command = next(
+        c["check_value"]
+        for c in entry["checks"]
+        if c["check_type"] == "command" and "grep -n OMNI_HOME" in c["check_value"]
+    )
+    prefix = _grep_prefix(command)
+    assert _run_bash(prefix, _REPO_ROOT) == 0, "positive control: this tree is clean"
+
+    def tree(root: Path, body: str | None) -> Path:
+        for rel in _OMNI_HOME_GREP_FILES:
+            if body is not None:
+                (root / rel).parent.mkdir(parents=True, exist_ok=True)
+                (root / rel).write_text(body, encoding="utf-8")
+        root.mkdir(parents=True, exist_ok=True)
+        return root
+
+    assert _run_bash(prefix, tree(tmp_path / "clean", "no home here\n")) == 0
+    assert _run_bash(prefix, tree(tmp_path / "reads", 'x="$OMNI_HOME"\n')) != 0
+    # grep exits 2 here (no such file); a check that only asks "did grep match"
+    # reads that as clean.
+    assert _run_bash(prefix, tree(tmp_path / "missing", None)) != 0
+
+
+_INSTALL_ROW = (
+    "ROLLING_WORK_LEDGER.md:1:2026-11-17T05:02:15Z | STATUS | lane=any-lane | "
+    "ticket=OMN-24977 | pr=omniclaude#3287 | installed={host}:{sha} | "
+    "proof=any-b1-haiku-stale-clone | observed={observed} | text"
+)
+_INSTALL_OBSERVED = "Workflow B1 model=haiku effort=low exit=0 stdout=empty stale_clone_without_haiku=true"
+_STUB_LANE_BRIEF = (
+    "import os, re, sys\n"
+    "pattern = re.compile(sys.argv[3])\n"
+    "for line in open(os.environ['STUB_ROWS'], encoding='utf-8'):\n"
+    "    if pattern.search(line):\n"
+    "        print(line, end='')\n"
+)
+
+
+def _git(repo: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", "-C", str(repo), *args],
+        env=scrub_git_location_env(os.environ),
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=_TIMEOUT_S,
+    ).stdout.strip()
+
+
+def _install_repo(tmp_path: Path) -> tuple[Path, dict[str, str]]:
+    """A repo with installed commit A, a plugin change C, and contract-only HEAD."""
+    repo = tmp_path / "repo"
+    (repo / "plugins" / "onex").mkdir(parents=True)
+    (repo / "contracts").mkdir()
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.email", "t@example.invalid")
+    _git(repo, "config", "user.name", "t")
+    (repo / "plugins" / "onex" / "hook.txt").write_text("v1\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "installed tree")
+    shas = {"installed": _git(repo, "rev-parse", "HEAD")}
+    (repo / "contracts" / "c.yaml").write_text("a\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "contracts only")
+    shas["contracts_only"] = _git(repo, "rev-parse", "HEAD")
+    (repo / "plugins" / "onex" / "hook.txt").write_text("v2\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "plugin change")
+    shas["plugin_changed"] = _git(repo, "rev-parse", "HEAD")
+    return repo, shas
+
+
+@pytest.mark.parametrize("ticket", _CONTRACT_FILES)
+def test_install_proof_check_follows_the_head_through_contract_only_commits(
+    ticket: str, tmp_path: Path
+) -> None:
+    """The row names the head that was installed; a later commit must not void it.
+
+    A check that needs ``installed=<host>:<current HEAD>`` can never pass: the row is
+    written after the push, and dropping ``pending`` is another commit. The check
+    accepts a 40-hex installed sha that is an ancestor of HEAD with no change under
+    ``plugins/onex`` since, and nothing else.
+    """
+    commands = _commands(ticket, "installed=")
+    assert len(commands) == 1, ticket
+    command = commands[0]
+    repo, shas = _install_repo(tmp_path)
+    plugin_root = tmp_path / "plugin"
+    script = plugin_root / "skills" / "lane-brief" / "scripts" / "lane_brief.py"
+    script.parent.mkdir(parents=True)
+    script.write_text(_STUB_LANE_BRIEF, encoding="utf-8")
+    rows = tmp_path / "rows.txt"
+    env = {"OMNI_PLUGIN_ROOT": str(plugin_root), "STUB_ROWS": str(rows)}
+
+    def verdict(head: str, row: str | None) -> int:
+        _git(repo, "checkout", "-q", head)
+        rows.write_text("" if row is None else row + "\n", encoding="utf-8")
+        return _run_bash(command, repo, env)
+
+    good = _INSTALL_ROW.format(
+        host="Host-1.lab", sha=shas["installed"], observed=_INSTALL_OBSERVED
+    )
+    assert verdict(shas["installed"], good) == 0, "positive control: same head"
+    assert verdict(shas["contracts_only"], good) == 0, "contract-only commit after"
+    assert verdict(shas["plugin_changed"], good) != 0, "plugin tree changed since"
+    assert verdict(shas["contracts_only"], None) != 0, "no row"
+    abbreviated = _INSTALL_ROW.format(
+        host="h1", sha=shas["installed"][:12], observed=_INSTALL_OBSERVED
+    )
+    assert verdict(shas["contracts_only"], abbreviated) != 0, "abbreviated sha"
+    wrong_text = _INSTALL_ROW.format(
+        host="h1", sha=shas["installed"], observed="config read back only"
+    )
+    assert verdict(shas["contracts_only"], wrong_text) != 0, "observed text differs"
+    unknown = _INSTALL_ROW.format(host="h1", sha="0" * 40, observed=_INSTALL_OBSERVED)
+    assert verdict(shas["contracts_only"], unknown) != 0, "sha not in this repo"
+
+
+_BASE_RUN_HAIKU_IDS: Final[tuple[str, ...]] = (
+    "test_haiku_route_in_the_haiku_band_passes",
+    "test_haiku_band_accepts_the_efforts_in_its_set",
+)
+
+
+def test_base_run_needs_named_haiku_tests_to_fail() -> None:
+    """The base run of OMN-24977 AC3 is red on haiku behaviour, not on file layout.
+
+    Run unfiltered, the base tree already fails the tests that read contracts/ files
+    the base does not have, so "at least one failure" proves nothing about haiku.
+    The check selects ``-k haiku`` and requires the two named band tests to fail.
+    """
+    entry = next(e for e in _dod_entries("OMN-24977") if e["binds_ac"] == ["AC3"])
+    command = next(
+        c["check_value"] for c in entry["checks"] if c["check_type"] == "command"
+    )
+    assert "-k haiku" in command
+    assert not re.search(r"\d+ failed", command)
+    source = Path(__file__).read_text(encoding="utf-8")
+    for test_id in _BASE_RUN_HAIKU_IDS:
+        assert test_id in command, test_id
+        assert f"def {test_id}(" in source, test_id
 
 
 @pytest.mark.parametrize("ticket", _CONTRACT_FILES)
@@ -2709,6 +3012,13 @@ def test_band_table_pinned() -> None:
         name: (frozenset(models), frozenset(efforts))
         for name, (models, efforts, *_rest) in expected.items()
     }
+    # Floors and caps: B1 has no concurrency cap and R and J are the only floor
+    # dimensions. The V=3 floor stays a lane-brief rule (the contract header says
+    # so); a change to either is a decision, so it fails here until re-pinned.
+    assert parsed.bands["B1"].max_concurrent is None
+    assert [
+        (floor.dimension, floor.value, floor.min_band) for floor in parsed.hard_floors
+    ] == [("R", 3, "B4"), ("J", 3, "B4")]
     no_agent_route = (
         "ROUTE: band=B1c score=0 dims=S0A0R0V0N0C0J0 dest=node model=haiku effort=low"
     )
