@@ -1,0 +1,93 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-25097
+title: "The installed hook accepts haiku from its own config and refuses a call model that differs from the ROUTE model"
+summary: >
+  Fixes the blocking findings of the review of omniclaude#3287: the agent-model guard reads agent_model_allowlist.json and
+  contract_agent_routing.yaml from its own installed tree, a call model that differs from the ROUTE model is refused, an unreadable
+  routing contract refuses a haiku call, and the band table is pinned by tests.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn25097-installed-policy
+    statement: "The installed hook decides haiku from its own tree, fails closed on an unreadable routing contract, and pins the band table."
+    acceptance:
+      - id: "AC1"
+        statement: |-
+          AC1: the guard resolves its config from the installed tree and not only from the OMNI_HOME clone, and a hook test with OMNI_HOME pointing at a stale clone that lacks haiku exits 0 for a B1 haiku ROUTE
+      - id: "AC2"
+        statement: |-
+          AC2: a Workflow call and an Agent call whose model is haiku under a ROUTE of band=B3 model=sonnet are refused, one test each
+      - id: "AC3"
+        statement: |-
+          AC3: the hook refuses a haiku call when contract_agent_routing.yaml is missing and when it is unparsable, exit 2 in both, one test each
+      - id: "AC4"
+        statement: |-
+          AC4: the STATUS row of this lane carries installed= with the new head and observed= of one accepted haiku Workflow agent read from the installed hook
+      - id: "AC5"
+        statement: |-
+          AC5: the band table (models, efforts, score ranges, timeouts, max_concurrent, the B1 destination) and the B1 to B5 guard message are pinned
+      - id: "AC6"
+        statement: |-
+          AC6: the focused suite passes on a lab host at the new head, the head is pushed to the pull request's own branch, and a pull request comment starts with Lab: head= and the new head sha
+evidence_requirements:
+  - kind: tests
+    description: "the guard focused test file"
+    command: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn25097-ac1
+    description: "AC1: the guard resolves its config from the installed tree and not only from the OMNI_HOME clone, and a hook test with OMNI_HOME pointing at a stale clone that lacks haiku exits 0 for a B1 haiku ROUTE"
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k stale_clone"
+    binds_ac: ["AC1"]
+  - id: dod-omn25097-ac2
+    description: "AC2: a Workflow call and an Agent call whose model is haiku under a ROUTE of band=B3 model=sonnet are refused, one test each"
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k route_model_mismatch"
+    binds_ac: ["AC2"]
+  - id: dod-omn25097-ac3
+    description: "AC3: the hook refuses a haiku call when contract_agent_routing.yaml is missing and when it is unparsable, exit 2 in both, one test each"
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k haiku_routing_contract_unreadable"
+    binds_ac: ["AC3"]
+  - id: dod-omn25097-ac4
+    description: "AC4: the STATUS row of this lane carries installed= with the new head and observed= of one accepted haiku Workflow agent read from the installed hook"
+    source: manual
+    execution_scope: local_done_gate
+    status: pending
+    checks:
+      - check_type: command
+        check_value: |-
+          set -o pipefail
+          head=$(git rev-parse HEAD)
+          python3 "${OMNI_PLUGIN_ROOT:?}/skills/lane-brief/scripts/lane_brief.py" grep -E "installed=[a-z0-9]+:${head}" \
+            | grep -F ' | STATUS | ' | grep -F 'lane=fin3287-2335' \
+            | grep -F 'proof=fin3287-2335-b1-haiku-stale-clone' \
+            | grep -F 'observed=Workflow B1 model=haiku effort=low exit=0 stdout=empty stale_clone_without_haiku=true' \
+            | grep -q .
+    binds_ac: ["AC4"]
+  - id: dod-omn25097-ac5
+    description: "AC5: the band table (models, efforts, score ranges, timeouts, max_concurrent, the B1 destination) and the B1 to B5 guard message are pinned"
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k band_table_pinned"
+    binds_ac: ["AC5"]
+  - id: dod-omn25097-ac6
+    description: "AC6: the focused suite passes on a lab host at the new head, the head is pushed to the pull request's own branch, and a pull request comment starts with Lab: head= and the new head sha"
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov"
+    binds_ac: ["AC6"]
