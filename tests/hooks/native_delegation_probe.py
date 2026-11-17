@@ -17,6 +17,8 @@ from http.client import HTTPConnection
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from omnimarket.nodes.node_llm_delegation_call_effect import HandlerHarnessEvalProcess
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -37,6 +39,7 @@ def main():
     config.mkdir(parents=True)
     requests = []
     provider_payloads = []
+    run_vendor = HandlerHarnessEvalProcess().handle
 
     class Refuse(BaseHTTPRequestHandler):
         def do_POST(self):
@@ -266,28 +269,27 @@ def main():
         if args.plugin and not args.install and not args.canonical_installer:
             command += ["--plugin-dir", str(args.plugin.resolve())]
         try:
-            process = subprocess.run(
+            process_log = root / "native-process.log"
+            code = run_vendor(
                 command,
                 cwd=home,
                 env=env,
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=150,
+                log=process_log,
+                timeout=330,
             )
-            result = json.loads(process.stdout)
-            code = process.returncode
-            (root / "stderr.txt").write_text(process.stderr)
-        except subprocess.TimeoutExpired:
-            result = {"is_error": True, "result": "CLI exceeded 150 seconds"}
-            code = None
+            raw_output = process_log.read_text()
+            result = (
+                {"is_error": True, "result": "CLI exceeded 330 seconds"}
+                if code == 124
+                else json.loads(raw_output)
+            )
         except json.JSONDecodeError:
             result = {
                 "is_error": True,
                 "result": "CLI did not emit JSON",
-                "stderr": process.stderr[-1500:],
+                "diagnostic_log": str(process_log),
+                "output_tail": raw_output[-1500:],
             }
-            code = process.returncode
         evidence = {
             "plugin": str(args.plugin) if args.plugin else None,
             "exit_code": code,
@@ -325,16 +327,15 @@ def main():
                 else "Check retained assistant history."
             )
             resumed += ["--resume", result["session_id"]]
-            process = subprocess.run(
+            history_log = root / "history-process.log"
+            history_code = run_vendor(
                 resumed,
                 cwd=home,
                 env=env,
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=150,
+                log=history_log,
+                timeout=330,
             )
-            history = json.loads(process.stdout)
+            history = json.loads(history_log.read_text())
             evidence["fallback_provider_requests"] = list(requests)
             evidence["history_result"] = history
             evidence["provider_requests"] = list(requests)
@@ -347,7 +348,7 @@ def main():
                     }
                 )
             )
-            assert process.returncode == 0 and history.get("is_error") is False
+            assert history_code == 0 and history.get("is_error") is False
             if args.fallback_history:
                 assert "BASELINE_ENGINE_CALLED" in history.get("result", "")
                 assert len(requests) == 1, requests
