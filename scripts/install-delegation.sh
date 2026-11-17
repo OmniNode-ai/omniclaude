@@ -41,7 +41,6 @@ INSTALL_HOOKS_JSON="${INSTALL_ROOT}/hooks-delegation.json"
 # (OMN-22498). The old flat hook-scripts/ copy could not run.
 INSTALL_PLUGIN_ROOT="${INSTALL_ROOT}/plugin/plugins/onex"
 INSTALL_SCRIPTS_DIR="${INSTALL_PLUGIN_ROOT}/hooks/scripts"
-NATIVE_PLUGIN_ID="onex-delegation@onex-delegation-local"
 ROLLBACK_MANIFEST="${INSTALL_ROOT}/rollback-manifest.json"
 
 CLAUDE_SETTINGS="${CLAUDE_CONFIG_DIR:-${HOME}/.claude}/settings.json"
@@ -423,7 +422,7 @@ install_hook_config() {
 
 install_native_plugin() {
   if "${DRY_RUN}"; then
-    log_dry "would install ${NATIVE_PLUGIN_ID} from ${INSTALL_ROOT} with Claude's plugin installer"
+    log_dry "would install native delegation from ${INSTALL_ROOT} with Claude's plugin installer"
     return 0
   fi
   # Do not load runtime user/project preferences for a plugin ownership change:
@@ -522,6 +521,7 @@ if manifest.exists():
         pass
 data = {
     "version": 1,
+    "entrypoint": "native",
     "created_at": created_at,
     "install_root": install_root,
     "claude_settings": settings_path,

@@ -106,7 +106,10 @@ class HandlerNativeDelegation:
             raise ValueError(
                 "Delegation belongs to another Claude profile; refusing uninstall."
             )
-        if _read(root / "hooks-delegation.json").get("entrypoint") != "native":
+        if (
+            manifest.get("entrypoint") != "native"
+            and _read(root / "hooks-delegation.json").get("entrypoint") != "native"
+        ):
             return False
         registry = _read(settings.parent / "plugins/installed_plugins.json").get(
             "plugins", {}

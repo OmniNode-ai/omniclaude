@@ -118,6 +118,7 @@ def main():
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     base = f"http://127.0.0.1:{server.server_port}"
+    evidence = {"status": "failed"}
     try:
         control = HTTPConnection("127.0.0.1", server.server_port, timeout=2)
         control.request("POST", "/instrument-control", body=b"{}")
@@ -365,38 +366,45 @@ def main():
                     "Assistant history was not retained"
                 )
                 assert not requests, requests
-        if args.canonical_installer:
-            stopped = subprocess.run(
-                [
-                    "bash",
-                    str(args.canonical_installer.resolve()),
-                    "--uninstall",
-                    "--python",
-                    args.python,
-                ],
-                cwd=home,
-                env=env,
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=60,
-            )
-            assert stopped.returncode == 0, stopped.stdout + stopped.stderr
-            settings = json.loads((config / "settings.json").read_text())
-            assert (
-                settings.get("enabledPlugins", {}).get(
-                    "onex-delegation@onex-delegation-local"
-                )
-                is not True
-            )
-            evidence["off_verified"] = True
-            evidence["private_store"] = str(
-                home / ".omninode/delegation/delegation.sqlite"
-            )
-            (root / "evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
     finally:
-        server.shutdown()
-        server.server_close()
+        try:
+            if (
+                args.canonical_installer
+                and (home / ".omninode/delegation/rollback-manifest.json").is_file()
+            ):
+                stopped = subprocess.run(
+                    [
+                        "bash",
+                        str(args.canonical_installer.resolve()),
+                        "--uninstall",
+                        "--python",
+                        args.python,
+                    ],
+                    cwd=home,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=60,
+                )
+                assert stopped.returncode == 0, stopped.stdout + stopped.stderr
+                settings = json.loads((config / "settings.json").read_text())
+                assert (
+                    settings.get("enabledPlugins", {}).get(
+                        "onex-delegation@onex-delegation-local"
+                    )
+                    is not True
+                )
+                evidence["off_verified"] = True
+                evidence["private_store"] = str(
+                    home / ".omninode/delegation/delegation.sqlite"
+                )
+                (root / "evidence.json").write_text(
+                    json.dumps(evidence, indent=2) + "\n"
+                )
+        finally:
+            server.shutdown()
+            server.server_close()
 
 
 if __name__ == "__main__":
