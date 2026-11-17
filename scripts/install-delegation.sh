@@ -10,9 +10,8 @@
 # What it installs:
 #   1. The omniclaude delegation runner Python package (pip install)
 #   2. SQLite database directory at ~/.omninode/delegation/
-#   3. Delegation hook config rewritten to point at the install location, copied
-#      to ~/.omninode/delegation/hooks-delegation.json, AND merged into
-#      ~/.claude/settings.json hooks block (existing hooks preserved + backed up)
+#   3. A dedicated native delegation plugin, its interpreter binding and ownership
+#      manifest; unrelated Claude Code hooks and settings are preserved.
 #   4. Rollback manifest at ~/.omninode/delegation/rollback-manifest.json
 #
 # Idempotent: re-running detects existing state and only acts on diffs.
@@ -42,6 +41,7 @@ INSTALL_HOOKS_JSON="${INSTALL_ROOT}/hooks-delegation.json"
 # (OMN-22498). The old flat hook-scripts/ copy could not run.
 INSTALL_PLUGIN_ROOT="${INSTALL_ROOT}/plugin/plugins/onex"
 INSTALL_SCRIPTS_DIR="${INSTALL_PLUGIN_ROOT}/hooks/scripts"
+NATIVE_PLUGIN_ID="onex-delegation@onex-delegation-local"
 ROLLBACK_MANIFEST="${INSTALL_ROOT}/rollback-manifest.json"
 
 CLAUDE_SETTINGS="${CLAUDE_CONFIG_DIR:-${HOME}/.claude}/settings.json"
@@ -111,7 +111,7 @@ Usage:
 
 Options:
   --apply                 Execute changes (default is dry-run preview).
-  --pause                 Remove delegation hooks, retaining pending-history delivery.
+  --pause                 Remove delegation entry points, retaining pending-history files.
   --uninstall             Restore prior state using the rollback manifest.
   --endpoint-url <url>    LLM endpoint URL to write into the bifrost endpoint
                           overlay (e.g. http://llm.example.com:8000). If omitted
@@ -170,6 +170,12 @@ check_claude_cli() {
   fi
   local ver
   ver="$(claude --version 2>&1 | head -1 || true)"
+  if [[ ! "$ver" =~ ([0-9]+)\.([0-9]+)\.([0-9]+) ]] ||
+     (( BASH_REMATCH[1] < 2 || (BASH_REMATCH[1] == 2 && BASH_REMATCH[2] < 1) ||
+        (BASH_REMATCH[1] == 2 && BASH_REMATCH[2] == 1 && BASH_REMATCH[3] < 287) )); then
+    log_err "Native delegation output requires Claude Code 2.1.287 or newer (${ver})"
+    return 1
+  fi
   log_ok "Claude Code CLI: ${ver}"
 }
 
@@ -388,6 +394,12 @@ PY
   log_ok "wrote bifrost endpoint overlay to ${INSTALL_BIFROST_OVERLAY}"
 }
 
+native_plugin() {
+  PYTHONPATH="${REPO_ROOT}/src${PYTHONPATH:+:$PYTHONPATH}" "${PYTHON_BIN}" -m \
+    omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.container_onboarding_assets \
+    "$1" "${INSTALL_ROOT}" "${CLAUDE_SETTINGS}" "${PYTHON_BIN}"
+}
+
 install_hook_config() {
   log_step "install hook config to ${INSTALL_HOOKS_JSON}"
   # Rewrite ${CLAUDE_PLUGIN_ROOT} → INSTALL_ROOT so hook commands work outside
@@ -405,25 +417,19 @@ install_hook_config() {
   rm -rf "${INSTALL_ROOT}/plugin" "${INSTALL_ROOT}/hook-scripts" && mkdir -p "${INSTALL_PLUGIN_ROOT}"
   cp -R "${SOURCE_HOOK_SCRIPTS%/hooks/scripts}/hooks" "${SOURCE_HOOK_SCRIPTS%/hooks/scripts}/lib" "${INSTALL_PLUGIN_ROOT}/"
   rm -rf "${INSTALL_PLUGIN_ROOT}/hooks/tests" && find "${INSTALL_PLUGIN_ROOT}" -type d -name __pycache__ -prune -exec rm -rf {} +
-  # Rewrite the JSON so commands run the installed copy with the Python this
-  # installer resolved: Claude Code runs settings.json hooks with neither
-  # CLAUDE_PLUGIN_ROOT nor PLUGIN_PYTHON_BIN set.
-  "${PYTHON_BIN}" - "${SOURCE_HOOK_CONFIG}" "${INSTALL_HOOKS_JSON}" "${INSTALL_PLUGIN_ROOT}" "${PYTHON_BIN}" <<'PY'
-import json, shlex, sys, pathlib
-src, dst, plugin_root, python_bin = sys.argv[1:5]
-data = json.loads(pathlib.Path(src).read_text())
-def rewrite(value, key=""):
-    if isinstance(value, str):
-        v = value.replace("${CLAUDE_PLUGIN_ROOT}", plugin_root).replace("${ONEX_DELEGATION_PYTHON}", shlex.quote(python_bin))
-        return f"PLUGIN_PYTHON_BIN={shlex.quote(python_bin)} {v}" if key == "command" else v
-    if isinstance(value, list):
-        return [rewrite(v) for v in value]
-    if isinstance(value, dict):
-        return {k: rewrite(v, k) for k, v in value.items()}
-    return value
-pathlib.Path(dst).write_text(json.dumps(rewrite(data), indent=2) + "\n")
-PY
+  native_plugin prepare
   log_ok "wrote ${INSTALL_HOOKS_JSON}"
+}
+
+install_native_plugin() {
+  if "${DRY_RUN}"; then
+    log_dry "would install ${NATIVE_PLUGIN_ID} from ${INSTALL_ROOT} with Claude's plugin installer"
+    return 0
+  fi
+  # Do not load runtime user/project preferences for a plugin ownership change:
+  # Claude otherwise migrates unrelated model aliases (opus -> opus[1m]). Its
+  # scoped plugin writer still preserves and updates the selected user profile.
+  claude --setting-sources "" plugin install onex-delegation --marketplace "${INSTALL_ROOT}" --scope user --json
 }
 
 merge_user_settings() {
@@ -474,39 +480,18 @@ PY
   "${PYTHON_BIN}" - "${CLAUDE_SETTINGS}" "${INSTALL_HOOKS_JSON}" "${INSTALL_ROOT}" <<'PY'
 import json, pathlib, sys
 settings_path = pathlib.Path(sys.argv[1])
-hooks_path = pathlib.Path(sys.argv[2])
-hook_cfg = json.loads(hooks_path.read_text())
-delegation_hooks = hook_cfg.get("hooks", {})
-
 if settings_path.exists():
     settings = json.loads(settings_path.read_text())
 else:
     settings = {}
 
 existing = settings.setdefault("hooks", {})
-# Drop every entry this installer wrote (under the install root), then add
-# the current set below, so a re-install also updates an entry's fields such
-# as its timeout (OMN-23413). Every other hook, including other tools' rows
-# such as another tool's hook groups, stays exactly where it is (OMN-22498).
+# Remove earlier owned command hooks; the native plugin is registered by the
+# vendor CLI. Preserve every unrelated hook and setting.
 for event in list(existing):
     groups = [{**g, "hooks": [h for h in g.get("hooks", []) if f"{sys.argv[3]}/" not in (h.get("command") or "")]} for g in existing[event]]
     existing[event] = [g for g in groups if g["hooks"]]
     if not existing[event]: existing.pop(event)
-# Merge per-event arrays without duplicating commands already present.
-for event, new_groups in delegation_hooks.items():
-    cur_groups = existing.setdefault(event, [])
-    existing_cmds = set()
-    for group in cur_groups:
-        for hook in group.get("hooks", []):
-            cmd = hook.get("command")
-            if cmd:
-                existing_cmds.add(cmd)
-    for group in new_groups:
-        filtered_hooks = [h for h in group.get("hooks", []) if h.get("command") not in existing_cmds]
-        if filtered_hooks:
-            new_group = {**group, "hooks": filtered_hooks}
-            cur_groups.append(new_group)
-
 settings_path.write_text(json.dumps(settings, indent=2) + "\n")
 PY
   log_ok "merged delegation hooks into ${CLAUDE_SETTINGS}"
@@ -590,12 +575,18 @@ uninstall() {
   fi
   log_step "rolling back via ${ROLLBACK_MANIFEST}"
   resolve_python
-  "${PYTHON_BIN}" - "${ROLLBACK_MANIFEST}" "${PAUSE}" <<'PY'
+  local native
+  native="$(native_plugin remove)"
+  # Native removal is owned by the package handler. Only older command-hook
+  # installs need the legacy consumer's exact-command rollback API.
+  if ! "${native}"; then
+    "${PYTHON_BIN}" - "${ROLLBACK_MANIFEST}" "${PAUSE}" <<'PY'
 import pathlib, sys
 from omnimarket.nodes.node_onex_setup_effect.handlers.handler_setup_claude import HandlerSetupClaude
 print(HandlerSetupClaude.rollback_hook_registration(pathlib.Path(sys.argv[1]), sys.argv[2] == 'true'))
 PY
-  if "${PAUSE}"; then
+  fi
+  if "${PAUSE}" && ! "${native}"; then
     log_ok "delegation paused; pending-history hook retained"
     return 0
   fi
@@ -635,7 +626,7 @@ ${C_GREEN}${C_BOLD}Installation complete.${C_RESET}
 
 Next steps:
   1. Restart any running Claude Code sessions so the new hooks load.
-  2. Open a new session — delegation hooks fire on Agent/Task tool use.
+  2. Open a new session — eligible prompts use native delegation output.
   3. Inspect telemetry:
        sqlite3 ${INSTALL_DB} '.tables'
   4. To roll back:
@@ -670,6 +661,7 @@ PY
   deploy_bifrost_contract
   install_hook_config
   merge_user_settings
+  install_native_plugin
   write_rollback_manifest
   run_smoke_test
 

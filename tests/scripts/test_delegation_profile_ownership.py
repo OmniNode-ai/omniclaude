@@ -23,7 +23,7 @@ def install(home: Path, profile: Path) -> subprocess.CompletedProcess[str]:
     binary = home / "bin"
     binary.mkdir(exist_ok=True)
     claude = binary / "claude"
-    claude.write_text("#!/bin/sh\necho claude-fixture\n")
+    claude.write_text("#!/bin/sh\necho claude 2.1.326-fixture\n")
     claude.chmod(0o700)
     return subprocess.run(
         [
@@ -56,7 +56,7 @@ def test_installer_only_changes_selected_profile(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
     assert default.read_text() == '{"model":"untouched"}\n'
     settings = json.loads((profile / "settings.json").read_text())
-    assert settings["hooks"]["PreToolUse"]
+    assert settings["hooks"] == {}
     manifest = json.loads(
         (tmp_path / ".omninode/delegation/rollback-manifest.json").read_text()
     )

@@ -83,6 +83,12 @@ capabilities:
 
 # IO operations
 io_operations:
+  - operation: native_delegation
+    description: Prepare the native plugin asset or remove owned vendor registrations
+    handler_method: handle
+    input_model: omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.models.model_native_delegation.ModelNativeDelegationRequest
+    output_model: omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.models.model_native_delegation.ModelNativeDelegationResult
+    idempotent: true
   - operation: model_config
     description: Read configuration or atomically add local backend placement
     handler_method: handle
@@ -171,6 +177,11 @@ metadata:
 handler_routing:
   routing_strategy: "operation_match"
   handlers:
+    - operation: "onboarding.native_delegation"
+      handler:
+        name: "HandlerNativeDelegation"
+        module: "omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.handler_native_delegation"
+      description: "Own the native delegation plugin artifact and vendor registration removal"
     - operation: "onboarding.customer_assets"
       handler:
         name: "HandlerOnboardingAssets"

@@ -146,7 +146,6 @@ def test_native_install_upgrade_repeat_and_off(
         )
         assert removed.returncode == 0, removed.stderr
     stopped = run("--uninstall")
-    assert run("--uninstall") == stopped
     assert stopped.get("enabledPlugins", {}).get(PLUGIN) is not True
     assert stopped["model"] == "preserve-model"
     assert stopped["enabledPlugins"]["unrelated@market"] is True

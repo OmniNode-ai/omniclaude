@@ -79,7 +79,7 @@ def _run_installer(home: Path, tmp_path: Path) -> None:
     stub_bin = tmp_path / "bin"
     stub_bin.mkdir(exist_ok=True)
     claude = stub_bin / "claude"
-    claude.write_text('#!/usr/bin/env bash\necho "claude 1.0.0-stub"\n')
+    claude.write_text('#!/usr/bin/env bash\necho "claude 2.1.326-stub"\n')
     claude.chmod(0o755)
     env = {
         "HOME": str(home),
@@ -193,7 +193,7 @@ def test_upgrade_leaves_only_the_prompt_hook_and_keeps_unrelated(
 
     settings = json.loads(settings_path.read_text())
     owned = _owned(settings, root)
-    assert sorted(_hook_kind(*row) for row in owned) == _EXPECTED_KINDS, owned
+    assert owned == [], "Native delegation must not coexist with classic command hooks"
     assert not any(name in cmd for _, _, cmd in owned for name in _RETIRED), owned
     assert settings.get("model") == "keep-me"
     assert settings["hooks"].get("PreToolUse") == [_UNRELATED], settings["hooks"].get(

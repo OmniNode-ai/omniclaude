@@ -36,7 +36,7 @@ STUB_BIN="${TMPDIR_SANDBOX}/bin"
 mkdir -p "${STUB_BIN}"
 cat > "${STUB_BIN}/claude" <<'EOF'
 #!/usr/bin/env bash
-echo "claude 1.0.0-stub"
+echo "claude 2.1.326-stub"
 EOF
 chmod +x "${STUB_BIN}/claude"
 
@@ -77,7 +77,7 @@ MUTEX_RC=$?
 set -e
 [[ "${MUTEX_RC}" -eq 2 ]] \
   || fail "--apply --uninstall must exit 2 (got ${MUTEX_RC})"
-echo "${MUTEX_OUT}" | grep -q -- "--apply and --uninstall are mutually exclusive" \
+echo "${MUTEX_OUT}" | grep -q -- "--apply, --pause and --uninstall are mutually exclusive" \
   || fail "--apply --uninstall error not clear: ${MUTEX_OUT}"
 pass "mutually exclusive modes fail clearly"
 
@@ -167,13 +167,13 @@ existing_cmds = [
 assert "/usr/local/bin/my-existing-hook.sh" in existing_cmds, (
     f"existing user hook lost during merge: {existing_cmds}"
 )
-# Delegation hook must have been added.
+# The native plugin must not register unrelated classic hooks.
 session_start = hooks.get("SessionStart", [])
 ss_cmds = [
     h.get("command") for g in session_start for h in g.get("hooks", [])
 ]
-assert any("session-start.sh" in (c or "") for c in ss_cmds), (
-    f"delegation SessionStart hook missing after merge: {ss_cmds}"
+assert not any("session-start.sh" in (c or "") for c in ss_cmds), (
+    f"retired delegation SessionStart hook remains after merge: {ss_cmds}"
 )
 PY
 ls "${SANDBOX_HOME}/.omninode/delegation/backups"/settings.json.*.bak >/dev/null \

@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -70,7 +71,7 @@ def _install(tmp_path: Path) -> Path:
     stub_bin = tmp_path / "bin"
     stub_bin.mkdir()
     claude = stub_bin / "claude"
-    claude.write_text('#!/usr/bin/env bash\necho "claude 1.0.0-stub"\n')
+    claude.write_text('#!/usr/bin/env bash\necho "claude 2.1.326-stub"\n')
     claude.chmod(0o755)
     env = {
         "HOME": str(home),
@@ -90,15 +91,17 @@ def _install(tmp_path: Path) -> Path:
 
 
 def _installed_pre_tool_command(home: Path) -> str:
-    settings = json.loads((home / ".claude" / "settings.json").read_text())
-    commands = [
-        hook["command"]
-        for group in settings["hooks"].get("PreToolUse", [])
-        for hook in group["hooks"]
-        if "pre_tool_use_delegation.sh" in hook["command"]
-    ]
-    assert len(commands) == 1, commands
-    return commands[0]
+    # Test the shell/runner boundary the native mod invokes. Registration and
+    # actual Claude cache loading are covered by test_native_delegation_install.
+    plugin = home / ".omninode/delegation/plugin/plugins/onex"
+    runtime = json.loads((plugin / "hooks/delegation-runtime.json").read_text())
+    return shlex.join(
+        [
+            "env",
+            f"PLUGIN_PYTHON_BIN={runtime['python']}",
+            str(plugin / "hooks/scripts/pre_tool_use_delegation.sh"),
+        ]
+    )
 
 
 def _customer_path(tmp_path: Path) -> str:
@@ -318,10 +321,10 @@ def test_delegation_switch_onex_hooks_cli_round_trip(tmp_path: Path) -> None:
 @pytest.mark.unit
 @pytest.mark.parametrize("history", ["accepted", "empty", "malformed"])
 def test_paused_installed_hook_preserves_context_without_delegation(tmp_path, history):
-    """OFF must retain context delivery; deleting it loses an accepted answer.
+    """Native OFF removes every entry point and preserves legacy pending history.
 
-    The real installer and installed command run. Empty/corrupt history is
-    silent, delivery drains once, and full uninstall removes the context hook.
+    Native answers already live in Claude's transcript (real CLI history proof).
+    Pending classic exchanges are kept on disk for a later native re-enable.
     """
     home = _install(tmp_path)
     env, project = _customer_env(tmp_path, home)
@@ -345,6 +348,8 @@ def test_paused_installed_hook_preserves_context_without_delegation(tmp_path, hi
         saved.write_text("[]")
     elif history == "malformed":
         saved.write_text("not JSON")
+    before = saved.read_bytes()
+    env["PATH"] = str(tmp_path / "bin") + os.pathsep + env["PATH"]
     paused = subprocess.run(
         ["/bin/bash", str(_INSTALLER), "--pause", "--python", sys.executable],
         env=env,
@@ -354,47 +359,18 @@ def test_paused_installed_hook_preserves_context_without_delegation(tmp_path, hi
     )
     assert paused.returncode == 0, paused.stdout + paused.stderr
     settings = home / ".claude/settings.json"
-    current = json.loads(settings.read_text())
+    current = json.loads(settings.read_text()) if settings.exists() else {}
     commands = [
         h["command"]
         for g in current.get("hooks", {}).get("UserPromptSubmit", [])
         for h in g["hooks"]
     ]
-    assert len(commands) == 1, current
-    assert "pre_tool_use_delegation.sh" not in settings.read_text()
-    assert "post_tool_use_cost_accounting.sh" not in settings.read_text()
-    payload = json.dumps(
-        {
-            "hook_event_name": "UserPromptSubmit",
-            "session_id": "history-off",
-            "prompt": "Continue working",
-        }
+    assert commands == [], current
+    assert (
+        current.get("enabledPlugins", {}).get("onex-delegation@onex-delegation-local")
+        is not True
     )
-
-    def run_context():
-        return subprocess.run(
-            ["/bin/bash", "-c", commands[0]],
-            input=payload,
-            env=env,
-            cwd=project,
-            text=True,
-            capture_output=True,
-            check=False,
-            timeout=30,
-        )
-
-    result = run_context()
-    assert result.returncode == 0, result.stderr
-    if history == "accepted":
-        output = json.loads(result.stdout)
-        assert "decision" not in output
-        context = output["hookSpecificOutput"]["additionalContext"]
-        assert "Accepted answer marker" in context
-        assert "history-run-marker" in context
-        assert "fixture-model" in context
-    else:
-        assert result.stdout.strip() == "", result.stdout
-    assert run_context().stdout.strip() == ""
+    assert saved.read_bytes() == before
     removed = subprocess.run(
         ["/bin/bash", str(_INSTALLER), "--uninstall", "--python", sys.executable],
         env=env,
@@ -409,7 +385,7 @@ def test_paused_installed_hook_preserves_context_without_delegation(tmp_path, hi
             {
                 "status": "passed",
                 "history": history,
-                "context_once": True,
+                "pending_history_preserved": True,
                 "full_uninstall": True,
             }
         )
