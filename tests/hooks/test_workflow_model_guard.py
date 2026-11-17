@@ -2793,10 +2793,15 @@ _INSTALL_ROW = (
 )
 _INSTALL_OBSERVED = "Workflow B1 model=haiku effort=low exit=0 stdout=empty stale_clone_without_haiku=true"
 _STUB_LANE_BRIEF = (
-    "import os, re, sys\n"
-    "pattern = re.compile(sys.argv[3])\n"
+    # The real lane_brief.py grep is a fixed-string search that takes PATTERN and
+    # --tail only; it has no -E, and argparse refuses one with exit 2.
+    "import os, sys\n"
+    "args = sys.argv[1:]\n"
+    "if args[:1] != ['grep'] or '-E' in args:\n"
+    "    sys.exit(2)\n"
+    "needle = args[-1]\n"
     "for line in open(os.environ['STUB_ROWS'], encoding='utf-8'):\n"
-    "    if pattern.search(line):\n"
+    "    if needle in line:\n"
     "        print(line, end='')\n"
 )
 
@@ -2907,20 +2912,16 @@ def test_base_run_needs_named_haiku_tests_to_fail() -> None:
 
 
 @pytest.mark.parametrize("ticket", _CONTRACT_FILES)
-def test_lab_comment_entries_are_not_left_pending(ticket: str) -> None:
-    """The Lab-comment entries are read at the live head when the done gate runs.
+def test_no_contract_entry_is_left_pending(ticket: str) -> None:
+    """No entry of these contracts is ``status: pending``, the install proof included.
 
-    ``status: pending`` marks an entry whose proof does not exist yet. The Lab
-    comment is bound to the head by its own check, so only the install-proof entry
-    may stay pending, and only while no installed= row exists.
+    A pending entry is skipped by the done gate, so a suite that exempted the
+    ``installed=`` entries stayed green with no install proof at all. The proof is
+    the STATUS row the install check reads; while it is absent the entry fails
+    instead of waiting.
     """
-    for entry in _dod_entries(ticket):
-        commands = " ".join(
-            c["check_value"] for c in entry["checks"] if c["check_type"] == "command"
-        )
-        if "installed=" in commands:
-            continue
-        assert entry.get("status") != "pending", entry["id"]
+    pending = [e["id"] for e in _dod_entries(ticket) if e.get("status") == "pending"]
+    assert pending == [], ticket
 
 
 @pytest.mark.parametrize("tool_name", ["Workflow", "Agent"])

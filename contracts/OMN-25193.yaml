@@ -70,13 +70,13 @@ dod_evidence:
       amendment is requested of the orchestrator by one MSG. The entry stays pending until the row exists.
     source: manual
     execution_scope: local_done_gate
-    status: pending
     checks:
       - check_type: command
         check_value: |-
           set -o pipefail
           head=$(git rev-parse HEAD)
-          rows=$(python3 "${OMNI_PLUGIN_ROOT:?}/skills/lane-brief/scripts/lane_brief.py" grep -E 'installed=[A-Za-z0-9._-]+:[0-9a-f]{40}' \
+          rows=$(python3 "${OMNI_PLUGIN_ROOT:?}/skills/lane-brief/scripts/lane_brief.py" grep --tail 100000 'installed=' \
+            | grep -E 'installed=[A-Za-z0-9._-]+:[0-9a-f]{40}' \
             | grep -F ' | STATUS | ' \
             | grep -E 'proof=[A-Za-z0-9._-]*b1-haiku-stale-clone' \
             | grep -F 'observed=Workflow B1 model=haiku effort=low exit=0 stdout=empty stale_clone_without_haiku=true' || true)

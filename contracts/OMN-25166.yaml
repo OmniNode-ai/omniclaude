@@ -67,13 +67,13 @@ dod_evidence:
     description: "AC3: the Mac install of the new head through adopt_merged.py install-tree is recorded in a STATUS row carrying installed=<host>:<new head sha> and observed= of one accepted haiku Workflow agent read from the installed hook, or OMN-24977 AC4 is amended with the authorisation for a lab host, and the contract installed= pattern accepts a hostname with a hyphen, a dot or a capital"
     source: manual
     execution_scope: local_done_gate
-    status: pending
     checks:
       - check_type: command
         check_value: |-
           set -o pipefail
           head=$(git rev-parse HEAD)
-          rows=$(python3 "${OMNI_PLUGIN_ROOT:?}/skills/lane-brief/scripts/lane_brief.py" grep -E 'installed=[A-Za-z0-9._-]+:[0-9a-f]{40}' \
+          rows=$(python3 "${OMNI_PLUGIN_ROOT:?}/skills/lane-brief/scripts/lane_brief.py" grep --tail 100000 'installed=' \
+            | grep -E 'installed=[A-Za-z0-9._-]+:[0-9a-f]{40}' \
             | grep -F ' | STATUS | ' \
             | grep -E 'proof=[A-Za-z0-9._-]*b1-haiku-stale-clone' \
             | grep -F 'observed=Workflow B1 model=haiku effort=low exit=0 stdout=empty stale_clone_without_haiku=true' || true)

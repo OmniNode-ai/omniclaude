@@ -79,21 +79,23 @@ dod_evidence:
       refuses on that host (target onex-plugin-cache: no installed onex record; into a named
       directory, 6 of 214 staged checks fail, five of them "No module named 'plugins'" and one
       the --help exit of hook_emit_bounded.py, none in a file this pull request changes).
-      The entry stays pending until a STATUS row of that shape exists. The orchestrator ruled
-      (MSG 2026-11-17T04:58:35Z) not to amend AC4 and to install on the Mac itself, so no
-      amendment is made. A config grep is not install evidence. The check reads the row for
-      any lane and any host, and accepts a 40-hex installed sha that is an ancestor of the head
-      with no change under plugins/onex since (OMN-25213), so the row written after the final
-      push still holds when a later commit only drops pending.
+      The orchestrator ruled (MSG 2026-11-17T04:58:35Z) not to amend AC4 and to install on the Mac
+      itself; its STATUS row (ledger line 3291) records that install (install-tree,
+      214 checks, none failed). The check reads the row of any lane and any host and accepts a
+      40-hex installed sha that is an ancestor of the head with no change under plugins/onex
+      since (OMN-25213); the row it finds is the one lane fix3287-0517 wrote for
+      installed=<lab host>:94f564ef6f683b1d842b7f30a8409a8163361c67, the lab host's loaded plugin tree (identical to
+      that head under plugins/onex), whose hook admitted one Workflow B1 haiku agent (OMN-25213).
+      A config grep is not install evidence.
     source: manual
     execution_scope: local_done_gate
-    status: pending
     checks:
       - check_type: command
         check_value: |-
           set -o pipefail
           head=$(git rev-parse HEAD)
-          rows=$(python3 "${OMNI_PLUGIN_ROOT:?}/skills/lane-brief/scripts/lane_brief.py" grep -E 'installed=[A-Za-z0-9._-]+:[0-9a-f]{40}' \
+          rows=$(python3 "${OMNI_PLUGIN_ROOT:?}/skills/lane-brief/scripts/lane_brief.py" grep --tail 100000 'installed=' \
+            | grep -E 'installed=[A-Za-z0-9._-]+:[0-9a-f]{40}' \
             | grep -F ' | STATUS | ' \
             | grep -E 'proof=[A-Za-z0-9._-]*b1-haiku-stale-clone' \
             | grep -F 'observed=Workflow B1 model=haiku effort=low exit=0 stdout=empty stale_clone_without_haiku=true' || true)
