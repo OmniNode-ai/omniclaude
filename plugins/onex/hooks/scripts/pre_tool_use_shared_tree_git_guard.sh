@@ -158,7 +158,7 @@ if [[ $GUARD_RC -eq 0 ]]; then
 fi
 
 if [[ $GUARD_RC -eq 2 ]]; then
-    REASON=$(printf '%s' "$GUARD_OUT" | jq -r '.reason // empty' 2>/dev/null || true)
+    REASON=$(printf '%s' "$GUARD_OUT" | tail -n 1 | jq -r '.reason // empty' 2>/dev/null || true)
     if [[ -z "$REASON" ]]; then
         REASON="BLOCKED: this command moves the shared registry clone at $OMNI_HOME that every concurrent lane works in (OMN-18798, Operating Rule 19), and the guard's own detail payload was unreadable."
     fi

@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.12, <3.14"
 resolution-markers = [
     "python_full_version >= '3.13' and platform_machine != 's390x'",
@@ -10,7 +10,7 @@ resolution-markers = [
 
 [manifest]
 overrides = [
-    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=dev-20261112204619-1289441e5608" },
+    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=dev-20261114062146-2a368ff08479" },
     { name = "omnibase-infra", specifier = ">=0.38.29,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
     { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?tag=dev-20261113184758-038de5032ef7" },
@@ -1682,8 +1682,8 @@ wheels = [
 
 [[package]]
 name = "omnibase-core"
-version = "0.47.73.dev8+g1289441e"
-source = { git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=dev-20261112204619-1289441e5608#1289441e5608b0c20a693d74b8f1d26dfdcfc95d" }
+version = "0.47.73.dev11+g2a368ff0"
+source = { git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=dev-20261114062146-2a368ff08479#2a368ff0847963efd391aff907c7809825459880" }
 dependencies = [
     { name = "blake3" },
     { name = "click" },
@@ -1907,12 +1907,12 @@ requires-dist = [
     { name = "discord-py", marker = "extra == 'discord'", specifier = ">=2.3.0,<3.0.0" },
     { name = "discord-py", marker = "extra == 'full'", specifier = ">=2.3.0,<3.0.0" },
     { name = "httpx", specifier = ">=0.27.0" },
-    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=dev-20261112204619-1289441e5608" },
+    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?tag=dev-20261114062146-2a368ff08479" },
     { name = "omnibase-infra", specifier = ">=0.38.29,<0.39.0" },
     { name = "omnibase-spi", specifier = ">=0.23.1,<0.24.0" },
     { name = "omnimarket", git = "https://github.com/OmniNode-ai/omnimarket.git?tag=dev-20261113184758-038de5032ef7" },
-    { name = "omninode-intelligence", marker = "extra == 'full'", git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=dev-20261113051717-358abb51bcd2" },
-    { name = "omninode-intelligence", marker = "extra == 'intelligence'", git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=dev-20261113051717-358abb51bcd2" },
+    { name = "omninode-intelligence", marker = "extra == 'full'", git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=dev-20261111074124-e3133252f1dd" },
+    { name = "omninode-intelligence", marker = "extra == 'intelligence'", git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=dev-20261111074124-e3133252f1dd" },
     { name = "opentelemetry-api", marker = "extra == 'full'", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-api", marker = "extra == 'otel'", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-api", marker = "extra == 'skills'", specifier = ">=1.23.0,<2.0.0" },
@@ -1959,7 +1959,7 @@ dev = [
 [[package]]
 name = "omninode-intelligence"
 version = "0.25.4"
-source = { git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=dev-20261113051717-358abb51bcd2#358abb51bcd2a449ea78cea952bbda132dd33a42" }
+source = { git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=dev-20261111074124-e3133252f1dd#e3133252f1ddebc389b2233eeabd76a7bae51ba2" }
 dependencies = [
     { name = "confluent-kafka" },
     { name = "httpx" },

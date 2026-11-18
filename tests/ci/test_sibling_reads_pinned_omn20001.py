@@ -31,7 +31,6 @@ _WORKFLOWS = Path(__file__).resolve().parents[2] / ".github" / "workflows"
 
 _SIBLINGS = (
     "omnibase_core",
-    "omnibase_compat",
     "omnibase_infra",
     "omnibase_spi",
     "omniintelligence",

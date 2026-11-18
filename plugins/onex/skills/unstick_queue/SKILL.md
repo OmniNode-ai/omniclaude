@@ -15,7 +15,7 @@ author: OmniClaude Team
 composable: true
 args:
   - name: --repos
-    description: "Comma-separated repo short-names under OmniNode-ai (default: ONEX_QUEUE_REPOS env or the canonical 9-repo set)"
+    description: "Comma-separated repo short-names under OmniNode-ai (default: ONEX_QUEUE_REPOS env or the default roster in prompt.md)"
     required: false
   - name: --dry-run
     description: "Classify candidates and print actions without touching the merge queue"

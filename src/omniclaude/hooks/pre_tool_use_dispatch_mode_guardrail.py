@@ -69,7 +69,6 @@ _REPO_NAMES: Final[frozenset[str]] = frozenset(
         "omnimarket",
         "omniweb",
         "onex_change_control",
-        "omnibase_compat",
     }
 )
 

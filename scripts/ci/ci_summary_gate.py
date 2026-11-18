@@ -226,7 +226,7 @@ EXPECTED_EXTERNAL_CONTEXTS: tuple[str, ...] = (
     # A missing or skipped whole-tree deployment ratchet cannot read green.
     "public-repo-hygiene / public-repo-hygiene",
     "public-repo-hygiene / deployment-config",
-    "repo-evidence / dod-verify",  # call-repo-evidence-gate.yml (PR target only)
+    "repo-evidence / dod-verify",  # call-repo-evidence-gate.yml (pull_request)
     # OMN-20074: removing the nested preflight also retires its indirect
     # enforcement of these verdicts. Assert their actual check contexts here.
     "Check architecture handshake",  # check-handshake.yml

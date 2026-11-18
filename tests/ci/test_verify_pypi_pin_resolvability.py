@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: MIT
 """Regression coverage for the PyPI pin-resolvability release gate (OMN-14070).
 
-``omnimarket`` 0.4.6 was published pinning a nonexistent
-``omnibase-compat==0.5.1`` (OMN-14064) because no gate anywhere in the 5
+``omnimarket`` 0.4.6 was published pinning a dependency version that did not
+exist on PyPI (OMN-14064) because no gate anywhere in the 5
 PyPI-publishing repos ever resolved a package's declared
 ``[project.dependencies]`` pins against the real PyPI index. These tests
 prove ``verify_pypi_pin_resolvability``:
@@ -153,9 +153,7 @@ packages = ["src/omn14070_pin_fixture"]
 
 
 def test_broken_pin_fails_red_reproduces_omn_14064(tmp_path: Path) -> None:
-    """A pin on a version that does not exist on PyPI must fail this gate --
-    this is structurally the omnimarket 0.4.6 / omnibase-compat==0.5.1 shape.
-    """
+    """A dependency pin to a nonexistent PyPI version must fail the gate."""
     wheel = _build_fixture_wheel(tmp_path, "requests==99.99.99")
 
     ok, log = verify_pin_resolvability(wheel)

@@ -45,6 +45,11 @@ that caused the incident -- an invisible model choice -- and would mask the
 omissions this validator exists to make visible. The author makes the cost
 choice, per call, or the call does not run.
 
+Lab-host work (OMN-24618): an ``agent()`` or ``Agent`` prompt that runs ssh, scp,
+sftp, rsync, docker or systemctl against a lab host is refused unless it declares
+a placement. That check lives in ``src/omniclaude/handlers/lab_host_work.py``
+(this file only shrinks; with no ``src/`` beside it the check is off); see its docstring.
+
 Parsing
 -------
 Structural, never a line grep. The spec's own first-draft regex reported 131 of
@@ -122,11 +127,14 @@ UI phase metadata, not the model a dispatched agent runs on. The per-call
 from __future__ import annotations
 
 import argparse
+import functools
+import importlib.util
 import json
 import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 from typing import Final
 
 __all__ = [
@@ -243,6 +251,22 @@ _BAND_RANK: Final[dict[str, int]] = {
 }
 
 _AGENT_TOOL_FILE: Final[str] = "<Agent tool call>"
+_LAB_MODULE: Final[Path] = (
+    Path(__file__).resolve().parents[4] / "src/omniclaude/handlers/lab_host_work.py"
+)
+
+
+@functools.cache
+def _lab() -> ModuleType | None:
+    """The lab-host check, loaded by path (standard library only); ``None`` in a copy with no ``src/``."""
+    if not _LAB_MODULE.is_file():
+        return None
+    spec = importlib.util.spec_from_file_location("lab_host_work", _LAB_MODULE)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"lab-host check unreadable: {_LAB_MODULE}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 class AllowlistError(RuntimeError):
@@ -1266,40 +1290,39 @@ def check_workflow_script(
     else is a block. With ``routing`` supplied, every call must also carry a
     ROUTE line in its prompt or label that the contract accepts.
     """
+    findings: list[Finding] = []
+
+    def add(line: int, label: str, reason: str) -> None:
+        findings.append(Finding(file=filename, line=line, label=label, reason=reason))
+
     scan = _mask(source)
     if scan.desyncs:
         desync = scan.desyncs[0]
-        return [
-            Finding(
-                file=filename,
-                line=_line_of(source, desync.offset),
-                label="<unparsed source>",
-                reason=(
-                    f"{desync.reason}. A desynchronised scan does not lose one "
-                    "construct, it silently reclassifies every byte after it -- "
-                    "an agent( call among them -- so the whole script is "
-                    "refused rather than scanned"
-                ),
-            )
-        ]
+        add(
+            _line_of(source, desync.offset),
+            "<unparsed source>",
+            (
+                f"{desync.reason}. A desynchronised scan does not lose one "
+                "construct, it silently reclassifies every byte after it -- "
+                "an agent( call among them -- so the whole script is "
+                "refused rather than scanned"
+            ),
+        )
+        return findings
     masked = scan.text
-    findings: list[Finding] = []
 
     for reference in _agent_references(masked):
         if reference.open_paren is None:
-            findings.append(
-                Finding(
-                    file=filename,
-                    line=_line_of(source, reference.name_start),
-                    label=_source_snippet(source, reference.name_start),
-                    reason=(
-                        "the agent() helper is referenced here without being "
-                        "called -- bound to another name, passed as a value, or "
-                        "destructured. Every dispatch made through that binding "
-                        "is invisible to this guard, so the model it runs on "
-                        "cannot be verified before it runs"
-                    ),
-                )
+            add(
+                _line_of(source, reference.name_start),
+                _source_snippet(source, reference.name_start),
+                (
+                    "the agent() helper is referenced here without being "
+                    "called -- bound to another name, passed as a value, or "
+                    "destructured. Every dispatch made through that binding "
+                    "is invisible to this guard, so the model it runs on "
+                    "cannot be verified before it runs"
+                ),
             )
             continue
 
@@ -1307,31 +1330,25 @@ def check_workflow_script(
         line = _line_of(source, open_paren)
         spans = _split_arguments(masked, open_paren)
         if spans is None:
-            findings.append(
-                Finding(
-                    file=filename,
-                    line=line,
-                    label="<unparsed>",
-                    reason=(
-                        "the argument list of this agent( call could not be "
-                        "resolved: its brackets do not balance. The guard "
-                        "fails closed rather than assume a model was chosen"
-                    ),
-                )
+            add(
+                line,
+                "<unparsed>",
+                (
+                    "the argument list of this agent( call could not be "
+                    "resolved: its brackets do not balance. The guard "
+                    "fails closed rather than assume a model was chosen"
+                ),
             )
             continue
 
         if len(spans) < 2:
-            findings.append(
-                Finding(
-                    file=filename,
-                    line=line,
-                    label="<no label>",
-                    reason=(
-                        "agent() was called with no options object, so no model "
-                        "was chosen; the agent inherits the parent session's model"
-                    ),
-                )
+            add(
+                line,
+                "<no label>",
+                (
+                    "agent() was called with no options object, so no model "
+                    "was chosen; the agent inherits the parent session's model"
+                ),
             )
             continue
 
@@ -1341,31 +1358,25 @@ def check_workflow_script(
         brace = opt_start + lead
         if brace >= opt_end or masked[brace] != "{":
             expr = " ".join(source[opt_start:opt_end].split())[:80]
-            findings.append(
-                Finding(
-                    file=filename,
-                    line=line,
-                    label="<no label>",
-                    reason=(
-                        f"the options argument is {expr!r}, not an object "
-                        "literal, so model: cannot be verified before dispatch"
-                    ),
-                )
+            add(
+                line,
+                "<no label>",
+                (
+                    f"the options argument is {expr!r}, not an object "
+                    "literal, so model: cannot be verified before dispatch"
+                ),
             )
             continue
 
         close = _matching_brace(masked, brace, opt_end)
         if close is None:
-            findings.append(
-                Finding(
-                    file=filename,
-                    line=line,
-                    label="<unparsed>",
-                    reason=(
-                        "the options object of this agent( call is unbalanced "
-                        "and could not be parsed; the guard fails closed"
-                    ),
-                )
+            add(
+                line,
+                "<unparsed>",
+                (
+                    "the options object of this agent( call is unbalanced "
+                    "and could not be parsed; the guard fails closed"
+                ),
             )
             continue
 
@@ -1384,53 +1395,47 @@ def check_workflow_script(
                     "agent inherits the parent session's model"
                 )
             )
-            findings.append(
-                Finding(file=filename, line=line, label=label, reason=reason)
-            )
+            add(line, label, reason)
             continue
 
         prop = model_props[-1]
         literal = _string_literal(source, masked, prop.value_start, prop.value_end)
         if literal is None:
             expr = " ".join(source[prop.value_start : prop.value_end].split())[:80]
-            findings.append(
-                Finding(
-                    file=filename,
-                    line=line,
-                    label=label,
-                    reason=(
-                        f"model: is {expr!r}, not a quoted string literal, so "
-                        "its value cannot be verified before dispatch"
-                    ),
-                )
+            add(
+                line,
+                label,
+                (
+                    f"model: is {expr!r}, not a quoted string literal, so "
+                    "its value cannot be verified before dispatch"
+                ),
             )
             continue
 
         if literal not in allowlist:
-            findings.append(
-                Finding(
-                    file=filename,
-                    line=line,
-                    label=label,
-                    reason=(
-                        f"model: {literal!r} is not an allowed background model "
-                        f"(allowed: {_allowed(allowlist)})"
-                        f"{_removed_note(literal)}"
-                    ),
-                )
+            add(
+                line,
+                label,
+                (
+                    f"model: {literal!r} is not an allowed background model "
+                    f"(allowed: {_allowed(allowlist)})"
+                    f"{_removed_note(literal)}"
+                ),
             )
             continue
 
+        label_text = "".join(
+            source[p.value_start : p.value_end] for p in props if p.key == "label"
+        )
+        problem = None
         if routing is not None:
-            label_prop = [prop for prop in props if prop.key == "label"]
-            route_text = source[spans[0][0] : spans[0][1]] + "".join(
-                source[prop.value_start : prop.value_end] for prop in label_prop
-            )
+            route_text = source[spans[0][0] : spans[0][1]] + label_text
             problem = _route_problem(routing, route_text, literal)
-            if problem is not None:
-                findings.append(
-                    Finding(file=filename, line=line, label=label, reason=problem)
-                )
+        if problem is None and (lab := _lab()):
+            text, lit, open_names = lab.expand(source, masked, spans[0])
+            problem = lab.problem(text + label_text, lit + label_text, open_names)
+        if problem is not None:
+            add(line, label, problem)
 
     return findings
 
@@ -1482,60 +1487,42 @@ def check_agent_input(
         )
     )
 
+    def refuse(reason: str) -> list[Finding]:
+        return [Finding(file=_AGENT_TOOL_FILE, line=0, label=label, reason=reason)]
+
     if isinstance(subagent_type, str) and subagent_type.strip() == "fork":
-        return [
-            Finding(
-                file=_AGENT_TOOL_FILE,
-                line=0,
-                label=label,
-                reason=(
-                    "subagent_type 'fork' always inherits the parent session's "
-                    "model, so the background model can never be chosen "
-                    "explicitly. Dispatch a normal subagent with an explicit "
-                    "model instead"
-                ),
-            )
-        ]
+        return refuse(
+            "subagent_type 'fork' always inherits the parent session's "
+            "model, so the background model can never be chosen "
+            "explicitly. Dispatch a normal subagent with an explicit "
+            "model instead"
+        )
 
     model = tool_input.get("model")
     if not isinstance(model, str) or not model.strip():
-        return [
-            Finding(
-                file=_AGENT_TOOL_FILE,
-                line=0,
-                label=label,
-                reason=(
-                    "the Agent call declares no model, so it inherits the "
-                    "parent session's model"
-                ),
-            )
-        ]
+        return refuse(
+            "the Agent call declares no model, so it inherits the "
+            "parent session's model"
+        )
 
     if model.strip() not in allowlist:
-        return [
-            Finding(
-                file=_AGENT_TOOL_FILE,
-                line=0,
-                label=label,
-                reason=(
-                    f"model {model.strip()!r} is not an allowed background model "
-                    f"(allowed: {_allowed(allowlist)})"
-                    f"{_removed_note(model)}"
-                ),
-            )
-        ]
-
-    if routing is not None:
-        route_text = "\n".join(
-            value
-            for value in (tool_input.get("prompt"), description)
-            if isinstance(value, str)
+        return refuse(
+            f"model {model.strip()!r} is not an allowed background model "
+            f"(allowed: {_allowed(allowlist)})"
+            f"{_removed_note(model)}"
         )
-        problem = _route_problem(routing, route_text, model.strip())
-        if problem is not None:
-            return [Finding(file=_AGENT_TOOL_FILE, line=0, label=label, reason=problem)]
 
-    return []
+    route_text = "\n".join(
+        value
+        for value in (tool_input.get("prompt"), description)
+        if isinstance(value, str)
+    )
+    problem = None
+    if routing is not None:
+        problem = _route_problem(routing, route_text, model.strip())
+    if problem is None and (lab := _lab()):
+        problem = lab.problem(route_text, route_text, [])
+    return [] if problem is None else refuse(problem)
 
 
 # ---------------------------------------------------------------------------
@@ -1560,6 +1547,7 @@ def render_block_reason(findings: list[Finding], allowlist: frozenset[str]) -> s
             "",
             FIX_LINE,
             ROUTE_FIX_LINE,
+            *(lab.fix_lines([f.reason for f in findings]) if (lab := _lab()) else []),
             f"Allowed models: {_allowed(allowlist)} "
             f"(config: {DEFAULT_ALLOWLIST_PATH}).",
             "To disable this guard deliberately: "

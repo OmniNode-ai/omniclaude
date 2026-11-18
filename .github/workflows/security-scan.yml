@@ -82,8 +82,8 @@ jobs:
     # "failed to clone file Git repo (file:///tmp) ... '/tmp' does not appear to
     # be a git repository". That is structural: no combination of the action's
     # inputs can fix it, because `path` only sets the composite step's
-    # working-directory, not the mount source. omnimarket and omnibase_compat
-    # run this same action with the same args on ubuntu-latest and are green.
+    # working-directory, not the mount source. omnimarket
+    # runs this same action with the same args on ubuntu-latest and is green.
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
