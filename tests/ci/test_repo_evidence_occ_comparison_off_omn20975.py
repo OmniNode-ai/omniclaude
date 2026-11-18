@@ -191,7 +191,7 @@ def without_pin_prose(comments: list[str]) -> list[str]:
 def test_every_other_caller_line_matches_the_merge_base(base_text: str) -> None:
     # The S6 cut-over (OMN-20074, omniclaude#2614) is the change this precursor
     # waited for: it sets shadow to "false" as well and replaces the S5 comment
-    # block with the S6 one. Every other line still matches the merge base.
+    # block with the S6 one. Account for subsequent caller changes explicitly.
     text = CALLER.read_text(encoding="utf-8")
     head = yaml.safe_load(text)
     base = yaml.safe_load(base_text)
@@ -219,10 +219,22 @@ def test_every_other_caller_line_matches_the_merge_base(base_text: str) -> None:
     assert head_job == expected_job
     expected = deepcopy(base)
     expected["jobs"]["repo-evidence"] = expected_job
+    expected[True] = {"pull_request": base[True]["pull_request_target"]}
     assert head == expected
 
     head_s6, head_comments = comment_block(text, "# S6 cut-over (OMN-20074)")
     base_s5, base_comments = comment_block(base_text, "# S5 shadow count ")
+    trigger_start = next(
+        index
+        for index, line in enumerate(base_comments)
+        if line.startswith("# Why pull_request_target:")
+    )
+    trigger_end = base_comments.index("#", trigger_start)
+    base_comments[trigger_start:trigger_end] = [
+        "# The caller runs on pull_request. The reusable refuses fork heads and checks",
+        "# out the pull request's own code as data. It runs the contract's bound checks",
+        "# with read-only permissions and no caller secrets.",
+    ]
     # OMN-19998: drop the comment run that explains check-timeout-seconds.
     kept: list[str] = []
     skipping = False
