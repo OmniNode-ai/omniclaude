@@ -97,6 +97,27 @@ _GUARD = _load_guard()
 POLICY = _GUARD.load_policy()
 
 
+def _load_sprint() -> ModuleType:
+    """Rule 2's new home (OMN-25623), loaded by path the guard's own way."""
+    path = (
+        _REPO_ROOT
+        / "src"
+        / "omniclaude"
+        / "nodes"
+        / "node_linear_effect"
+        / "handlers"
+        / "handler_lane_sprint.py"
+    )
+    spec = importlib.util.spec_from_file_location("handler_lane_sprint", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_SPRINT = _load_sprint()
+
+
 def _check(tool_input: dict[str, Any]) -> list[Any]:
     return list(_GUARD.check_save_issue(tool_input, POLICY))
 
@@ -586,9 +607,12 @@ def test_create_without_a_project_is_admitted() -> None:
 
 
 def test_create_with_a_project_is_refused() -> None:
-    assert "project_set" in _codes(
-        _create(project="7ab68a44-653e-40e1-a770-b5e6a964b159")
+    """Rule 2 for a person's create moved to handler_lane_sprint (OMN-25623);
+    a lane create carrying the sprint project is admitted there instead."""
+    findings = _SPRINT.project_findings(
+        _create(project="7ab68a44-653e-40e1-a770-b5e6a964b159"), None, None
     )
+    assert "project_set" in {f["code"] for f in findings}
 
 
 def test_the_projectid_spelling_is_refused_too() -> None:
@@ -596,16 +620,21 @@ def test_the_projectid_spelling_is_refused_too() -> None:
     the other."""
     payload = _create()
     payload["projectId"] = "7ab68a44-653e-40e1-a770-b5e6a964b159"
-    assert "project_set" in _codes(payload)
+    findings = _SPRINT.project_findings(payload, None, None)
+    assert "project_set" in {f["code"] for f in findings}
 
 
 def test_a_null_or_empty_project_is_not_a_project() -> None:
-    assert "project_set" not in _codes(_create(project=None))
-    assert "project_set" not in _codes(_create(project=""))
+    assert not _SPRINT.project_findings(_create(project=None), None, None)
+    assert not _SPRINT.project_findings(_create(project=""), None, None)
 
 
 def test_the_project_refusal_names_the_ruling() -> None:
-    reason = _GUARD.render_block_reason(_check(_create(project="p")), POLICY)
+    findings = [
+        _GUARD.Finding(**f)
+        for f in _SPRINT.project_findings(_create(project="p"), None, None)
+    ]
+    reason = _GUARD.render_block_reason(findings, POLICY)
     assert "2026-09-30T14:30:05Z" in reason
     assert "OMN-17427" in reason
     assert "Backlog" in reason

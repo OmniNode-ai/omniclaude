@@ -15,6 +15,7 @@ is admitted, so a refusal is never a guard that refuses everything.
 
 from __future__ import annotations
 
+import datetime as dt
 import importlib.util
 import json
 import os
@@ -49,6 +50,27 @@ _BODY = (
 
 def _stamped(lane: str, body: str = _BODY) -> str:
     return f"{_STAMP_PREFIX} {lane}\n\n{body}"
+
+
+_TODAY = dt.datetime.now(dt.UTC).date()
+_SPRINT_NAME = (
+    f"Sprint {_TODAY - dt.timedelta(days=2)} to {_TODAY + dt.timedelta(days=4)}"
+)
+
+
+def _lane_create(lane: str, **overrides: Any) -> dict[str, Any]:
+    """A lane's create as RULING 2026-11-18T12:17:41Z admits it (OMN-25623):
+    the sprint project holding today's date -- self-describing, so a hermetic
+    run with no tracker answer still reads the window from the name -- with its
+    milestone and a due date inside the window."""
+    return _create(
+        description=_stamped(lane),
+        labels=[_LABEL],
+        project=_SPRINT_NAME,
+        milestone="Post-Beta Hardening milestone",
+        dueDate=str(_TODAY + dt.timedelta(days=1)),
+        **overrides,
+    )
 
 
 def _create(**overrides: Any) -> dict[str, Any]:
@@ -134,14 +156,14 @@ def test_a_lane_create_without_label_or_stamp_is_refused(tmp_path: Path) -> None
 
 
 def test_a_labelled_and_stamped_lane_create_is_admitted(tmp_path: Path) -> None:
-    ok = _create(description=_stamped("lane-x"), labels=[_LABEL])
+    ok = _lane_create("lane-x")
     _admitted(_run(ok, tmp_path, lane="lane-x"))
 
 
 def test_no_count_refuses_a_create(tmp_path: Path) -> None:
     """The former 30-a-day budget is gone (RULING 2026-10-30T00:03:58Z): the Nth
     create of a day is admitted exactly as the first, and no per-day file is written."""
-    ok = _create(description=_stamped("lane-x"), labels=[_LABEL])
+    ok = _lane_create("lane-x")
     for _ in range(35):
         _admitted(_run(ok, tmp_path, lane="lane-x"))
     assert not (tmp_path / "state").exists()
@@ -165,7 +187,7 @@ def test_the_stamp_alone_is_not_enough(tmp_path: Path) -> None:
 
 
 def test_a_stamp_naming_another_lane_is_refused(tmp_path: Path) -> None:
-    wrong = _create(description=_stamped("lane-y"), labels=[_LABEL])
+    wrong = _lane_create("lane-y")
     result = _run(wrong, tmp_path, lane="lane-x")
     assert result.returncode == 3
     assert "lane_stamp_missing" in _reason(result)
@@ -196,7 +218,7 @@ def test_a_subagent_with_no_lane_identity_is_refused(tmp_path: Path) -> None:
 
 
 def test_a_subagent_that_declares_its_lane_is_admitted(tmp_path: Path) -> None:
-    ok = _create(description=_stamped("lane-x"), labels=[_LABEL])
+    ok = _lane_create("lane-x")
     _admitted(_run(ok, tmp_path, lane="lane-x", agent_id="a1b2c3"))
 
 
@@ -209,7 +231,7 @@ def test_an_update_from_a_lane_is_not_an_intake(tmp_path: Path) -> None:
 def test_node_mode_forces_a_lane_context_whatever_the_environment(
     tmp_path: Path,
 ) -> None:
-    ok = _create(description=_stamped("node-x"), labels=[_LABEL])
+    ok = _lane_create("node-x")
     refused = _run(ok, tmp_path, flags=("--node",))
     assert refused.returncode == 3, "no lane identity declared: refused"
     assert "lane_identity_missing" in _reason(refused)
@@ -255,7 +277,7 @@ def test_a_policy_missing_a_lane_intake_key_refuses_rather_than_defaulting(
     del raw["lane_intake"][key]
     broken = tmp_path / "policy.json"
     broken.write_text(json.dumps(raw), encoding="utf-8")
-    ok = _create(description=_stamped("lane-x"), labels=[_LABEL])
+    ok = _lane_create("lane-x")
     home = tmp_path / "home"
     home.mkdir()
     result = subprocess.run(
@@ -357,14 +379,14 @@ def _terminal(lane: str, at: str = "2026-10-21T21:30:00Z") -> str:
 
 def test_a_workflow_subagent_with_an_open_claim_mints(tmp_path: Path) -> None:
     env, extra = _workflow_subagent(tmp_path, ledger_rows=(_claim("lane-w"),))
-    ok = _create(description=_stamped("lane-w"), labels=[_LABEL])
+    ok = _lane_create("lane-w")
     _admitted(_run(ok, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=extra))
 
 
 def test_the_claimed_subagent_still_needs_its_stamp(tmp_path: Path) -> None:
     """The resolved lane is the one the stamp must name -- not any lane."""
     env, extra = _workflow_subagent(tmp_path, ledger_rows=(_claim("lane-w"),))
-    wrong = _create(description=_stamped("lane-other"), labels=[_LABEL])
+    wrong = _lane_create("lane-other")
     result = _run(wrong, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=extra)
     assert result.returncode == 3
     reason = _reason(result)
@@ -374,7 +396,7 @@ def test_the_claimed_subagent_still_needs_its_stamp(tmp_path: Path) -> None:
 
 def test_a_workflow_subagent_without_a_claim_is_refused(tmp_path: Path) -> None:
     env, extra = _workflow_subagent(tmp_path, ledger_rows=(_claim("lane-other"),))
-    ok = _create(description=_stamped("lane-w"), labels=[_LABEL])
+    ok = _lane_create("lane-w")
     result = _run(ok, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=extra)
     assert result.returncode == 3
     reason = _reason(result)
@@ -388,7 +410,7 @@ def test_a_claim_closed_by_its_terminal_no_longer_names_the_lane(
     env, extra = _workflow_subagent(
         tmp_path, ledger_rows=(_claim("lane-w"), _terminal("lane-w"))
     )
-    ok = _create(description=_stamped("lane-w"), labels=[_LABEL])
+    ok = _lane_create("lane-w")
     result = _run(ok, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=extra)
     assert result.returncode == 3
     assert "lane_identity_missing" in _reason(result)
@@ -399,7 +421,7 @@ def test_a_claim_without_a_sidecar_names_no_lane(tmp_path: Path) -> None:
     env, extra = _workflow_subagent(
         tmp_path, sidecar_lane=None, ledger_rows=(_claim("lane-w"),)
     )
-    ok = _create(description=_stamped("lane-w"), labels=[_LABEL])
+    ok = _lane_create("lane-w")
     result = _run(ok, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=extra)
     assert result.returncode == 3
     assert "lane_identity_missing" in _reason(result)
@@ -407,7 +429,7 @@ def test_a_claim_without_a_sidecar_names_no_lane(tmp_path: Path) -> None:
 
 def test_an_agent_id_that_is_a_path_names_no_lane(tmp_path: Path) -> None:
     env, extra = _workflow_subagent(tmp_path, ledger_rows=(_claim("lane-w"),))
-    ok = _create(description=_stamped("lane-w"), labels=[_LABEL])
+    ok = _lane_create("lane-w")
     result = _run(ok, tmp_path, agent_id="../x", extra_env=env, extra_payload=extra)
     assert result.returncode == 3
     assert "lane_identity_missing" in _reason(result)
@@ -419,7 +441,7 @@ def test_a_declared_lane_still_wins_over_the_sidecar(key: str, tmp_path: Path) -
     no CLAIM read, even when a sidecar and a claim name another lane."""
     env, extra = _workflow_subagent(tmp_path, ledger_rows=(_claim("lane-w"),))
     env[key] = "lane-remote"
-    ok = _create(description=_stamped("lane-remote"), labels=[_LABEL])
+    ok = _lane_create("lane-remote")
     _admitted(_run(ok, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=extra))
 
 
@@ -444,7 +466,7 @@ def test_session_helper_uses_parent_claim(
     hook: bool,
 ) -> None:
     env, payload = _session_helper(tmp_path, claims=(_claim("orchestrator-31d9"),))
-    ok = _create(description=_stamped("orchestrator-31d9"), labels=[_LABEL])
+    ok = _lane_create("orchestrator-31d9")
     _admitted(
         _run(
             ok,
@@ -469,7 +491,7 @@ def test_session_helper_without_parent_claim_is_refused(
     tmp_path: Path, claims: tuple[str, ...]
 ) -> None:
     env, payload = _session_helper(tmp_path, claims=claims)
-    ok = _create(description=_stamped("orchestrator-31d9"), labels=[_LABEL])
+    ok = _lane_create("orchestrator-31d9")
     result = _run(ok, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=payload)
     assert result.returncode == 3
     assert "lane_identity_missing" in _reason(result)
@@ -479,7 +501,7 @@ def test_session_helper_cannot_stamp_another_claimed_lane(tmp_path: Path) -> Non
     env, payload = _session_helper(
         tmp_path, claims=(_claim("orchestrator-31d9"), _claim("another-session"))
     )
-    wrong = _create(description=_stamped("another-session"), labels=[_LABEL])
+    wrong = _lane_create("another-session")
     result = _run(
         wrong, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=payload
     )
@@ -491,7 +513,7 @@ def test_session_helper_cannot_stamp_another_claimed_lane(tmp_path: Path) -> Non
 def test_headless_session_cannot_borrow_parent_claim(tmp_path: Path) -> None:
     env, payload = _session_helper(tmp_path, claims=(_claim("orchestrator-31d9"),))
     env["CLAUDE_CODE_ENTRYPOINT"] = "sdk-cli"
-    ok = _create(description=_stamped("orchestrator-31d9"), labels=[_LABEL])
+    ok = _lane_create("orchestrator-31d9")
     result = _run(ok, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=payload)
     assert result.returncode == 3
     assert "lane_identity_missing" in _reason(result)
@@ -512,7 +534,7 @@ def test_session_helper_registry_fails_closed(tmp_path: Path, registry: str) -> 
     (
         Path(env["OMNI_LANE_LIVENESS_STATE_DIR"]) / "lane-liveness-sessions.json"
     ).write_text(registry, encoding="utf-8")
-    ok = _create(description=_stamped("orchestrator-31d9"), labels=[_LABEL])
+    ok = _lane_create("orchestrator-31d9")
     result = _run(ok, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=payload)
     assert result.returncode == 3
     assert "lane_identity_missing" in _reason(result)
@@ -530,7 +552,7 @@ def test_session_helper_reads_session_start_registry_location(
         target = tmp_path / "home/.local/state/omni/session-start"
         target.parent.mkdir(parents=True)
         Path(directory).rename(target)
-    ok = _create(description=_stamped("orchestrator-31d9"), labels=[_LABEL])
+    ok = _lane_create("orchestrator-31d9")
     _admitted(_run(ok, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=payload))
 
 
@@ -538,7 +560,7 @@ def test_session_helper_still_needs_harness_sidecar(tmp_path: Path) -> None:
     env, payload = _session_helper(tmp_path, claims=(_claim("orchestrator-31d9"),))
     for path in (tmp_path / "projects").rglob("*.meta.json"):
         path.unlink()
-    ok = _create(description=_stamped("orchestrator-31d9"), labels=[_LABEL])
+    ok = _lane_create("orchestrator-31d9")
     result = _run(ok, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=payload)
     assert result.returncode == 3
     assert "lane_identity_missing" in _reason(result)
@@ -546,7 +568,7 @@ def test_session_helper_still_needs_harness_sidecar(tmp_path: Path) -> None:
 
 def test_node_cannot_borrow_parent_session_claim(tmp_path: Path) -> None:
     env, payload = _session_helper(tmp_path, claims=(_claim("orchestrator-31d9"),))
-    ok = _create(description=_stamped("orchestrator-31d9"), labels=[_LABEL])
+    ok = _lane_create("orchestrator-31d9")
     result = _run(
         ok,
         tmp_path,
@@ -563,7 +585,7 @@ def test_node_cannot_borrow_parent_session_claim(tmp_path: Path) -> None:
     ("override", "code"),
     [
         ({"labels": []}, "lane_label_missing"),
-        ({"project": "A project"}, "project_set"),
+        ({"project": "A project"}, "sprint_unverified"),
         ({"parentId": None}, "missing_parent"),
         (
             {"description": _stamped("orchestrator-31d9", "No binding")},
@@ -575,7 +597,7 @@ def test_session_helper_keeps_other_create_rules(
     tmp_path: Path, override: dict[str, Any], code: str
 ) -> None:
     env, payload = _session_helper(tmp_path, claims=(_claim("orchestrator-31d9"),))
-    ok = _create(description=_stamped("orchestrator-31d9"), labels=[_LABEL])
+    ok = _lane_create("orchestrator-31d9")
     ok.update(override)
     result = _run(ok, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=payload)
     assert result.returncode == 3
@@ -620,7 +642,7 @@ def _prompted_lane(
         prompt=_dispatch() if prompt is None else prompt,
         ledger_rows=rows,
     )
-    ok = _create(description=_stamped(_LANE), labels=[_LABEL])
+    ok = _lane_create(_LANE)
     return _run(ok, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=extra)
 
 
@@ -704,7 +726,7 @@ def test_the_prompt_named_lane_still_needs_its_stamp(tmp_path: Path) -> None:
         prompt=_dispatch(),
         ledger_rows=(_claim(_LANE, parent=_ORCHESTRATOR),),
     )
-    wrong = _create(description=_stamped("fix-other-0115"), labels=[_LABEL])
+    wrong = _lane_create("fix-other-0115")
     result = _run(wrong, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=extra)
     assert result.returncode == 3
     reason = _reason(result)
@@ -891,7 +913,7 @@ def _relayed_lane(
     transcript.write_text(
         "".join(json.dumps(e) + "\n" for e in entries), encoding="utf-8"
     )
-    ok = _create(description=_stamped(_LANE), labels=[_LABEL])
+    ok = _lane_create(_LANE)
     return _run(ok, tmp_path, agent_id=_AGENT, extra_env=env, extra_payload=extra)
 
 

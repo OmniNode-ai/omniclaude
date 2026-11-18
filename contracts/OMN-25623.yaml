@@ -1,0 +1,71 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-25623
+title: "Ticket-creation gate: a lane create lands in today's sprint project"
+summary: >
+  OMN-25623 amends the create gate's project rule per RULING
+  2026-11-18T12:17:41Z: a create from a lane or node context (an admission)
+  must carry the sprint project holding today's date, with its milestone and a
+  due date inside the sprint window; a create with no project is refused
+  sprint_missing, a project that is not today's sprint is refused
+  sprint_project_not_today, and an id-shaped project the tracker cannot verify
+  is refused sprint_unverified (fail-closed). A person's create keeps the
+  2026-09-30 default: no project, refusal project_set when one is named. The
+  rules live in the handler_lane_sprint handler the guard loads by path, so
+  the baselined guard script shrinks.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn25623-sprint-project
+    statement: A lane or node create carries the sprint project holding today's date, with milestone and due date inside the sprint window; a person's create names no project (operator rulings 2026-11-18T12:17:41Z and 2026-09-30T14:30:05Z).
+    acceptance:
+      - id: AC1
+        statement: 'AC1: the guard refuses a lane create with no sprint project naming sprint_missing and admits the same create with it; falsifier: uv run pytest tests/hooks -k ticket_creation_guard_sprint.'
+      - id: AC2
+        statement: 'AC2: the guard refuses a sprint-project create without a milestone or with a due date outside the sprint dates, naming the field; falsifier: uv run pytest tests/hooks -k ticket_creation_guard_sprint_fields.'
+evidence_requirements:
+  - kind: tests
+    description: "Sprint admission for lane creates, each refusal beside an admitted control, run through the real guard command"
+    command: "uv run pytest tests/hooks/test_ticket_creation_guard_sprint.py -q --no-cov"
+  - kind: tests
+    description: "The unchanged create rules still hold against the relocated rule 2"
+    command: "uv run pytest tests/hooks/test_ticket_creation_guard.py tests/hooks/test_ticket_creation_guard_lane_intake.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-sprint-admission
+    description: >
+      A lane create with no project is refused sprint_missing and the same
+      create carrying today's sprint project is admitted; a person's create
+      with a project is still refused project_set. Red-first: the merge base
+      refuses every project on every create.
+    source: manual
+    status: verified
+    binds_ac: [AC1]
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_ticket_creation_guard_sprint.py -q --no-cov"
+  - id: dod-sprint-fields
+    description: >
+      A lane create carrying the sprint project but no milestone, no parseable
+      due date, or a due date outside the sprint window is refused naming the
+      field; with all three present it is admitted.
+    source: manual
+    status: verified
+    binds_ac: [AC2]
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_ticket_creation_guard_sprint.py -q --no-cov -k ticket_creation_guard_sprint_fields"
+  - id: dod-unchanged-rules
+    description: >
+      The guard and lane-intake suites still pass with rule 2 relocated to the
+      handler: label, stamp, identity, binding and person-path project rules
+      are unchanged.
+    source: manual
+    status: verified
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/hooks/test_ticket_creation_guard.py tests/hooks/test_ticket_creation_guard_lane_intake.py -q --no-cov"
