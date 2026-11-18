@@ -86,7 +86,7 @@ dod_evidence:
       since (OMN-25213); the row it finds is the one lane fix3287-0517 wrote for
       installed=<lab host>:94f564ef6f683b1d842b7f30a8409a8163361c67, the lab host's loaded plugin tree (identical to
       that head under plugins/onex), whose hook admitted one Workflow B1 haiku agent (OMN-25213).
-      A config grep is not install evidence. This item is not bound (no binds_ac) because the hosted dod-verify control never runs a local_done_gate item; the lane's own done gate runs it, as in contracts/OMN-25097.yaml.
+      A config grep is not install evidence.
     source: manual
     execution_scope: local_done_gate
     checks:
@@ -105,3 +105,4 @@ dod_evidence:
             fi
           done
           exit 1
+    binds_ac: ["AC4"]
