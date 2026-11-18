@@ -8,7 +8,9 @@ summary: >
   claimed. omniclaude#2363 (merge commit a6ab1eed1) reaps an expired or malformed claim through a revalidated tomb rename, keeps
   a same-run same-lane re-claim idempotent, makes the CLI name the live holder only for an active claim, and never deletes a
   fresh claim a racing acquirer wrote. This contract binds the four acceptance criteria to the ten tests of
-  tests/unit/hooks/test_pr_claim_registry_expired_reclaim.py that landed with that fix.
+  tests/unit/hooks/test_pr_claim_registry_expired_reclaim.py that first landed with that fix.
+  The must-fail control uses the merged product fix; the receipt gate overlays the regression tests
+  even when the reverse patch requires falling back to the fix's parent.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
@@ -59,7 +61,7 @@ dod_evidence:
         check_value: "uv run pytest tests/unit/hooks/test_pr_claim_registry_expired_reclaim.py -k different -q -p no:cacheprovider"
     binds_ac: ["AC3"]
   - id: dod-omn19695-ac4
-    description: "AC4: the deterministic reap race leaves the fresh claim another acquirer wrote in place; 1 passed on the lab at origin/dev d3d5bbe84; replacing the tomb reap with a blind unlink fails only this test (mutation check in omniclaude#2363)"
+    description: "AC4: the deterministic reap race preserves the complete claim another acquirer wrote; 1 passed on the lab at origin/dev d3d5bbe84; replacing the tomb reap with a blind unlink fails only this test (mutation check in omniclaude#2363)"
     source: manual
     checks:
       - check_type: test_passes

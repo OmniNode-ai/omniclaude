@@ -224,6 +224,7 @@ def test_race_reap_does_not_delete_fresh_different_claim(
     claim_file = _write_claim(claims_dir, run_id=RUN_A, lane_id=LANE_A, expired=True)
     registry = pr_claim_registry.ClaimRegistry(claims_dir=claims_dir)
     real_rename = os.rename
+    fresh_claim = _claim_data(run_id=RUN_B, lane_id=LANE_B, expired=False)
     injected = False
 
     def _replace_with_fresh_claim_before_rename(
@@ -233,18 +234,11 @@ def test_race_reap_does_not_delete_fresh_different_claim(
         nonlocal injected
         if Path(source) == claim_file and not injected:
             injected = True
-            claim_file.write_text(
-                json.dumps(
-                    _claim_data(run_id=RUN_B, lane_id=LANE_B, expired=False),
-                    indent=2,
-                )
-            )
+            claim_file.write_text(json.dumps(fresh_claim, indent=2))
         real_rename(source, destination)
 
     monkeypatch.setattr(os, "rename", _replace_with_fresh_claim_before_rename)
 
     assert registry.acquire(PR_KEY, RUN_A, "merge", lane_id=LANE_A) is False
     assert injected is True
-    winner = json.loads(claim_file.read_text())
-    assert winner["claimed_by_run"] == RUN_B
-    assert winner["lane_id"] == LANE_B
+    assert json.loads(claim_file.read_text()) == fresh_claim

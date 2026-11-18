@@ -1,0 +1,68 @@
+schema_version: "1.0.0"
+ticket_id: OMN-25654
+title: Restore required checks on omniclaude PR 3288
+summary: >-
+  PR 3288 adds acceptance-criterion evidence for the already-merged claim
+  registry fix. The receipt gate needs the merged-fix citation and a test-side
+  overlay so the same tests can run against the pre-fix code.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn25654-receipt-gate
+    statement: Resolve the required-check failures on the PR branch and record the result.
+    acceptance:
+      - id: AC1
+        statement: |-
+          AC1: omniclaude PR 3288 reads a clean merge state against its base and the required checks CI Summary and repo-evidence / dod-verify read success at its new head, with the new head named in a PR comment that starts `Lab: head=<full head sha>` -- falsifier: `onex scm pr-checks OmniNode-ai/omniclaude#3288` shows a required context not success at the head, or `onex scm pr-view OmniNode-ai/omniclaude#3288` shows a merge state other than clean, or no Lab comment names that head
+      - id: AC2
+        statement: |-
+          AC2: when the cause lies outside the PR, a STATUS row reads cause=<one line> shared=yes with the evidence and the lane pushes nothing that widens or skips a check -- falsifier: `grep -F 'omniclaude#3288' "$ONEX_LEDGER_PATH" | grep -F 'shared=yes'` finds no STATUS row while the PR head is unchanged and still red or conflicting
+evidence_requirements:
+  - kind: tests
+    description: Exercise the bound claim-registry regressions at the candidate head.
+    command: uv run pytest tests/unit/hooks/test_pr_claim_registry_expired_reclaim.py -q -p no:cacheprovider
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn25654-ac1
+    description: >-
+      AC1 checks the watcher for a clean new head and both successful contexts
+      on that SHA. The Lab comment and its matching SHA require the PR write
+      receipt as additional evidence.
+    source: manual
+    execution_scope: local_done_gate
+    checks:
+      - check_type: command
+        check_value: >-
+          python3 "${OMNI_PLUGIN_ROOT}/skills/merge-drain/scripts/pr_state_local.py"
+          --state "${ONEX_PR_WATCHER_STATE}" --pr OmniNode-ai/omniclaude#3288 --json
+          | jq -e '.facts.head_sha as $head
+          | ($head | test("^[0-9a-f]{40}$"))
+          and ($head != "62732a52fb655e401966f5664fd081cbaad68490")
+          and (.review.merge_state == "CLEAN")
+          and (.ci.sha == $head)
+          and any(.ci.runs[]; .[0] == "CI Summary" and .[2] == "success")
+          and any(.ci.runs[]; .[0] == "repo-evidence / dod-verify" and .[2] == "success")'
+  - id: dod-omn25654-ac2
+    description: >-
+      AC2 checks for a shared-cause STATUS or the merged-fix citation at the PR head
+      that identifies the PR-local evidence repair.
+    source: manual
+    execution_scope: local_done_gate
+    checks:
+      - check_type: command
+        check_value: >-
+          awk -F ' [|] ' '$2 == "STATUS"
+          && /[|] lane=unblk3288-1811 [|]/
+          && /[|] pr=omniclaude#3288 [|]/
+          && /[|] cause=[^|]+[|]/
+          && /[|] shared=yes [|]/ {print; found=1}
+          END {exit !found}' "${ONEX_LEDGER_PATH}"
+          || (head="$(python3 "${OMNI_PLUGIN_ROOT}/skills/merge-drain/scripts/pr_state_local.py"
+          --state "${ONEX_PR_WATCHER_STATE}" --pr OmniNode-ai/omniclaude#3288 --json
+          | jq -er '.facts.head_sha | select(test("^[0-9a-f]{40}$"))')"
+          && git -C "${OMNI_HOME}/omniclaude" show -s --format="%(trailers:key=Binds-Merged-Fix,valueonly)" "$head"
+          | grep -Fx "OMN-19695 a6ab1eed126591d45b1b799ccc2caffc7dc86f15")
