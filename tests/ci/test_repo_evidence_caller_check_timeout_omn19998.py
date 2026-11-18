@@ -5,9 +5,7 @@
 The receipt-gate reusable keeps the verifier's own 30 s per-check ceiling unless the
 caller passes ``check-timeout-seconds``. A bound ``uv run pytest`` check that runs
 past it is skipped ``CHECK_BUDGET_EXCEEDED`` and repo-evidence / dod-verify reads
-red with no failing test (omniclaude#3229: 32 to 36 s against 30 s). The caller is
-read from the base branch, so the value has to be on ``dev`` before a pull request
-can use it.
+red with no failing test (omniclaude#3229: 32 to 36 s against 30 s).
 """
 
 from __future__ import annotations

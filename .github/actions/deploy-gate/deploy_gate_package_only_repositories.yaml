@@ -24,4 +24,3 @@
 package_only_repositories:
   - OmniNode-ai/omnibase_core
   - OmniNode-ai/omnibase_spi
-  - OmniNode-ai/omnibase_compat

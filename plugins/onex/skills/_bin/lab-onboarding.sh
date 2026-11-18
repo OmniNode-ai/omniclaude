@@ -92,7 +92,7 @@ BOOT_FREE_DISK_GB=15      # free disk required at the moment the stack boots
 MODE2_PORTS="5436 19092 16379 8085 8086"
 VM_SPEC="a macOS 14 (or newer) VM with 4 vCPU, 8 GB RAM and 50 GB disk (the stock Tart macOS image as pulled, 17 GB free: do not resize it), on a host with that much to spare (Tart or UTM on an Apple-silicon Mac, or a hosted Mac such as EC2 Mac)"
 
-REPOS="omnibase_compat omnibase_core omnibase_spi omnibase_infra omnimarket omniclaude omnidash"
+REPOS="omnibase_core omnibase_spi omnibase_infra omnimarket omniclaude omnidash"
 GITHUB_ORG_URL="https://github.com/OmniNode-ai"
 
 # At least 3 attempts, 5-10 s apart, for everything that touches the network.
@@ -1089,7 +1089,7 @@ clone_fix() { # repo
 # where any `dev` has moved since: the same email installs the same commits.
 # A participant gets a fix only through a new email that pins a script naming a
 # newer anchor. ONBOARD_TEST_INFRA_ANCHOR exists for the tests' fixture repos.
-INFRA_ANCHOR="${ONBOARD_TEST_INFRA_ANCHOR:-bf256f9660f2520dddb56328d2983f00bafdc910}"
+INFRA_ANCHOR="${ONBOARD_TEST_INFRA_ANCHOR:-96f1f4ec0000b34c8dd76e753c371b39f0154e5b}"
 
 # ---------------------------------------------------------------------------
 # The workspace's tier-1 runtime config.

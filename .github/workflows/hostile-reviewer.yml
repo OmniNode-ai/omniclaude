@@ -246,7 +246,7 @@ jobs:
 
       - name: Clean stale dependency clones
         working-directory: ${{ github.workspace }}
-        run: rm -rf ../omniintelligence ../omnibase_core ../omnibase_compat ../ci-overlay
+        run: rm -rf ../omniintelligence ../omnibase_core ../ci-overlay
 
       # OMN-20910: the roster is read at the exact commit OMNI_CI_OVERLAY_REF
       # names. Unset or not a full lowercase sha, the gate fails closed naming
@@ -397,23 +397,6 @@ jobs:
             if git -C ../omnibase_core fetch --depth=1 --filter=blob:none \
               https://github.com/OmniNode-ai/omnibase_core.git "$core_ref"; then
               git -C ../omnibase_core checkout --quiet FETCH_HEAD
-              exit 0
-            fi
-            sleep $((attempt * 10))
-          done
-          exit 1
-
-      - name: Clone omnibase_compat
-        working-directory: ${{ github.workspace }}
-        run: |
-          # Pinned to the omnibase-compat version this repo's uv.lock resolves
-          # (ruling 2026-10-01: a sibling is read at the pin, never its live dev).
-          pin_version="$(awk -v n=omnibase-compat '$0 == "name = \"" n "\"" {getline; print $3; exit}' uv.lock | tr -d '"')"
-          [[ -n "$pin_version" ]] || { echo "::error::omnibase-compat not found in uv.lock"; exit 1; }
-          for attempt in {1..4}; do
-            rm -rf ../omnibase_compat
-            if git clone --depth=1 --filter=blob:none --branch "v${pin_version}" \
-              https://github.com/OmniNode-ai/omnibase_compat.git ../omnibase_compat; then
               exit 0
             fi
             sleep $((attempt * 10))

@@ -5,8 +5,8 @@ PyPI index before the release job is allowed to publish (OMN-14070).
 
 Why this exists
 ---------------
-``omnimarket`` 0.4.6 was published pinning a nonexistent
-``omnibase-compat==0.5.1`` (OMN-14064), breaking every clean install. Nothing
+``omnimarket`` 0.4.6 was published with a dependency pin to a version that
+did not exist on PyPI (OMN-14064), breaking every clean install. Nothing
 in any of the 5 PyPI-publishing repos' ``release.yml`` ever attempted to
 resolve a package's declared ``[project.dependencies]`` pins against the real
 PyPI index -- ``uv build`` only packages the wheel from local source and does

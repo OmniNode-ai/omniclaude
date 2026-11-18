@@ -1,0 +1,53 @@
+schema_version: "1.0.0"
+ticket_id: OMN-25662
+title: "OMN-25662: repo evidence gate caller runs on pull_request"
+summary: >-
+  Run the Repo Evidence Gate caller on pull_request and keep the
+  repo-evidence / dod-verify context.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn25662-caller-trigger
+    statement: Run the Repo Evidence Gate caller on pull_request.
+    acceptance:
+      - id: AC1
+        statement: >-
+          AC1: omniclaude's call-repo-evidence-gate.yml on its default branch triggers on pull_request with the same types and branches, keeps job id repo-evidence so the context name repo-evidence / dod-verify is unchanged, and no longer names pull_request_target -- falsifier: git grep -c pull_request_target origin/dev -- .github/workflows/call-repo-evidence-gate.yml returns 0 in omniclaude
+      - id: AC2
+        statement: >-
+          AC2: the tests that pin the old trigger in omniclaude are rewritten to pin the new one with the same strictness, fail on the old workflow and pass on the new one -- falsifier: the repository's caller-trigger test run with pytest red on the base workflow and green on the head, receipt in the PR body
+evidence_requirements:
+  - kind: tests
+    description: The caller checks admit only the pull_request trigger and verify the job and workflow wiring.
+    command: >-
+      uv run --frozen pytest
+      tests/ci/test_repo_evidence_caller_workflow.py
+      tests/ci/test_repo_evidence_occ_comparison_off_omn20975.py
+      -q -p no:randomly --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn25662-caller-trigger
+    description: The tracked caller file has zero matches for pull_request_target.
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: command
+        check_value: >-
+          bash -c 'test -f "$1" && git ls-files --error-unmatch -- "$1" >/dev/null &&
+          { git grep -c -F pull_request_target -- "$1"; test "$?" -eq 1; }'
+          _ .github/workflows/call-repo-evidence-gate.yml
+  - id: dod-omn25662-caller-tests
+    description: The workflow shape and comparison tests require the migrated caller.
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: >-
+          uv run --frozen pytest
+          tests/ci/test_repo_evidence_caller_workflow.py
+          tests/ci/test_repo_evidence_occ_comparison_off_omn20975.py
+          -q -p no:randomly --no-cov

@@ -57,7 +57,7 @@ class TestFindRuntimePaths:
         assert find_runtime_paths(files) == []
 
     def test_dto_only_diff_not_matched(self) -> None:
-        files = ["src/omnibase_compat/dto/dto_event_wire.py"]
+        files = ["src/example_package/dto/dto_event_wire.py"]
         assert find_runtime_paths(files) == []
 
     def test_tests_not_matched(self) -> None:
