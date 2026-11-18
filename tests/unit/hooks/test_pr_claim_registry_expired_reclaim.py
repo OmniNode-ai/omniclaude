@@ -126,6 +126,7 @@ def test_expired_cli_claim_exits_zero(
     replacement = json.loads(claim_file.read_text())
     assert replacement["claimed_by_run"] == RUN_B
     assert replacement["lane_id"] == LANE_B
+    assert replacement["action"] == "merge"
 
 
 def test_same_run_live_reclaim_is_idempotent(tmp_path: Path) -> None:

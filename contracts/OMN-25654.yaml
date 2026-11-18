@@ -1,0 +1,42 @@
+schema_version: "1.0.0"
+ticket_id: OMN-25654
+title: "unblock omniclaude PR 3288 (required checks CI Summary and repo-evidence / dod-verify red at its head)"
+summary: >-
+  Recover the receipt-gate verdict for the expired PR claim evidence binding by
+  exercising the bound tests on both sides of the already merged reclaim fix.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn25654-unblock-reclaim-evidence
+    statement: Recover the required checks for the existing reclaim evidence pull request or record a shared failure with evidence.
+    acceptance:
+      - id: "AC1"
+        statement: |-
+          AC1: omniclaude PR 3288 reads a clean merge state against its base and the required checks CI Summary and repo-evidence / dod-verify read success at its new head, with the new head named in a PR comment that starts `Lab: head=<full head sha>` -- falsifier: `onex scm pr-checks OmniNode-ai/omniclaude#3288` shows a required context not success at the head, or `onex scm pr-view OmniNode-ai/omniclaude#3288` shows a merge state other than clean, or no Lab comment names that head
+      - id: "AC2"
+        statement: |-
+          AC2: If the PR failure has a shared cause, a STATUS row for this PR records the one-line cause, shared=yes and the evidence. The lane pushes no change that widens or skips a check. The absence of this row while the PR stays at the same head and remains red or conflicting falsifies this criterion.
+evidence_requirements:
+  - kind: tests
+    description: The four bound selectors fail on the pre-fix checkout and pass on the candidate checkout.
+    command: "uv run pytest tests/unit/hooks/test_pr_claim_registry_expired_reclaim.py -q -p no:cacheprovider"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn25654-ac1
+    description: >-
+      From the watcher, verify a clean merge state and both required check
+      successes at the same full head SHA. Verify the pull request has a Lab
+      comment starting with that SHA and carrying the lab result.
+    source: manual
+    binds_ac: ["AC1"]
+  - id: dod-omn25654-ac2
+    description: >-
+      When the check failure has a shared cause, read the matching STATUS row
+      and its evidence in the work ledger. Verify that the pull request head
+      and the required checks stayed unchanged.
+    source: manual
+    binds_ac: ["AC2"]
