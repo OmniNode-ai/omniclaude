@@ -1,0 +1,67 @@
+schema_version: "1.0.0"
+ticket_id: OMN-19695
+title: "PR claim registry refuses to reclaim an expired claim: acquire() never removes the stale file, so the claim CLI prints the reap notice and then refuses"
+summary: >
+  ClaimRegistry.acquire() in plugins/onex/hooks/lib/pr_claim_registry.py printed the expired-claim notice for a claim whose
+  heartbeat and claimed_at were both stale, then fell through to os.link without removing the stale file, so os.link raised
+  FileExistsError, the handler re-read the same stale record and returned False, and the claim CLI reported the PR as actively
+  claimed. omniclaude#2363 (merge commit a6ab1eed1) reaps an expired or malformed claim through a revalidated tomb rename, keeps
+  a same-run same-lane re-claim idempotent, makes the CLI name the live holder only for an active claim, and never deletes a
+  fresh claim a racing acquirer wrote. This contract binds the four acceptance criteria to the ten tests of
+  tests/unit/hooks/test_pr_claim_registry_expired_reclaim.py that landed with that fix.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn19695-expired-claim-reclaim
+    statement: "A claim registry acquire on an expired claim reaps the stale file and writes the new claim, and the claim CLI no longer reports an expired claim as active."
+    acceptance:
+      - id: "AC1"
+        statement: |-
+          AC1: acquire() on a key whose claim is expired reaps the stale file and writes the new claim, returning True, and the claim CLI exits 0 -- falsifier: uv run pytest tests/unit/hooks/test_pr_claim_registry_expired_reclaim.py -k expired -q fails today on origin/dev and passes after the fix
+      - id: "AC2"
+        statement: |-
+          AC2: a re-claim by the same run id on a live claim, and on its own expired claim, is idempotent and returns True -- falsifier: uv run pytest tests/unit/hooks/test_pr_claim_registry_expired_reclaim.py -k same_run -q
+      - id: "AC3"
+        statement: |-
+          AC3: a live claim held by a different run still refuses, and the CLI refusal names the live holder; the CLI never reports an expired claim as active -- falsifier: uv run pytest tests/unit/hooks/test_pr_claim_registry_expired_reclaim.py -k different -q
+      - id: "AC4"
+        statement: |-
+          AC4: two concurrent acquirers racing on one expired claim never delete a fresh claim the other just wrote -- falsifier: uv run pytest tests/unit/hooks/test_pr_claim_registry_expired_reclaim.py -k race -q
+evidence_requirements:
+  - kind: tests
+    description: "the expired-claim reclaim tests of the PR claim registry"
+    command: "uv run pytest tests/unit/hooks/test_pr_claim_registry_expired_reclaim.py -q -p no:cacheprovider"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn19695-ac1
+    description: "AC1: expired claim reaped and replaced, malformed expired claim reaped, claim CLI exits 0; 10 passed on the lab at origin/dev d3d5bbe84 (the -k expired selector matches the whole file); a pre-fix registry (a6ab1eed1 parent) returns False on the same planted expired claim and leaves the stale file"
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/hooks/test_pr_claim_registry_expired_reclaim.py -k expired -q -p no:cacheprovider"
+    binds_ac: ["AC1"]
+  - id: dod-omn19695-ac2
+    description: "AC2: same-run re-claim on a live claim and on its own expired claim returns True; 2 passed on the lab at origin/dev d3d5bbe84"
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/hooks/test_pr_claim_registry_expired_reclaim.py -k same_run -q -p no:cacheprovider"
+    binds_ac: ["AC2"]
+  - id: dod-omn19695-ac3
+    description: "AC3: a live claim of a different run is refused and untouched, the CLI refusal names the live holder, and the CLI does not describe an inactive claim as active; 5 passed on the lab at origin/dev d3d5bbe84"
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/hooks/test_pr_claim_registry_expired_reclaim.py -k different -q -p no:cacheprovider"
+    binds_ac: ["AC3"]
+  - id: dod-omn19695-ac4
+    description: "AC4: the deterministic reap race leaves the fresh claim another acquirer wrote in place; 1 passed on the lab at origin/dev d3d5bbe84; replacing the tomb reap with a blind unlink fails only this test (mutation check in omniclaude#2363)"
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/hooks/test_pr_claim_registry_expired_reclaim.py -k race -q -p no:cacheprovider"
+    binds_ac: ["AC4"]
