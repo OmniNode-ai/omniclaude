@@ -915,9 +915,9 @@ def test_a_yaml_document_start_marker_is_not_a_parse_error() -> None:
     `unrecognized top-level line: '---'` and exit 2 -- which surfaces as a red
     check that reads like a verdict and is actually "the gate did not run".
 
-    Measured on omnimemory, omniintelligence, omnibase_compat and omnidash: in
-    each the adoption commit was rewritten by that hook and every one of those
-    four gate runs failed this way, while omnibase_spi (no such hook) passed.
+    The hook rewrote the adoption commit in four repositories, including
+    omnimemory, omniintelligence and omnidash. All four gate runs failed this
+    way. The gate passed in omnibase_spi, which had no such hook.
 
     A gate that cannot be adopted in a repo that formats its YAML is not a
     gate. Both markers are skipped, exactly like a blank line or a comment --

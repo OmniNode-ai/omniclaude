@@ -8,11 +8,9 @@
 # "\.201") references inside the scanned path set.
 #
 # Scanned paths (OMN-17993): .github/workflows/** AND tests/**.
-# Until OMN-17993 this gate scanned workflow files only. omnibase_compat — a
-# repo that ships this very workflow — carried the exact banned literal as a
-# fixture value in tests/unit/contracts/delegation/, and the gate reported
-# green over it. Every repo that inherited this workflow had the same blind
-# spot. A gate scoped to a subtree reports green over the rest of the tree.
+# Until OMN-17993 this gate scanned workflow files only. One repository's
+# delegation tests held the banned literal in a fixture while the gate
+# reported green. Every repository using the workflow had the same blind spot.
 #
 # Runner routing must be config/variable-driven (vars.OMNI_TRUSTED_CI_RUNS_ON_JSON).
 # Direct IP literals in workflow files create non-portable, incident-fragile
