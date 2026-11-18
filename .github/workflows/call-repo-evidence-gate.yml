@@ -6,10 +6,9 @@
 # omnibase_core's receipt-gate reusable with evidence-source: caller.
 # This is the path omnimarket proved as the canary (OMN-20070, OMN-20072).
 #
-# Why pull_request_target: GitHub reads the workflow definition from the BASE
-# branch, so a pull request that edits this file or the reusable's pin does not
-# change which definition runs on it. The pull request's own code is only ever
-# checked out as data by the reusable, which refuses fork heads.
+# The caller runs on pull_request. The reusable refuses fork heads and checks
+# out the pull request's own code as data. It runs the contract's bound checks
+# with read-only permissions and no caller secrets.
 #
 # dev and main are the integration branches. The activity types cover new heads,
 # reopened and ready PRs, and edits to the ticket citation or base branch.
@@ -55,7 +54,7 @@
 name: Repo Evidence Gate
 
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, synchronize, reopened, edited, ready_for_review]
     branches: [dev, main]
 
