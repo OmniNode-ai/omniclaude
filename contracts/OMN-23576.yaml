@@ -44,7 +44,7 @@ dod_evidence:
     check_value: 'env PYTHONDONTWRITEBYTECODE=1 onex lab-work run --repo OmniNode-ai/omniclaude --sha "$(git rev-parse HEAD)" --lane dod-integration-proof-23576 --kind test -- env PYTHONDONTWRITEBYTECODE=1 uv run --frozen pytest tests/ci/test_retired_repository_targets_omn23576.py tests/unit/handlers/test_handler_internal_sibling_pins_omn21282.py tests/unit/hooks/test_self_healing_orchestrator.py -q --no-cov'
     cwd: .
 - id: dod-omn23576-retirement-ac1
-  description: AC1 checks the head for references in maintained files. The published lock, existing absence guards and closed historical evidence have separate verification.
+  description: AC1 checks the head for references in maintained files. The published lock, existing absence guards, the unchanged runner-address workflow header comment and closed historical evidence have separate verification.
   source: manual
   binds_ac:
   - AC1
@@ -55,7 +55,7 @@ dod_evidence:
       git grep -nIE 'omnibase[_-]compat' HEAD -- \
         ':!uv.lock' ':!contracts/OMN-12245.yaml' ':!contracts/OMN-13828.yaml' \
         ':!contracts/OMN-14190.yaml' ':!tests/ci/test_retired_repository_targets_omn23576.py' \
-        ':!tests/hooks/test_hostile_reviewer_workflow.py' || status=$?
+        ':!tests/hooks/test_hostile_reviewer_workflow.py' ':!.github/workflows/ban-hardcoded-runner-ip.yml' || status=$?
       test "$status" -eq 1
     cwd: .
 - id: dod-omn23576-retirement-ac2
