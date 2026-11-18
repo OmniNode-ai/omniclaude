@@ -1,0 +1,58 @@
+schema_version: 1.0.0
+ticket_id: OMN-25669
+title: Unblock the public repository hygiene check on omniclaude PR 3289
+summary: >
+  The branch changes a historical comment in a workflow that contains existing
+  deployment values. The deployment vocabulary pass checks every finding in
+  each changed workflow. Drop the comment edit from the branch and retain the
+  changes to live repository lists and dependency governance.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn25669-hygiene
+    statement: Resolve the required public repository hygiene check without weakening enforcement.
+    acceptance:
+      - id: AC1
+        statement: 'AC1: omniclaude PR 3289 reads the required check public-repo-hygiene / public-repo-hygiene success at its new head, with the new head named in a PR comment that starts `Lab: head=<full head sha>` -- falsifier: `onex scm pr-checks OmniNode-ai/omniclaude#3289` shows that context not success at the head, or no Lab comment names that head'
+      - id: AC2
+        statement: 'AC2: when the cause lies outside the PR, a STATUS row reads cause=<one line> shared=yes with the evidence and the lane pushes nothing that widens or skips a check -- falsifier: `grep -F ''omniclaude#3289'' "$ONEX_LEDGER_PATH" | grep -F ''shared=yes''` finds no STATUS row while the PR head is unchanged and still red'
+evidence_requirements:
+  - kind: tests
+    description: Live-list checks exercise the retirement work independently of the historical workflow comment.
+    command: uv run --frozen pytest tests/ci/test_retired_repository_targets_omn23576.py -q --no-cov -p no:randomly
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+  - id: dod-omn25669-hygiene-failing-workflow
+    description: >
+      Hosted source check for the workflow blob at the PR base. It fails at the
+      original PR head and passes when the unrelated comment edit is removed.
+      The watcher verdict and Lab comment must be read at the published head.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac: [AC1]
+    checks:
+      - check_type: command
+        check_value: >-
+          test "$(git hash-object .github/workflows/ban-hardcoded-runner-ip.yml)" =
+          03ce5c4fce6b79a336419393f29b44fbe92bcf7b
+        cwd: .
+  - id: dod-omn25669-shared-cause
+    description: >
+      The branch diagnosis is supported when the original PR has a workflow
+      diff and the candidate restores the base blob. A shared cause requires
+      the STATUS row and evidence specified in AC2.
+    source: manual
+    execution_scope: local_done_gate
+    binds_ac: [AC2]
+    checks:
+      - check_type: command
+        check_value: >-
+          test "$(git hash-object .github/workflows/ban-hardcoded-runner-ip.yml)" =
+          03ce5c4fce6b79a336419393f29b44fbe92bcf7b ||
+          grep -F 'omniclaude#3289' "${ONEX_LEDGER_PATH:?}" |
+          grep -E '\| STATUS \|.*\| cause=[^|]+\| shared=yes( \||$)'
+        cwd: .
