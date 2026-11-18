@@ -56,11 +56,10 @@ def test_allow_sibling_pinned_to_its_dev_merge_tag(mod, tmp_path: Path) -> None:
     assert mod.main(["--pyproject", str(_pyproject(tmp_path, line))]) == 0
 
 
-def test_allow_dev_merge_tag_for_infra_spi_and_compat(mod, tmp_path: Path) -> None:
+def test_allow_dev_merge_tag_for_infra_and_spi(mod, tmp_path: Path) -> None:
     for pkg, repo in (
         ("omnibase-infra", "omnibase_infra"),
         ("omnibase_spi", "omnibase_spi"),
-        ("omnibase-compat", "omnibase_compat"),
     ):
         url = f"https://github.com/OmniNode-ai/{repo}.git"
         line = f'{pkg} = {{ git = "{url}", tag = "{_DEV_TAG}" }}'

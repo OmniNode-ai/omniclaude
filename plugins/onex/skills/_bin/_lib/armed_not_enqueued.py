@@ -15,7 +15,7 @@ entering the queue — this detector surfaces those cases.
 
 Usage:
     python -m plugins.onex.skills._bin._lib.armed_not_enqueued \
-        --repos omniclaude,omnibase_core,omnibase_infra,omnibase_compat,omnidash,omnimarket \
+        --repos omniclaude,omnibase_core,omnibase_infra,omnidash,omnimarket \
         --threshold-minutes 30 \
         --format json
 
@@ -52,7 +52,6 @@ QUEUE_REPOS: tuple[str, ...] = (
     "OmniNode-ai/omniclaude",
     "OmniNode-ai/omnibase_core",
     "OmniNode-ai/omnibase_infra",
-    "OmniNode-ai/omnibase_compat",
     "OmniNode-ai/omnidash",
     "OmniNode-ai/omnimarket",
 )

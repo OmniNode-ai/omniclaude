@@ -1096,8 +1096,10 @@ def test_result_triage_positive_success_test_with_else_exit_is_green(
 def test_result_triage_success_or_skipped_pass_condition_is_red(
     tmp_path: Path,
 ) -> None:
-    """RED: `== success || == skipped` admits a verdict-less upstream. Live
-    shape: omnibase_compat / omnibase_core `tests-gate` at origin/dev."""
+    """RED: `== success || == skipped` admits a verdict-less upstream.
+
+    This shape appeared in the omnibase_core `tests-gate`.
+    """
     manifest_path, wf_dir = _write(
         tmp_path,
         {
