@@ -1803,7 +1803,10 @@ repos:
       # Configuration: .markdown-link-check.json (ignore patterns ported from lychee excludes)
       - id: onex-validate-links
         name: Validate markdown links
-        entry: bash scripts/uv-run-worktree-safe.sh onex-validate-links --verbose
+        # OMN-25070: omnibase_core removes the onex-validate-links console script.
+        entry: bash scripts/uv-run-worktree-safe.sh python -m
+          omnibase_core.nodes.node_markdown_links_check_compute.runtime_markdown_links_check
+          --verbose
         language: system
         types: [markdown]
         pass_filenames: false
