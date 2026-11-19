@@ -31,7 +31,6 @@ HOOK = (
 _COMPLETE_STAMP = (
     "Summary paragraph.\n\nEvidence-Ticket: OMN-14190\nEvidence-Source: OCC#1408\n"
 )
-_MISSING_SOURCE = "Summary.\n\nEvidence-Ticket: OMN-14190\n"
 _NON_ARTIFACT = "Just a plain readme with no stamp.\n"
 
 # Stripped environment that guarantees `onex occ` cannot resolve, so the
@@ -49,15 +48,6 @@ def _run_hook(
         text=True,
         env=env,
     )
-
-
-def _occ_available() -> bool:
-    """True when `onex occ` resolves the same way the shim resolves it."""
-    probe = (
-        "command -v onex >/dev/null 2>&1 && onex occ --help >/dev/null 2>&1 "
-        "|| uv run --no-sync onex occ --help >/dev/null 2>&1"
-    )
-    return subprocess.run(["bash", "-c", probe], check=False).returncode == 0
 
 
 # ---------------------------------------------------------------------------
@@ -93,29 +83,9 @@ def test_artifact_without_validator_hard_fails(tmp_path: Path) -> None:
     assert "OMN-14190" in result.stderr
 
 
-# ---------------------------------------------------------------------------
-# occ-dependent behaviors — require the onex occ CLI (skipped until released)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.unit
-def test_complete_stamp_passes(tmp_path: Path) -> None:
-    if not _occ_available():
-        pytest.skip("onex occ CLI unavailable (bump omnibase-infra pin, OMN-14190)")
-    f = tmp_path / "pr_body.md"
-    f.write_text(_COMPLETE_STAMP, encoding="utf-8")
-    assert _run_hook(f).returncode == 0
-
-
-@pytest.mark.unit
-def test_incomplete_stamp_fails(tmp_path: Path) -> None:
-    if not _occ_available():
-        pytest.skip("onex occ CLI unavailable (bump omnibase-infra pin, OMN-14190)")
-    f = tmp_path / "pr_body.md"
-    f.write_text(_MISSING_SOURCE, encoding="utf-8")
-    result = _run_hook(f)
-    assert result.returncode == 1
-    assert "Evidence-Source" in result.stderr
+# The two occ-dependent cases (a complete stamp passes, a missing
+# Evidence-Source fails) were removed with OMN-23413: omnibase_infra#5648
+# (OMN-20074) removed the `onex occ` CLI, so they could only ever skip.
 
 
 @pytest.mark.unit
