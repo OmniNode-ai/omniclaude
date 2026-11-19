@@ -1833,6 +1833,16 @@ def test_lab_host_work_function_parameter_is_what_the_call_passes(
     assert _refused(_lab_script("build(args.topic)", with_command), "cannot be read")
 
 
+def test_lab_host_work_zero_parameter_arrow_is_read_not_crashed(
+    lab_table: None,
+) -> None:
+    """``() =>`` binds no parameter; the scan reads its body instead of raising TypeError."""
+    assert _lab_script("build()", "const build = () => `explain docker layers`\n") == []
+    assert _refused(_lab_script("build()", "const build = () => `ssh h201 ls`\n"))
+    setup = "const items = [1].map(() => 'x')\n"
+    assert _lab_script("`summarise ${items}`", setup) == []
+
+
 def test_lab_host_work_const_held_prompt_with_declaration_admitted(
     lab_table: None,
 ) -> None:
