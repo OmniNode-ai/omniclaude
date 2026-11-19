@@ -105,4 +105,10 @@ dod_evidence:
             fi
           done
           exit 1
+  - id: dod-omn24977-ac4-hosted
+    description: "AC4 (hosted half): the registered hook, run from the installed policy while OMNI_HOME names a stale clone without haiku, admits one Workflow B1 haiku agent and exits 0; this test fails on the merge base, where no band allows haiku. The install-proof row itself is read by dod-omn24977-ac4, which only the lane's local done gate can run"
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k test_registered_hook_uses_installed_policy_with_stale_clone"
     binds_ac: ["AC4"]
