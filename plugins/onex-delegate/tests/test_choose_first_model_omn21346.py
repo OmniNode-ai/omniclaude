@@ -125,7 +125,11 @@ def test_choosing_through_the_skill_lists_that_model_first(home: Path) -> None:
         home,
     )
     assert chosen.returncode == 0, chosen.stderr
-    assert f"Delegation now tries Local URL {_SECOND} first" in chosen.stdout
+    # omnimarket#5813 labels a local model "Local Model" and names where it is served.
+    assert (
+        f"Delegation now tries Local Model {_SECOND} on http://127.0.0.1:9 first."
+        in chosen.stdout
+    )
 
     rows = _listed(home)
     assert rows[0]["provider"] == "local"
@@ -135,7 +139,7 @@ def test_choosing_through_the_skill_lists_that_model_first(home: Path) -> None:
     text = _run(_command("onex models list"), home)
     assert text.returncode == 0, text.stderr
     first_line = text.stdout.splitlines()[0]
-    assert first_line.startswith("Local URL")
+    assert first_line.startswith("Local Model")
     assert f"tried first: {_SECOND}" in first_line
 
     cleared = _run(_command("onex models first --clear"), home)

@@ -3,6 +3,17 @@
   "description": "OmniClaude Delegation Hooks - Minimal hook config for delegation interception and cost accounting, switched by the POST_SKILL_DELEGATION_ENFORCER hook bit",
   "version": "1.0.0",
   "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ONEX_DELEGATION_HOOK=prompts ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_delegation.sh",
+            "timeout": 300
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [
@@ -29,7 +40,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_delegation.sh"
+            "command": "ONEX_DELEGATION_HOOK=subagents ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_delegation.sh",
+            "timeout": 300
           }
         ]
       }

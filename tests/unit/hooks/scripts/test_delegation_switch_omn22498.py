@@ -39,6 +39,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -308,7 +309,11 @@ def _registered_scripts() -> list[Path]:
         for group in groups:
             for hook in group["hooks"]:
                 command = hook["command"].replace("${CLAUDE_PLUGIN_ROOT}", str(_PLUGIN))
-                scripts.append(Path(command.split()[0]))
+                words = shlex.split(command)
+                # OMN-23413: skip leading NAME=value assignments before the script
+                while len(words) > 1 and re.fullmatch(r"[A-Za-z_]\w*=\S*", words[0]):
+                    words.pop(0)
+                scripts.append(Path(words[0]))
     return scripts
 
 

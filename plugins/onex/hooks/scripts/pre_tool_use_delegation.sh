@@ -2,29 +2,45 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 #
-# PreToolUse Delegation Hook (OMN-10607)
+# Delegation Hook (OMN-10607, OMN-23413): PreToolUse Agent/Task and UserPromptSubmit
 #
-# Intercepts Agent/Task tool calls and routes them through the delegation
-# pipeline (SensitivityGate → TaskClassifier). When a task is delegatable,
-# blocks the tool (exit 2) and emits a delegation result via stderr.
-# Falls through to exit 0 on non-delegatable, error, or disabled.
+# An Agent/Task call goes through the delegation pipeline (SensitivityGate →
+# TaskClassifier → omnimarket node_hook_delegate_effect). When it is answered,
+# the tool is blocked (exit 2) with the answer on stderr; otherwise exit 0 and
+# the original tool proceeds. Every prompt (AC33) goes to the node's prompt
+# handler, and the runner prints this hook's whole output: a "block" carrying
+# the delegated answer, context for Claude, or nothing.
 #
-# Flow:
-#   1. Read tool_name + tool_input from stdin JSON
-#   2. Only act on Agent|Task tool calls; exit 0 for everything else
-#   3. Run delegation_hook_runner.py with tool_input JSON on stdin
-#   4. If result starts with "DELEGATED:": exit 2, stderr = result
-#   5. Otherwise: exit 0, original tool proceeds
-#
-# Hook registration: hooks.json PreToolUse, matcher "^(Agent|Task)$"
-# Ticket: OMN-10607
+# Hook registration: hooks-delegation.v1.json, PreToolUse "^(Agent|Task)$" and
+# UserPromptSubmit. One switch: POST_SKILL_DELEGATION_ENFORCER (bit 11).
 
 set -euo pipefail
-_OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
+# ONEX_DELEGATION_HOOK (prompts | subagents) labels each registration in Claude
+# Code's settings and in this log, without a second script (OMN-23413).
+_OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")${ONEX_DELEGATION_HOOK:+[${ONEX_DELEGATION_HOOK}]}"
 
 # Resolve paths before cd $HOME
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/error-guard.sh" 2>/dev/null || true
+
+TOOL_INFO=$(cat)
+if ! command -v jq >/dev/null 2>&1; then
+    # Without jq the event cannot be read. A prompt hook's stdout becomes
+    # Claude's context, so anything that may be a prompt prints nothing: echoing
+    # it would put the whole hook envelope (prompt, transcript path) into the
+    # conversation. A tool call still passes through by echoing its input.
+    [[ "$TOOL_INFO" == *UserPromptSubmit* ]] || printf '%s\n' "$TOOL_INFO"
+    exit 0
+fi
+TOOL_NAME=$(printf '%s\n' "$TOOL_INFO" | jq -r '.tool_name // ""' 2>/dev/null) || TOOL_NAME=""
+EVENT_NAME=$(printf '%s\n' "$TOOL_INFO" | jq -r '.hook_event_name // "PreToolUse"' 2>/dev/null) || EVENT_NAME="PreToolUse"
+# A tool call passes through by echoing its input. A prompt hook's plain stdout
+# becomes Claude's context, so a prompt that passes through prints nothing (AC33).
+pass_through() { [[ "$EVENT_NAME" == "UserPromptSubmit" ]] || printf '%s\n' "$TOOL_INFO"; exit 0; }
+# A disabled prompt is still a new turn. Reset accepted answers without
+# classification or inference so re-enabling cannot reuse an older turn.
+RESET_ONLY=0
+pass_or_reset() { if [[ "$EVENT_NAME" == "UserPromptSubmit" ]]; then RESET_ONLY=1; else pass_through; fi; }
 
 # A customer install (OMN-22498): scripts/install-delegation.sh --apply writes
 # ~/.omninode/delegation/hooks-delegation.json, and only that installer
@@ -37,12 +53,7 @@ _OMNICLAUDE_CALLER_CWD="${CLAUDE_PROJECT_DIR:-$PWD}"
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/repo_guard.sh" 2>/dev/null || true
 if [[ ! -f "${HOME}/.omninode/delegation/hooks-delegation.json" ]] && declare -F is_omninode_repo >/dev/null 2>&1; then
     CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$_OMNICLAUDE_CALLER_CWD}" \
-        is_omninode_repo || {
-        _OMNICLAUDE_PASSTHROUGH=$(cat)
-        echo "$_OMNICLAUDE_PASSTHROUGH"
-        trap - EXIT 2>/dev/null || true
-        exit 0
-    }
+        is_omninode_repo || pass_or_reset
 fi
 # The one switch (OMN-22498): `onex hooks disable POST_SKILL_DELEGATION_ENFORCER`
 # turns Claude Code delegation off. The bit (11, 0x800) is BORROWED, as Jake
@@ -53,16 +64,14 @@ fi
 # PRE_TOOL_USE_DELEGATION, is not a hook bit, and onex_hook_gate passes an
 # unknown name, so nothing could switch this hook off.
 if ! onex_hook_gate POST_SKILL_DELEGATION_ENFORCER; then
-    cat
-    exit 0
+    pass_or_reset
 fi
 
 cd "$HOME" 2>/dev/null || cd /tmp || true
 
 # Kill switch
 if [[ "${OMNICLAUDE_HOOKS_DISABLED:-0}" == "1" || "${PRE_TOOL_DELEGATION_DISABLED:-0}" == "1" ]]; then
-    cat
-    exit 0
+    pass_or_reset
 fi
 
 # Lite mode guard [OMN-5398]; a customer install is not silenced by it (OMN-22498).
@@ -70,8 +79,7 @@ _MODE_SH="${SCRIPT_DIR}/../../lib/mode.sh"
 if [[ ! -f "${HOME}/.omninode/delegation/hooks-delegation.json" && -f "$_MODE_SH" ]]; then
     source "$_MODE_SH"
     if [[ "$(omniclaude_mode)" == "lite" ]]; then
-        cat
-        exit 0
+        pass_or_reset
     fi
 fi
 unset _MODE_SH
@@ -82,20 +90,9 @@ mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
 
 TIMESTAMP="$(date -u +%FT%TZ)"
 
-# Guard: jq required
-if ! command -v jq >/dev/null 2>&1; then
-    cat
-    exit 0
-fi
-
-TOOL_INFO=$(cat)
-
-TOOL_NAME=$(printf '%s\n' "$TOOL_INFO" | jq -r '.tool_name // ""' 2>/dev/null) || TOOL_NAME=""
-
-# Only intercept Agent and Task tool calls
-if [[ "$TOOL_NAME" != "Agent" && "$TOOL_NAME" != "Task" ]]; then
-    printf '%s\n' "$TOOL_INFO"
-    exit 0
+# One switch covers prompts and subagent tasks. Other tool calls pass through.
+if [[ "$EVENT_NAME" != "UserPromptSubmit" && "$TOOL_NAME" != "Agent" && "$TOOL_NAME" != "Task" ]]; then
+    pass_through
 fi
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
@@ -120,27 +117,36 @@ fi
 
 if [[ -z "$PYTHON_CMD" ]]; then
     echo "[$TIMESTAMP] [$_OMNICLAUDE_HOOK_NAME] WARN: no Python found, passing through" >> "$LOG_FILE" 2>/dev/null || true
-    printf '%s\n' "$TOOL_INFO"
-    exit 0
+    pass_through
 fi
 
 if [[ ! -f "$RUNNER" ]]; then
     echo "[$TIMESTAMP] [$_OMNICLAUDE_HOOK_NAME] WARN: runner not found at ${RUNNER}, passing through" >> "$LOG_FILE" 2>/dev/null || true
-    printf '%s\n' "$TOOL_INFO"
-    exit 0
+    pass_through
 fi
 
-# Run the delegation runner with tool input on stdin; 5s timeout
+# Run the delegation runner with tool input on stdin. It delegates the task with
+# onex delegate within ONEX_HOOK_DELEGATE_TIMEOUT_S (default 240 s); the alarm
+# allows 30 s more. perl's alarm, not `timeout`: macOS ships no `timeout` (GNU
+# coreutils), and a missing one made every call exit 127 (OMN-23413).
 set +e
 DELEGATION_RESULT=$(printf '%s\n' "$TOOL_INFO" | \
-    timeout 5 env -u PYTHONPATH "$PYTHON_CMD" "$RUNNER" 2>>"$LOG_FILE")
+    perl -e "alarm $(( ${ONEX_HOOK_DELEGATE_TIMEOUT_S:-240} + 30 )); exec @ARGV or exit 127" env -u PYTHONPATH ONEX_HOOK_RESET_ONLY="$RESET_ONLY" ONEX_HOOK_DELEGATE_TIMEOUT_S="${ONEX_HOOK_DELEGATE_TIMEOUT_S:-240}" "$PYTHON_CMD" "$RUNNER" 2>>"$LOG_FILE")
 RUNNER_EXIT=$?
 set -e
 
+if [[ "$EVENT_NAME" == "UserPromptSubmit" ]]; then
+    # OMN-23413 AC33: the runner printed this hook's whole output and logged why
+    # on stderr. decision "block" stops Claude Code before any model call. A
+    # disabled or failed run prints nothing.
+    [[ $RUNNER_EXIT -ne 0 || "$RESET_ONLY" == "1" ]] || printf '%s' "$DELEGATION_RESULT"
+    echo "[$TIMESTAMP] [$_OMNICLAUDE_HOOK_NAME] PROMPT runner_exit=${RUNNER_EXIT} reset_only=${RESET_ONLY}" >> "$LOG_FILE" 2>/dev/null || true
+    exit 0
+fi
+
 if [[ $RUNNER_EXIT -ne 0 ]]; then
     echo "[$TIMESTAMP] [$_OMNICLAUDE_HOOK_NAME] WARN: runner exited ${RUNNER_EXIT}, passing through" >> "$LOG_FILE" 2>/dev/null || true
-    printf '%s\n' "$TOOL_INFO"
-    exit 0
+    pass_through
 fi
 
 # Check if delegation was approved
@@ -156,6 +162,5 @@ if [[ "$DELEGATION_RESULT" == DELEGATED:* ]]; then
 fi
 
 # Not delegatable — pass through
-echo "[$TIMESTAMP] [$_OMNICLAUDE_HOOK_NAME] PASS tool=${TOOL_NAME} result=${DELEGATION_RESULT}" >> "$LOG_FILE" 2>/dev/null || true
-printf '%s\n' "$TOOL_INFO"
-exit 0
+echo "[$TIMESTAMP] [$_OMNICLAUDE_HOOK_NAME] PASS tool=${TOOL_NAME} result=$(printf '%s\n' "$DELEGATION_RESULT" | head -n 1)" >> "$LOG_FILE" 2>/dev/null || true
+pass_through

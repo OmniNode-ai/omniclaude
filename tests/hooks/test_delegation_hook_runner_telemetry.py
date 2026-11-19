@@ -24,6 +24,14 @@ from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from omnimarket.nodes.node_hook_delegate_effect import container as delegate_container
+from omnimarket.nodes.node_hook_delegate_effect.handlers.handler_hook_delegate import (
+    HandlerHookDelegate,
+)
+from omnimarket.nodes.node_hook_delegate_effect.models import (
+    EnumHookDelegateOutcome,
+    ModelHookDelegateResult,
+)
 
 _RUNNER_PATH = (
     Path(__file__).parent.parent.parent
@@ -70,6 +78,36 @@ def _load_telemetry() -> ModuleType:
 
 
 _runner = _load_runner()
+
+
+def _clean_gate() -> MagicMock:
+    """A sensitivity gate that finds nothing sensitive. Since OMN-23413 a missing
+    gate keeps the task with Claude (fail closed), so tests of the classifier and
+    the delegation path stand in this gate rather than none."""
+    gate = MagicMock()
+    gate.check.return_value = SimpleNamespace(is_sensitive=False, reasons=[])
+    return gate
+
+
+#: What the stand-in `onex delegate` answers. Since OMN-23413 the runner
+#: delegates a delegatable task for real and prints the answer after the
+#: telemetry line; these tests cover the telemetry, so no model is called.
+_ANSWER = "the delegated answer"
+
+
+@pytest.fixture(autouse=True)
+def _delegate_answers(monkeypatch: pytest.MonkeyPatch) -> object:
+    monkeypatch.setenv("ONEX_HOOK_DELEGATE_TIMEOUT_S", "240")  # as the .sh sets it
+    with patch.object(
+        HandlerHookDelegate,
+        "handle",
+        return_value=ModelHookDelegateResult(
+            outcome=EnumHookDelegateOutcome.ANSWERED, answer=_ANSWER, run_id="run-0001"
+        ),
+    ):
+        yield
+
+
 _telemetry_mod = _load_telemetry()
 
 
@@ -126,13 +164,14 @@ def test_delegatable_emits_two_lines() -> None:
     mock_classifier = MagicMock()
     mock_classifier.is_delegatable.return_value = _delegatable_score()
 
-    with patch.object(_runner, "_import_gate", return_value=None):
+    with patch.object(_runner, "_import_gate", return_value=_clean_gate()):
         with patch.object(_runner, "_import_classifier", return_value=mock_classifier):
             lines, code = _run_main(_tool_json("explain this module"))
 
     assert code == 0
-    assert len(lines) == 2
+    assert len(lines) == 3  # DELEGATED, telemetry, the answer
     assert lines[0].startswith("DELEGATED:")
+    assert lines[2] == _ANSWER
 
 
 @pytest.mark.unit
@@ -142,7 +181,7 @@ def test_telemetry_line_is_valid_json() -> None:
         "document", "local-model"
     )
 
-    with patch.object(_runner, "_import_gate", return_value=None):
+    with patch.object(_runner, "_import_gate", return_value=_clean_gate()):
         with patch.object(_runner, "_import_classifier", return_value=mock_classifier):
             lines, _ = _run_main(_tool_json("summarize the PR"))
 
@@ -155,7 +194,7 @@ def test_telemetry_non_authoritative_marker() -> None:
     mock_classifier = MagicMock()
     mock_classifier.is_delegatable.return_value = _delegatable_score()
 
-    with patch.object(_runner, "_import_gate", return_value=None):
+    with patch.object(_runner, "_import_gate", return_value=_clean_gate()):
         with patch.object(_runner, "_import_classifier", return_value=mock_classifier):
             lines, _ = _run_main(_tool_json("explain code"))
 
@@ -168,7 +207,7 @@ def test_telemetry_tokens_and_cost_are_zero() -> None:
     mock_classifier = MagicMock()
     mock_classifier.is_delegatable.return_value = _delegatable_score()
 
-    with patch.object(_runner, "_import_gate", return_value=None):
+    with patch.object(_runner, "_import_gate", return_value=_clean_gate()):
         with patch.object(_runner, "_import_classifier", return_value=mock_classifier):
             lines, _ = _run_main(_tool_json("research something"))
 
@@ -185,7 +224,7 @@ def test_telemetry_task_type_propagates() -> None:
         "code_review", "Qwen3"
     )
 
-    with patch.object(_runner, "_import_gate", return_value=None):
+    with patch.object(_runner, "_import_gate", return_value=_clean_gate()):
         with patch.object(_runner, "_import_classifier", return_value=mock_classifier):
             lines, _ = _run_main(_tool_json("review this code"))
 
@@ -200,7 +239,7 @@ def test_telemetry_correlation_id_from_payload() -> None:
     mock_classifier.is_delegatable.return_value = _delegatable_score()
 
     stdin = _tool_json("explain X", correlation_id="corr-abc", session_id="sess-xyz")
-    with patch.object(_runner, "_import_gate", return_value=None):
+    with patch.object(_runner, "_import_gate", return_value=_clean_gate()):
         with patch.object(_runner, "_import_classifier", return_value=mock_classifier):
             lines, _ = _run_main(stdin)
 
@@ -215,7 +254,7 @@ def test_telemetry_correlation_id_from_env_fallback() -> None:
     mock_classifier.is_delegatable.return_value = _delegatable_score()
 
     stdin = _tool_json("explain Y")  # no IDs in payload
-    with patch.object(_runner, "_import_gate", return_value=None):
+    with patch.object(_runner, "_import_gate", return_value=_clean_gate()):
         with patch.object(_runner, "_import_classifier", return_value=mock_classifier):
             lines, _ = _run_main(
                 stdin,
@@ -239,7 +278,7 @@ def test_telemetry_quality_result_non_authoritative() -> None:
     mock_classifier = MagicMock()
     mock_classifier.is_delegatable.return_value = _delegatable_score()
 
-    with patch.object(_runner, "_import_gate", return_value=None):
+    with patch.object(_runner, "_import_gate", return_value=_clean_gate()):
         with patch.object(_runner, "_import_classifier", return_value=mock_classifier):
             lines, _ = _run_main(_tool_json("explain this"))
 
@@ -261,12 +300,12 @@ def test_not_delegatable_emits_one_line_only() -> None:
         delegatable=False, classified_intent="mutation", delegate_to_model=None
     )
 
-    with patch.object(_runner, "_import_gate", return_value=None):
+    with patch.object(_runner, "_import_gate", return_value=_clean_gate()):
         with patch.object(_runner, "_import_classifier", return_value=mock_classifier):
             lines, code = _run_main(_tool_json("git commit and push"))
 
     assert code == 0
-    assert lines == ["not_delegatable"]
+    assert lines == ["not_delegatable:classifier"]  # OMN-23413: the reason is named
 
 
 @pytest.mark.unit
@@ -291,14 +330,14 @@ def test_telemetry_build_failure_does_not_crash() -> None:
     mock_classifier = MagicMock()
     mock_classifier.is_delegatable.return_value = _delegatable_score()
 
-    with patch.object(_runner, "_import_gate", return_value=None):
+    with patch.object(_runner, "_import_gate", return_value=_clean_gate()):
         with patch.object(_runner, "_import_classifier", return_value=mock_classifier):
             with patch.object(_runner, "_import_telemetry", return_value=(None, None)):
                 lines, code = _run_main(_tool_json("explain this"))
 
     assert code == 0
-    # Only the DELEGATED: line — no telemetry line when module unavailable
-    assert len(lines) == 1
+    # The DELEGATED: line and the answer — no telemetry line when module unavailable
+    assert lines == [lines[0], _ANSWER]
     assert lines[0].startswith("DELEGATED:")
 
 
@@ -310,7 +349,7 @@ def test_telemetry_exception_during_build_does_not_crash() -> None:
     broken_cls = MagicMock(side_effect=RuntimeError("telemetry exploded"))
     broken_hash = MagicMock(return_value="")
 
-    with patch.object(_runner, "_import_gate", return_value=None):
+    with patch.object(_runner, "_import_gate", return_value=_clean_gate()):
         with patch.object(_runner, "_import_classifier", return_value=mock_classifier):
             with patch.object(
                 _runner, "_import_telemetry", return_value=(broken_cls, broken_hash)
@@ -318,5 +357,28 @@ def test_telemetry_exception_during_build_does_not_crash() -> None:
                 lines, code = _run_main(_tool_json("explain this"))
 
     assert code == 0
-    assert len(lines) == 1
+    assert lines == [lines[0], _ANSWER]
     assert lines[0].startswith("DELEGATED:")
+
+
+@pytest.mark.unit
+def test_the_shells_limit_reaches_the_request() -> None:
+    """The .sh sets ONEX_HOOK_DELEGATE_TIMEOUT_S; the node request carries it.
+
+    Drafted by onex delegate run e0925821 (OMN-23413); its string patch targets
+    and its is_delegatable stub were corrected here.
+    """
+    classifier = MagicMock()
+    classifier.is_delegatable.return_value = _delegatable_score()
+    handler = MagicMock()
+    handler.handle.return_value = ModelHookDelegateResult(
+        outcome=EnumHookDelegateOutcome.ANSWERED, answer=_ANSWER
+    )
+    with (
+        patch.object(_runner, "_import_gate", return_value=_clean_gate()),
+        patch.object(_runner, "_import_classifier", return_value=classifier),
+        patch.object(delegate_container, "build_handler", return_value=handler),
+    ):
+        _run_main(_tool_json("explain"), {"ONEX_HOOK_DELEGATE_TIMEOUT_S": "90"})
+    handler.handle.assert_called_once()
+    assert handler.handle.call_args[0][0].timeout_seconds == 90.0

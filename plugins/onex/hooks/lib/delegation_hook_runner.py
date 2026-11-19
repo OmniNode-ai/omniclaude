@@ -1,28 +1,12 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""PreToolUse delegation hook runner (OMN-10607).
-
-Invoked by pre_tool_use_delegation.sh with serialized tool input on stdin.
-Runs SensitivityGate then TaskClassifier; prints a one-line result to stdout:
-
-  not_delegatable            — gate or classifier rejected delegation
-  not_delegatable:sensitive  — sensitivity gate blocked
-  DELEGATED: <task_type> routed to <model>  — delegatable; JSON telemetry on next line
-
-When delegatable, a second JSON line is printed immediately after DELEGATED:.
-This JSON conforms to ModelHookDelegationTelemetry and contains runtime-compatible
-fields (correlation_id, task_type, routing_policy_hash, tokens_input, tokens_output,
-cost_usd, quality_result). All fields are NON-AUTHORITATIVE — see
-hook_delegation_telemetry.py for per-field caveats.
-
-The shell caller (pre_tool_use_delegation.sh) reads only the first line for its
-exit-code decision; the second line is forwarded to emit_via_daemon for telemetry.
-
-Exit codes:
-  0 — classification complete (check stdout for result)
-  1 — unrecoverable error (caller treats as not_delegatable)
-"""
+#
+# Delegation hook runner for pre_tool_use_delegation.sh (OMN-10607, OMN-23413).
+# Agent/Task: SensitivityGate, TaskClassifier, node_hook_delegate_effect, then prints
+# not_delegatable:<why> or "DELEGATED: <task_type> answered by <model> (run <id>)",
+# NON-AUTHORITATIVE telemetry JSON and the answer. A prompt prints the node's hook
+# output. Every reason that keeps text with Claude is named in the hook log.
 
 from __future__ import annotations
 
@@ -35,25 +19,19 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 # Path bootstrap — allow running from the plugin lib dir or repo root
 # ---------------------------------------------------------------------------
-_HERE = Path(__file__).parent
-_PLUGIN_ROOT = _HERE.parent.parent  # hooks/lib -> hooks -> plugins/onex
-_REPO_ROOT = _PLUGIN_ROOT.parent.parent  # plugins/onex -> omniclaude root
+# hooks/lib -> hooks -> plugins/onex -> plugins -> omniclaude root
+_REPO_ROOT = Path(__file__).parents[4]
 
-for _candidate in [
-    _REPO_ROOT / "src",
-    _REPO_ROOT,
-]:
+for _candidate in [_REPO_ROOT / "src", _REPO_ROOT]:
     if _candidate.exists() and str(_candidate) not in sys.path:
         sys.path.insert(0, str(_candidate))
 
 
 def _import_gate():  # type: ignore[return]
-    try:
-        from omniclaude.delegation.sensitivity_gate import SensitivityGate
+    # An import or construction error is named by _gate_why (gate_error:<type>).
+    from omniclaude.delegation.sensitivity_gate import SensitivityGate
 
-        return SensitivityGate()
-    except Exception:  # noqa: BLE001
-        return None
+    return SensitivityGate()
 
 
 def _import_classifier():  # type: ignore[return]
@@ -78,20 +56,11 @@ def _import_telemetry():  # type: ignore[return]
 
 
 def _build_telemetry_json(
-    task_type: str,
-    model: str,
-    latency_ms: int,
-    correlation_id: str,
-    session_id: str,
+    task_type: str, model: str, t0: float, correlation_id: str, session_id: str
 ) -> str:
-    """Build NON-AUTHORITATIVE telemetry JSON for a delegatable classification.
-
-    Returns an empty string when hook_delegation_telemetry is unavailable so
-    the caller can skip emitting rather than failing.
-    """
+    # NON-AUTHORITATIVE telemetry JSON, or "" when hook_delegation_telemetry is
+    # missing (calling its None stand-ins raises TypeError, caught below).
     TelemetryClass, hash_fn = _import_telemetry()
-    if TelemetryClass is None or hash_fn is None:
-        return ""
     try:
         telemetry = TelemetryClass(
             correlation_id=correlation_id,
@@ -99,7 +68,7 @@ def _build_telemetry_json(
             task_type=task_type,
             delegated_to=model,
             routing_policy_hash=hash_fn(),
-            delegation_latency_ms=latency_ms,
+            delegation_latency_ms=int((time.monotonic() - t0) * 1000),
             # tokens_input / tokens_output / cost_usd stay 0 — hook has no LLM usage
         )
         return json.dumps(telemetry.to_dict())
@@ -107,8 +76,39 @@ def _build_telemetry_json(
         return ""
 
 
+def _gate_why(text: str) -> str:
+    # "" when text may go to a delegated model, else why not. Fails closed
+    # (OMN-23413): with no working gate nothing is sent, and stderr (the hook log)
+    # names the reason, so a broken install never reads as a real hit. Empty text
+    # holds nothing to keep.
+    why = "no_gate"
+    try:
+        gate = _import_gate() if text else None
+        if gate is not None or not text:
+            return "sensitive" if text and gate.check(text).is_sensitive else ""
+    except Exception as error:  # noqa: BLE001 - fail closed, keep it with Claude
+        why = f"gate_error:{type(error).__name__}"
+    print(f"delegation gate unavailable ({why}): nothing sent", file=sys.stderr)
+    return why
+
+
+def _sensitive(text: str) -> bool:
+    # The node's check for recent conversation (OMN-23413): any text, uncut or not.
+    return bool(_gate_why(text))
+
+
+def _strings(value: object) -> list[str]:
+    # Every string a tool input holds, decoded and nested ones included.
+    items = [*value.keys(), *value.values()] if isinstance(value, dict) else value
+    if isinstance(items, list):
+        return [text for item in items for text in _strings(item)]
+    return [value] if isinstance(value, str) else []
+
+
 def main() -> int:
     t0 = time.monotonic()
+    # OMN-23413: the answering node; if missing, exit 1 and the .sh passes through
+    from omnimarket.nodes.node_hook_delegate_effect import container, models
 
     raw = sys.stdin.read()
     try:
@@ -116,71 +116,87 @@ def main() -> int:
     except json.JSONDecodeError:
         payload = {}
 
-    # Extract correlation_id and session_id forwarded from the shell hook
-    correlation_id = ""
-    session_id = ""
-    if isinstance(payload, dict):
-        correlation_id = str(payload.get("correlation_id", ""))
-        session_id = str(payload.get("session_id", ""))
-    # Fallback to env vars set by the shell hook wrapper
-    if not correlation_id:
-        correlation_id = os.environ.get("HOOK_CORRELATION_ID", "")
+    # correlation_id and session_id come from the shell hook, else its environment
+    fields = payload if isinstance(payload, dict) else {}
+    correlation_id = str(fields.get("correlation_id", ""))
+    correlation_id = correlation_id or os.environ.get("HOOK_CORRELATION_ID", "")
+    session_id = str(fields.get("session_id", ""))
     if not session_id:
-        try:
-            from .session_id import resolve_session_id  # noqa: PLC0415
+        try:  # PLC0415 (import outside top level) is off for this repo
+            from .session_id import resolve_session_id
         except ImportError:
-            from plugins.onex.hooks.lib.session_id import (  # noqa: PLC0415
-                resolve_session_id,
-            )
+            from plugins.onex.hooks.lib.session_id import resolve_session_id
         session_id = resolve_session_id(default="")
 
-    # Flatten tool_input to a string for gate + classifier
-    tool_input = (
-        payload.get("tool_input", payload) if isinstance(payload, dict) else payload
-    )
-    if isinstance(tool_input, dict):
-        tool_text = json.dumps(tool_input)
-    else:
-        tool_text = str(tool_input)
-
-    # --- Sensitivity gate ---
-    gate = _import_gate()
-    if gate is not None:
+    handler = container.build_handler()
+    limit = os.environ.get("ONEX_HOOK_DELEGATE_TIMEOUT_S")  # set by the .sh
+    if fields.get("hook_event_name") == "UserPromptSubmit":
+        handler.begin_turn(session_id)  # even a disabled prompt starts a new turn
+        if os.environ.get("ONEX_HOOK_RESET_ONLY") == "1":
+            return 0
+        # AC33: every prompt goes to delegation first; Claude answers what it cannot.
+        prompt = str(fields.get("prompt", ""))
+        # The intent only picks a task class; a classifier error exits 1 and the
+        # .sh passes the prompt to Claude.
+        tc = _import_classifier()  # the TaskClassifier
+        intent = tc.is_delegatable(prompt).classified_intent if tc else ""
+        request = models.ModelPromptDelegateRequest.of(
+            fields, session_id, _sensitive(prompt), intent, limit
+        )
+        # The node withholds recent conversation this gate flags (OMN-23413). An
+        # omnimarket older than that callback (dependency skew) sends nothing.
         try:
-            gate_result = gate.check(tool_text)
-            if gate_result.is_sensitive:
-                print("not_delegatable:sensitive")
-                return 0
-        except Exception:  # noqa: BLE001
-            pass  # Fail open — proceed to classifier
+            prompt_handler = container.build_prompt_handler(sensitive=_sensitive)
+        except TypeError:
+            print("prompt not_delegatable:node_skew (no sensitive)", file=sys.stderr)
+            return 0
+        result = prompt_handler.handle(request)
+        print(result.log_line, file=sys.stderr)  # the .sh appends stderr to its log
+        print(result.hook_output)
+        return 0
 
-    # --- Task classifier ---
+    # Classify the task itself, never session metadata or the whole hook envelope.
+    tool_input = fields.get("tool_input", payload)
+    tool_text = (
+        json.dumps(tool_input) if isinstance(tool_input, dict) else str(tool_input)
+    )
+    # The gate reads the decoded strings that are sent, not only their JSON form,
+    # where a newline is backslash-n and hides a key from a word boundary.
+    why = _gate_why("\n".join([*_strings(tool_input), tool_text]))
+    if why:
+        print(f"not_delegatable:{why}")
+        return 0
+
+    why = "no_classifier"  # OMN-23413: the hook log names every pass-through's reason
     classifier = _import_classifier()
     if classifier is not None:
         try:
             score = classifier.is_delegatable(tool_text)
+            why = "classifier"
             if score.delegatable:
-                model = score.delegate_to_model or "local-model"
                 task_type = score.classified_intent
-                latency_ms = int((time.monotonic() - t0) * 1000)
-                print(f"DELEGATED: {task_type} routed to {model}")
-                # Emit NON-AUTHORITATIVE telemetry on a second line.
-                # Shell caller reads only the first line; this line is for
-                # emit_via_daemon consumption.
+                request = models.ModelHookDelegateRequest.of(
+                    tool_input, tool_text, task_type, limit
+                ).model_copy(update={"session_id": session_id})
+                result = handler.handle(request)
+                if not result.answered:  # never block a subagent without an answer
+                    print(f"not_delegatable:{result.outcome}")
+                    return 0
+                model = result.model or score.delegate_to_model or "local-model"
+                run = result.run_id
+                print(f"DELEGATED: {task_type} answered by {model} (run {run})")
+                # NON-AUTHORITATIVE telemetry on a second line, for emit_via_daemon.
                 telemetry_json = _build_telemetry_json(
-                    task_type=task_type,
-                    model=model,
-                    latency_ms=latency_ms,
-                    correlation_id=correlation_id,
-                    session_id=session_id,
+                    task_type, model, t0, correlation_id, session_id
                 )
                 if telemetry_json:
                     print(telemetry_json)
+                print(result.answer)  # Claude Code's answer in place of the subagent's
                 return 0
-        except Exception:  # noqa: BLE001
-            pass  # Fail open
+        except Exception as error:  # noqa: BLE001 - fail open
+            why = f"error:{type(error).__name__}"
 
-    print("not_delegatable")
+    print(f"not_delegatable:{why}")
     return 0
 
 
