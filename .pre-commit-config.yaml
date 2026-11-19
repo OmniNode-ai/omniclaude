@@ -29,7 +29,7 @@
 repos:
   # OMN-21516: consume the core validators by hook id.
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: dev-20261101103701-2fc5e461fca7
+    rev: dev-20261119101844-59e0293aeaef
     hooks:
       - id: check-ai-slop
       - id: skip-count-ratchet
@@ -41,7 +41,7 @@ repos:
   # is stated in that file. CI twin: the first-party-ref job in .github/workflows/ci.yml,
   # which runs these hooks at this rev instead of repeating it (the validator allows one home per tag literal).
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: dev-20261114143324-d55e67e6a8ed
+    rev: dev-20261119101844-59e0293aeaef
     hooks:
       - id: check-internal-sibling-pins
         args: [--baseline, .onex/baselines/first_party_ref.yaml]
@@ -228,7 +228,7 @@ repos:
   # baseline sit in .onex_ratchets/canonical_file_shape_burndown_baseline.txt,
   # a ticketed burn-down file that only shrinks.
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: dev-20261029151319-6e0a5eee541a
+    rev: dev-20261119101844-59e0293aeaef
     hooks:
       # OMN-18531: this rev carries the canonical-file-shape mod-file-growth rule
       # (ruling 2026-10-15T08:14:15Z): a baselined script under plugins/, .claude/
@@ -242,7 +242,7 @@ repos:
       # .github/workflows/ci.yml, same omnibase_core tag.
       - id: check-node-home
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: dev-20261018024445-b6ee996befa1
+    rev: dev-20261119101844-59e0293aeaef
     hooks:
       # Shape-gate independence (OMN-20298): a shape-gate detector job never waits on
       # the change-control preflight and never reads its result. BLOCKING, zero
@@ -281,7 +281,7 @@ repos:
   # lab has a typed route packaged with this core, and the routes only shrink. CI twin:
   # the last steps of job public-runner-placement in .github/workflows/ci.yml read this rev.
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: dev-20261108002741-ae93bb0ec3e2
+    rev: dev-20261119101844-59e0293aeaef
     hooks:
       - id: check-public-lab-selection
         args: [--repo, omniclaude, --visibility, public]
@@ -299,7 +299,7 @@ repos:
   # Shared ONEX governance hooks (omnibase_core; moved from onex_change_control
   # under the same hook ids, OMN-20074 OCC retirement S8)
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: dev-20261018024445-b6ee996befa1
+    rev: dev-20261119101844-59e0293aeaef
     hooks:
       - id: no-hardcoded-topics
         stages: [pre-commit]
@@ -311,7 +311,7 @@ repos:
   # no-bare-feature-flags comes from omnibase_core (omnibase_core#1936, OMN-20920,
   # OCC retirement S8). A separate block keeps the hooks above on v0.47.39.
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: dev-20261018024445-b6ee996befa1
+    rev: dev-20261119101844-59e0293aeaef
     hooks:
       - id: no-bare-feature-flags
         stages: [pre-commit]
@@ -324,7 +324,7 @@ repos:
   # there commit-hygiene writes a report under .onex_state, which
   # tests/ci/test_precommit_core_hooks_canary_omn21499.py refuses.
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: dev-20261029044430-3f33be0d5364
+    rev: dev-20261119101844-59e0293aeaef
     hooks:
       - id: check-hook-writes
       - id: commit-hygiene
@@ -348,7 +348,7 @@ repos:
   # at this tag, findings in the tree). check-no-raw-sqlite3 is wired in the v0.47.61
   # block below.
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: dev-20261101023710-a66b5ff79cc0
+    rev: dev-20261119101844-59e0293aeaef
     hooks:
       - id: handler-di-gate
         args: [--baseline, .onex/baselines/handler-di-gate.txt]
@@ -407,7 +407,7 @@ repos:
   # pinned omnibase_core; keep this rev equal to the pin in
   # .github/workflows/url-authority-gate.yml. Suppress: # url-authority-ok: <reason>
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: dev-20261018024445-b6ee996befa1
+    rev: dev-20261119101844-59e0293aeaef
     hooks:
       - id: check-url-authority
         args: [--repo, omniclaude, --repo-root, .]
@@ -425,7 +425,7 @@ repos:
   # markers too, with the same spelling. CI runs these same hook ids with
   # `pre-commit run <id> --all-files` (ci.yml, the arch-* jobs).
   - repo: https://github.com/OmniNode-ai/omnibase_core
-    rev: dev-20261114143324-d55e67e6a8ed
+    rev: dev-20261119101844-59e0293aeaef
     hooks:
       - id: check-no-utcnow
         files: ^src/.*\.py$

@@ -3610,7 +3610,7 @@ jobs:
             exit 1
           fi
           echo "Reading ${#reports[@]} JUnit report(s)."
-          uv run --no-project --with pyyaml --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@dev-20261101103701-2fc5e461fca7' python -m omnibase_core.nodes.node_skip_count_ratchet_check_compute.runtime_skip_count_ratchet_check \
+          uv run --no-project --with pyyaml --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@dev-20261119101844-59e0293aeaef' python -m omnibase_core.nodes.node_skip_count_ratchet_check_compute.runtime_skip_count_ratchet_check \
             --suite omniclaude/hooks-tests \
             --baseline config/skip_count_baseline.yaml \
             --junit "${reports[@]}"
@@ -3631,7 +3631,7 @@ jobs:
             exit 1
           fi
           echo "Reading ${#reports[@]} JUnit report(s)."
-          uv run --no-project --with pyyaml --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@dev-20261101103701-2fc5e461fca7' python -m omnibase_core.nodes.node_skip_count_ratchet_check_compute.runtime_skip_count_ratchet_check \
+          uv run --no-project --with pyyaml --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@dev-20261119101844-59e0293aeaef' python -m omnibase_core.nodes.node_skip_count_ratchet_check_compute.runtime_skip_count_ratchet_check \
             --suite omniclaude/test-split \
             --baseline config/skip_count_baseline.yaml \
             --junit "${reports[@]}"
@@ -3662,7 +3662,7 @@ jobs:
             exit 1
           fi
           echo "Reading ${#reports[@]} JUnit report(s)."
-          uv run --no-project --with pyyaml --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@dev-20261101103701-2fc5e461fca7' python -m omnibase_core.nodes.node_skip_count_ratchet_check_compute.runtime_skip_count_ratchet_check \
+          uv run --no-project --with pyyaml --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@dev-20261119101844-59e0293aeaef' python -m omnibase_core.nodes.node_skip_count_ratchet_check_compute.runtime_skip_count_ratchet_check \
             --suite omniclaude/agent-framework-tests \
             --baseline config/skip_count_baseline.yaml \
             --junit "${reports[@]}"
@@ -4379,7 +4379,7 @@ jobs:
       - name: Ratchet non-canonical lifecycle-word classes against frozen allowlist (OMN-14350)
         run: |
           uv run --no-project \
-            --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@dev-20261018024445-b6ee996befa1' \
+            --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@dev-20261119101844-59e0293aeaef' \
             python -m omnibase_core.validators.no_noncanonical_lifecycle_classes \
             --check-stale \
             --allowlist .onex_ratchets/noncanonical_class_allowlist.yaml \
@@ -4404,7 +4404,7 @@ jobs:
       - name: Refuse shape-gate detector jobs that depend on the preflight (OMN-20298)
         run: |
           uv run --no-project \
-            --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@dev-20261018024445-b6ee996befa1' \
+            --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@dev-20261119101844-59e0293aeaef' \
             python -m omnibase_core.handlers.handler_shape_gate_independence
 
   precommit-suite:
@@ -4575,7 +4575,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      CANONICAL_FILE_SHAPE_CORE: "omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@dev-20261029151319-6e0a5eee541a"
+      CANONICAL_FILE_SHAPE_CORE: "omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@dev-20261119101844-59e0293aeaef"
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -6860,4 +6860,4 @@ jobs:
         run: |
           FILES="${{ steps.changed.outputs.files }}"
           if [ -z "$FILES" ]; then exit 0; fi
-          uv run --no-project --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@dev-20261101103701-2fc5e461fca7' python -m omnibase_core.nodes.node_ai_slop_check_compute.runtime_ai_slop_check --strict $FILES
+          uv run --no-project --with 'omnibase-core @ git+https://github.com/OmniNode-ai/omnibase_core@dev-20261119101844-59e0293aeaef' python -m omnibase_core.nodes.node_ai_slop_check_compute.runtime_ai_slop_check --strict $FILES
