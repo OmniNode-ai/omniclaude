@@ -1818,15 +1818,33 @@ def test_the_declaration_needs_no_comment_marker(tmp_path: Path) -> None:
     assert _run_eligible(module, root, tmp_path, _rulings_file(tmp_path)) == 0
 
 
-def test_the_shipped_registry_carries_no_ruling() -> None:
-    """The operator withdrew hosted eligibility on 2026-10-19 (OMN-17427).
+def test_the_shipped_registry_carries_only_the_2026_11_19_ruling() -> None:
+    """RULING 2026-11-19T17:59:10Z restored eligibility for one private repo.
 
-    "make it impossible to run private repos actions on github" reverses RULING
-    2026-10-16T17:44:31Z, so the registry a declaration must cite is empty and
-    every `.github/hosted-eligible-jobs.yaml` entry is refused.
+    The 2026-10-19 withdrawal emptied this registry because GitHub had
+    reported 90 percent of the included Enterprise Actions minutes used. The
+    2026-11-19 ruling amends it on measurement: over Nov 1 to 19 the org ran
+    6,858,162 Actions Linux minutes at $41,149 gross and net $0.00, 100
+    percent covered on every one of the 19 days.
+
+    Pinned by CONTENT, not by count, so widening the registry to another
+    repository or another label family has to be a deliberate edit here. The
+    reversed 2026-10-16 ruling stays absent, which is what
+    test_a_declaration_citing_the_withdrawn_ruling_is_refused rests on.
     """
     module = _module()
-    assert module.load_hosted_rulings(module.DEFAULT_HOSTED_RULINGS) == {}
+    rulings = module.load_hosted_rulings(module.DEFAULT_HOSTED_RULINGS)
+    assert sorted(rulings) == ["2026-11-19T17:59:10Z"]
+    only = rulings["2026-11-19T17:59:10Z"]
+    assert only.lane == "hosted-runner-reversal"
+    assert only.ticket == "OMN-17427"
+    assert only.label_families == ("ubuntu",)
+    # sha256 of the one lowercased owner/name the ruling covers. The name
+    # itself stays out of this public tree, which is why the registry keys
+    # repositories by digest at all.
+    assert only.repo_hashes == frozenset(
+        {"a1d6884cdfb17a057eb2d4d79648d36a9f64b816d47bf68ee73a133e41da35f6"}
+    )
 
 
 def test_a_declaration_citing_the_withdrawn_ruling_is_refused(
