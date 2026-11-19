@@ -45,10 +45,8 @@ that caused the incident -- an invisible model choice -- and would mask the
 omissions this validator exists to make visible. The author makes the cost
 choice, per call, or the call does not run.
 
-Lab-host work (OMN-24618): an ``agent()`` or ``Agent`` prompt that runs ssh, scp,
-sftp, rsync, docker or systemctl against a lab host is refused unless it declares
-a placement. That check lives in ``src/omniclaude/handlers/lab_host_work.py``
-(this file only shrinks; with no ``src/`` beside it the check is off); see its docstring.
+Lab-host work (OMN-24618): the placement check lives in ``src/omniclaude/handlers/lab_host_work.py``
+(this file only shrinks), found beside this file or in the installed package.
 
 Parsing
 -------
@@ -246,19 +244,19 @@ _BAND_RANK: Final[dict[str, int]] = {
 }
 
 _AGENT_TOOL_FILE: Final[str] = "<Agent tool call>"
-_LAB_MODULE: Final[Path] = (
-    Path(__file__).resolve().parents[4] / "src/omniclaude/handlers/lab_host_work.py"
-)
 
 
 @functools.cache
 def _lab() -> ModuleType | None:
-    """The lab-host check, loaded by path (standard library only); ``None`` in a copy with no ``src/``."""
-    if not _LAB_MODULE.is_file():
-        return None
-    spec = importlib.util.spec_from_file_location("lab_host_work", _LAB_MODULE)
+    """The lab-host check, found (standard library only): beside this checkout, else in the installed ``omniclaude`` package."""
+    package = importlib.util.find_spec("omniclaude")
+    roots = [Path(__file__).resolve().parents[4] / "src/omniclaude"]
+    roots += map(Path, (package and package.submodule_search_locations) or ())
+    paths = (r / "handlers/lab_host_work.py" for r in roots)
+    path = next((p for p in paths if p.is_file()), None)
+    spec = path and importlib.util.spec_from_file_location("lab_host_work", path)
     if spec is None or spec.loader is None:
-        raise RuntimeError(f"lab-host check unreadable: {_LAB_MODULE}")
+        return None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

@@ -13,8 +13,9 @@ lab's placement and load bar. Such a prompt is refused unless it declares one li
 ``PLACEMENT: remote-lane``, ``PLACEMENT: fable-review`` or ``LOCAL-ONLY: <reason>``
 (a reason of at least three words that is not a placeholder).
 
-The guard loads this file by path from its own repository checkout. A plugin cache copy has
-no ``src/``, so there the check is off and no dispatch is refused for it (OMN-24738).
+The guard finds this file beside its own checkout, else in the installed ``omniclaude`` package
+(the plugin cache ships no ``src/``; the plugin venv installs the project). Where neither holds
+it the check is off and no dispatch is refused for it (OMN-24738).
 
 What the check is, and is not:
 
