@@ -22,6 +22,14 @@ RUN pip install --default-timeout=300 --retries 5 --no-cache-dir uv
 # Copy package files
 COPY pyproject.toml uv.lock ./
 COPY src/ ./src/
+# The wheel force-includes the customer bundle (pyproject.toml
+# [tool.hatch.build.targets.wheel.force-include], OMN-23413); the build fails
+# without these paths.
+COPY plugins/.claude-plugin/marketplace.json ./plugins/.claude-plugin/marketplace.json
+COPY plugins/onex-delegate/ ./plugins/onex-delegate/
+COPY plugins/onex/hooks/ ./plugins/onex/hooks/
+COPY plugins/onex/lib/ ./plugins/onex/lib/
+COPY scripts/install-delegation.sh ./scripts/install-delegation.sh
 
 # Install dependencies. GitHub-side git dependencies occasionally reset during
 # container builds; retry the bounded install instead of failing a clean build.
