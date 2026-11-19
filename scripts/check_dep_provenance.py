@@ -14,7 +14,7 @@ dependency is sourced from git instead of PyPI.
 
 Forbidden first-party deps (both hyphen and underscore spellings):
 
-    omnibase-core   omnibase-spi   omnibase-compat   omnibase-infra
+    omnibase-core   omnibase-spi   omnibase-infra
 
 A ``[tool.uv.sources]`` entry for any of the above with a ``git`` / ``rev`` /
 ``branch`` / ``tag`` key is a forbidden override and fails the gate, with one
@@ -73,7 +73,6 @@ _FORBIDDEN_PACKAGES: frozenset[str] = frozenset(
     {
         "omnibase-core",
         "omnibase-spi",
-        "omnibase-compat",
         # OMN-17176: omnibase-infra joined the set. It was exempt while it had no
         # usable tag, so the gate reported OK against a live git override that
         # `uv lock --upgrade-package` structurally cannot move -- every
@@ -274,7 +273,7 @@ def main(argv: list[str] | None = None) -> int:
         for msg in violations:
             print(f"  - {msg}", file=sys.stderr)
         print(
-            "\nomnibase-core / omnibase-spi / omnibase-compat / omnibase-infra "
+            "\nomnibase-core / omnibase-spi / omnibase-infra "
             "must NOT be pinned to a git commit, a branch, a release tag or a "
             "fork on dev/main. Resolve them from PyPI, or, when the needed change "
             "is not released, pin the sibling's newest dev merge tag instead of "

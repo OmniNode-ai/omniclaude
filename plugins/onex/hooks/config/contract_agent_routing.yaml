@@ -19,9 +19,23 @@
 # score: a dimension at the given value needs at least min_band. Every agent()
 # and Agent dispatch must carry a ROUTE line:
 #   ROUTE: band=<B> score=<n> dims=S<s>A<a>R<r>V<v>N<n>C<c>J<j> dest=<d> model=<m> effort=<e>
-# Bands with an empty models set (B0, B1, B1c) dispatch no Claude agent. The V=3
+# Bands with an empty models set (B0, B1c) dispatch no Claude agent. B1 allows
+# model haiku only (RULING 2026-11-16T19:43:11Z, OMN-24977): low-score mechanical
+# work (run one script and return its output, post a given text, read a file and
+# list fields) may run on the cheapest Claude model. Haiku in B2 and above is
+# refused because those bands' model sets do not name it. The V=3
 # floor ("output must be true" is never accepted from delegation alone) is a
 # lane-brief rule, not machine-checkable here.
+#
+# The lab harness, Claude Code 2.1.316, resolved --model haiku to claude-haiku-5-5
+# (system init event, 2026-11-16). Both --effort low and --effort medium reached
+# the account quota refusal, so this observes CLI admission and alias resolution,
+# not completed model execution. Haiku 4.5 is not the alias observed here.
+# B1 sets only low and medium: mechanical work gains nothing from a higher
+# effort and a dispatch that
+# needs one belongs in B2 or above. B1 keeps timeout_s 240 and max_concurrent null
+# from before the ruling (no cap was set for it, and none is invented here);
+# its destination now names both routes the band serves.
 #
 # The set of models a background agent may run on stays in
 # agent_model_allowlist.json (allowed_models).
@@ -67,11 +81,11 @@ bands:
   B1:
     score_min: 0
     score_max: 4
-    models: []
-    efforts: []
+    models: ["haiku"]
+    efforts: ["low", "medium"]
     timeout_s: 240
     max_concurrent: null
-    destination: "onex delegate"
+    destination: "Haiku lane, or onex delegate for pure text"
   B1c:
     score_min: 0
     score_max: 4

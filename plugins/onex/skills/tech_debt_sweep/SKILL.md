@@ -374,7 +374,7 @@ Tech Debt Sweep Summary
 ============================================================
 
 Repos scanned: 7
-Stale-ignores skipped: 1 (omnibase_compat -- mypy failed)
+Stale-ignores skipped: 1 (the repository's mypy run failed)
 Categories: 6
 
 | Category | Findings | New | Already Tracked | Tickets Created |

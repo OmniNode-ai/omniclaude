@@ -21,7 +21,7 @@ Anti-patterns to detect in any plan, design, or implementation proposal. Each en
 
 **Flag**: Any plan that proposes passing structured data as raw strings, dicts, `json.loads` output, or untyped payloads between nodes or across Kafka topics.
 
-**Rule**: All inter-node data — event envelopes, command payloads, response objects — must be declared as Pydantic models in `omnibase_compat` or the owning repo's schema module. Type safety is enforced at the boundary; strings are not boundaries.
+**Rule**: Declare all inter-node data, including event envelopes, command payloads, and response objects, as Pydantic models in `omnibase_core` or the owning repository's schema module. Enforce type safety at the boundary.
 
 **Signals to flag**:
 - "Parse the JSON payload with `json.loads`"

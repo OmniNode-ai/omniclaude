@@ -93,7 +93,7 @@ def test_reject_underscore_spelling(mod, tmp_path: Path) -> None:
 def test_reject_branch_override(mod, tmp_path: Path) -> None:
     block = (
         "[tool.uv.sources]\n"
-        'omnibase-compat = { git = "https://github.com/OmniNode-ai/omnibase_compat.git", '
+        'omnibase-infra = { git = "https://github.com/OmniNode-ai/omnibase_infra.git", '
         'branch = "dev" }\n'
     )
     path = _write_pyproject(tmp_path, block)
@@ -132,8 +132,8 @@ def test_reject_indented_inline_table(mod, tmp_path: Path) -> None:
 
 def test_reject_uv_sources_subtable(mod, tmp_path: Path) -> None:
     block = (
-        "[tool.uv.sources.omnibase-compat]\n"
-        'git = "https://github.com/OmniNode-ai/omnibase_compat.git"\n'
+        "[tool.uv.sources.omnibase-spi]\n"
+        'git = "https://github.com/OmniNode-ai/omnibase_spi.git"\n'
         'rev = "deadbeef"\n'
     )
     path = _write_pyproject(tmp_path, block)

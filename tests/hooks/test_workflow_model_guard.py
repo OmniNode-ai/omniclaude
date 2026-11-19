@@ -33,6 +33,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -42,6 +43,9 @@ from typing import Any, Final
 
 import pytest
 import yaml
+from omnibase_core.validators.no_unguarded_git_subprocess import (
+    scrub_git_location_env,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -89,6 +93,9 @@ _ROUTE_B4 = (
 _ROUTE_B5 = (
     "ROUTE: band=B5 score=18 dims=S3A3R2V2N3C2J3 dest=lane model=opus effort=xhigh"
 )
+_ROUTE_B1_HAIKU = (
+    "ROUTE: band=B1 score=3 dims=S1A1R0V1N0C0J0 dest=haiku-lane model=haiku effort=low"
+)
 _ROUTE_B5_FABLE = (
     "ROUTE: band=B5 score=16 dims=S3A3R3V3N2C2J0 dest=claude model=fable effort=high "
     "(complexity: operator ruling)"
@@ -117,14 +124,14 @@ def _routed_call(route: str | None, model: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def test_shipped_allowlist_is_exactly_the_three_background_models() -> None:
-    """Fable joined on 2026-11-10 (operator ruling) for large tasks at band B5."""
-    assert set(ALLOWLIST) == {"fable", "opus", "sonnet"}
+def test_shipped_allowlist_is_exactly_the_four_background_models() -> None:
+    """Fable joined 2026-11-10 (B5), haiku 2026-11-16 (B1) by operator ruling."""
+    assert set(ALLOWLIST) == {"fable", "haiku", "opus", "sonnet"}
 
 
-def test_shipped_allowlist_has_no_haiku() -> None:
-    """Operator ruling OMN-17427: haiku is removed from background dispatch."""
-    assert "haiku" not in ALLOWLIST
+def test_shipped_allowlist_has_haiku() -> None:
+    """RULING 2026-11-16T19:43:11Z: haiku may run low-score mechanical work."""
+    assert "haiku" in ALLOWLIST
 
 
 def test_shipped_allowlist_has_no_inherit_escape_hatch() -> None:
@@ -235,7 +242,7 @@ def test_unlisted_model_fails_and_the_message_quotes_the_offending_value() -> No
     assert len(findings) == 1
     assert "'gpt-5'" in findings[0].reason
     assert "not an allowed background model" in findings[0].reason
-    assert "fable, opus, sonnet" in findings[0].reason
+    assert "fable, haiku, opus, sonnet" in findings[0].reason
     assert findings[0].label == "other-call"
 
 
@@ -294,6 +301,7 @@ def test_meta_phases_model_is_informational_only() -> None:
 
 def test_nested_template_substitution_does_not_desynchronise_the_scan() -> None:
     source = (
+        "const c = 'x'\n"
         "await agent(`a ${ `b ${c}` } d`, { label: 'nested-tmpl', model: 'sonnet' })"
     )
     assert _check(source) == []
@@ -323,18 +331,21 @@ def test_double_quoted_model_passes() -> None:
     assert _check('await agent("x", { label: "dq", model: "sonnet" })') == []
 
 
-@pytest.mark.parametrize("model", ["sonnet", "opus"])
+@pytest.mark.parametrize("model", ["sonnet", "opus", "haiku"])
 def test_workflow_agent_on_an_allowed_model_passes(model: str) -> None:
     assert _check(f"await agent(`x`, {{ label: 'ok', model: '{model}' }})") == []
 
 
-@pytest.mark.parametrize("model", ["haiku", "claude-haiku-4-5-20251001"])
-def test_workflow_agent_on_haiku_is_refused_and_says_it_is_removed(model: str) -> None:
-    findings = _check(f"await agent(`x`, {{ label: 'h', model: '{model}' }})")
+def test_workflow_agent_on_a_haiku_alias_is_allowed_and_a_pinned_id_is_not() -> None:
+    """The alias is the allowlisted spelling; a dated id is not, and no longer
+    carries a 'removed' note because haiku is not removed."""
+    assert _check("await agent(`x`, { label: 'h', model: 'haiku' })") == []
+    findings = _check(
+        "await agent(`x`, { label: 'h', model: 'claude-haiku-4-5-20251001' })"
+    )
     assert len(findings) == 1
     assert "not an allowed background model" in findings[0].reason
-    assert "haiku is removed" in findings[0].reason
-    assert "onex delegate" in findings[0].reason
+    assert "haiku is removed" not in findings[0].reason
 
 
 def test_line_numbers_point_at_the_offending_call() -> None:
@@ -381,9 +392,16 @@ def test_real_offending_snippet_is_refused(path: Path) -> None:
 
 @pytest.mark.parametrize("path", _fixtures("passing"), ids=lambda p: p.name)
 def test_real_passing_snippet_is_allowed(path: Path) -> None:
-    findings = _GUARD.check_workflow_script(
-        path.read_text(encoding="utf-8"), ALLOWLIST, filename=path.name
-    )
+    """The model check holds on a real excerpt. An excerpt is one call clipped from its script, so
+    a const the prompt names (``COMMON``, ``counts``) sits outside it and the lab-host check
+    reads that as an unresolved substitution; that finding is not a model finding."""
+    findings = [
+        f
+        for f in _GUARD.check_workflow_script(
+            path.read_text(encoding="utf-8"), ALLOWLIST, filename=path.name
+        )
+        if not _GUARD._lab().fix_lines([f.reason])
+    ]
     assert findings == [], (
         f"{path.name} names an allowed model in the real corpus but was flagged: "
         f"{[f.render() for f in findings]!r}"
@@ -441,14 +459,18 @@ def test_agent_with_opus_passes() -> None:
     )
 
 
-@pytest.mark.parametrize("model", ["haiku", "claude-haiku-4-5-20251001"])
-def test_agent_on_haiku_is_refused_and_says_it_is_removed(model: str) -> None:
+def test_agent_on_a_haiku_alias_is_allowed_and_a_pinned_id_is_not() -> None:
+    allowed = _GUARD.check_agent_input(
+        {"subagent_type": "general-purpose", "model": "haiku"}, ALLOWLIST
+    )
+    assert allowed == []
     findings = _GUARD.check_agent_input(
-        {"subagent_type": "general-purpose", "model": model}, ALLOWLIST
+        {"subagent_type": "general-purpose", "model": "claude-haiku-4-5-20251001"},
+        ALLOWLIST,
     )
     assert len(findings) == 1
-    assert "haiku is removed" in findings[0].reason
-    assert "onex delegate" in findings[0].reason
+    assert "not an allowed background model" in findings[0].reason
+    assert "haiku is removed" not in findings[0].reason
 
 
 def test_agent_with_no_model_fails() -> None:
@@ -490,14 +512,18 @@ def _registered_command() -> str:
 
 
 def _run_hook(
-    payload: dict[str, Any], tmp_path: Path
+    payload: dict[str, Any],
+    tmp_path: Path,
+    *,
+    hook_script: Path = _HOOK_SCRIPT,
+    registry_root: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     home = tmp_path / "home"
     home.mkdir(exist_ok=True)
     env = {
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
         "HOME": str(home),
-        "CLAUDE_PLUGIN_ROOT": str(_HOOKS_DIR.parent),
+        "CLAUDE_PLUGIN_ROOT": str(hook_script.parents[2]),
         "CLAUDE_PROJECT_DIR": str(_REPO_ROOT),
         "ONEX_HOOK_LOG": str(tmp_path / "hook.log"),
         "ONEX_STATE_DIR": str(tmp_path / "state"),
@@ -506,8 +532,10 @@ def _run_hook(
         # host happens to be in.
         "OMNICLAUDE_MODE": "full",
     }
+    if registry_root is not None:
+        env["OMNI_HOME"] = str(registry_root)
     return subprocess.run(
-        ["bash", str(_HOOK_SCRIPT)],
+        ["bash", str(hook_script)],
         input=json.dumps(payload),
         capture_output=True,
         text=True,
@@ -1100,17 +1128,90 @@ def test_fable_is_refused_below_band_b5() -> None:
     assert "band B4" in findings[0].reason
 
 
-def test_haiku_is_still_refused_at_every_band() -> None:
-    for route in (_ROUTE_B3, _ROUTE_B4, _ROUTE_B5_FABLE):
+def test_haiku_is_refused_at_b2_and_above_naming_the_bands_models() -> None:
+    """Haiku is allowed in band B1 only (RULING 2026-11-16T19:43:11Z)."""
+    for route in (_ROUTE_B2, _ROUTE_B3, _ROUTE_B4, _ROUTE_B5, _ROUTE_B5_FABLE):
         band = route.split("band=")[1].split()[0]
-        swapped = (
-            route.replace("model=fable", "model=haiku")
-            .replace("model=opus", "model=haiku")
-            .replace("model=sonnet", "model=haiku")
-        )
+        swapped = re.sub(r"model=\w+", "model=haiku", route)
         findings = _check_routed(_routed_call(swapped, "haiku"))
-        assert findings, band
-        assert any("haiku" in f.reason for f in findings), band
+        assert len(findings) == 1, band
+        reason = findings[0].reason
+        assert f"band {band} allows only:" in reason, band
+        assert "'haiku' is not in that set" in reason, band
+        assert "haiku is removed" not in reason, band
+
+
+def test_haiku_route_in_the_haiku_band_passes() -> None:
+    assert _check_routed(_routed_call(_ROUTE_B1_HAIKU, "haiku")) == []
+
+
+@pytest.mark.parametrize("effort", ["low", "medium"])
+def test_haiku_band_accepts_the_efforts_in_its_set(effort: str) -> None:
+    route = _ROUTE_B1_HAIKU.replace("effort=low", f"effort={effort}")
+    assert _check_routed(_routed_call(route, "haiku")) == []
+
+
+@pytest.mark.parametrize("effort", ["high", "xhigh", "max", "ultra"])
+def test_haiku_band_refuses_an_effort_outside_its_set(effort: str) -> None:
+    route = _ROUTE_B1_HAIKU.replace("effort=low", f"effort={effort}")
+    findings = _check_routed(_routed_call(route, "haiku"))
+    assert len(findings) == 1
+    assert findings[0].reason == (
+        f"ROUTE effort={effort} is not allowed for band B1 (allowed: low, medium)"
+    )
+
+
+@pytest.mark.parametrize("model", ["sonnet", "opus", "fable"])
+def test_haiku_band_refuses_any_other_model(model: str) -> None:
+    route = _ROUTE_B1_HAIKU.replace("model=haiku", f"model={model}")
+    findings = _check_routed(_routed_call(route, model))
+    assert len(findings) == 1
+    assert "band B1 allows only: haiku" in findings[0].reason
+
+
+def test_haiku_route_whose_score_does_not_fit_the_haiku_band_is_refused() -> None:
+    """Score 5 implies band B2; a haiku ROUTE claiming B1 sits below its score."""
+    route = _ROUTE_B1_HAIKU.replace("score=3", "score=5").replace(
+        "S1A1R0V1N0C0J0", "S1A1R1V1N1C0J0"
+    )
+    findings = _check_routed(_routed_call(route, "haiku"))
+    assert len(findings) == 1
+    assert "below the band score 5 implies" in findings[0].reason
+
+
+def test_haiku_route_with_a_hard_floor_dimension_is_refused() -> None:
+    route = _ROUTE_B1_HAIKU.replace("S1A1R0V1N0C0J0", "S0A0R3V0N0C0J0")
+    findings = _check_routed(_routed_call(route, "haiku"))
+    assert len(findings) == 1
+    assert "hard floor" in findings[0].reason
+
+
+def test_haiku_band_is_data_only_b1c_and_b0_still_dispatch_no_agent() -> None:
+    assert ROUTING.bands["B1"].models == frozenset({"haiku"})
+    assert ROUTING.bands["B1"].efforts == frozenset({"low", "medium"})
+    assert ROUTING.bands["B0"].models == frozenset()
+    assert ROUTING.bands["B1c"].models == frozenset()
+    # Every other band is exactly as before the haiku ruling.
+    assert ROUTING.bands["B2"].models == frozenset({"sonnet"})
+    assert ROUTING.bands["B2"].efforts == frozenset({"medium", "high"})
+    assert ROUTING.bands["B3"].models == frozenset({"sonnet"})
+    assert ROUTING.bands["B3"].efforts == frozenset({"high"})
+    assert ROUTING.bands["B4"].models == frozenset({"opus"})
+    assert ROUTING.bands["B5"].models == frozenset({"opus", "fable"})
+
+
+def test_haiku_agent_tool_dispatch_in_b1_passes_and_in_b3_is_refused() -> None:
+    base = {"subagent_type": "general-purpose", "model": "haiku", "description": "d"}
+    ok = _GUARD.check_agent_input(
+        {**base, "prompt": f"{_ROUTE_B1_HAIKU}\nwork"}, ALLOWLIST, routing=ROUTING
+    )
+    assert ok == []
+    b3 = _ROUTE_B3.replace("model=sonnet", "model=haiku")
+    bad = _GUARD.check_agent_input(
+        {**base, "prompt": f"{b3}\nwork"}, ALLOWLIST, routing=ROUTING
+    )
+    assert len(bad) == 1
+    assert "band B3 allows only: sonnet" in bad[0].reason
 
 
 def test_a_missing_model_is_still_refused_with_a_fable_route() -> None:
@@ -1203,7 +1304,7 @@ def test_effort_must_be_in_the_band_set() -> None:
     assert "effort" in findings[0].reason
 
 
-@pytest.mark.parametrize("band", ["B0", "B1", "B1c"])
+@pytest.mark.parametrize("band", ["B0", "B1c"])
 def test_non_model_band_cannot_dispatch_an_agent(band: str) -> None:
     route = f"ROUTE: band={band} score=2 dims=S1A1R0V0N0C0J0 dest=x model=sonnet effort=high"
     findings = _check_routed(_routed_call(route, "sonnet"))
@@ -1236,6 +1337,31 @@ def test_registered_hook_blocks_b4_route_with_sonnet_model(tmp_path: Path) -> No
     )
     assert result.returncode == 2
     assert "band B4" in result.stdout
+
+
+def test_registered_hook_passes_a_haiku_route_in_the_haiku_band(tmp_path: Path) -> None:
+    result = _run_hook(
+        {
+            "tool_name": "Workflow",
+            "tool_input": {"script": _routed_call(_ROUTE_B1_HAIKU, "haiku")},
+        },
+        tmp_path,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout == ""
+
+
+def test_registered_hook_blocks_a_haiku_route_in_b3(tmp_path: Path) -> None:
+    route = _ROUTE_B3.replace("model=sonnet", "model=haiku")
+    result = _run_hook(
+        {
+            "tool_name": "Workflow",
+            "tool_input": {"script": _routed_call(route, "haiku")},
+        },
+        tmp_path,
+    )
+    assert result.returncode == 2
+    assert "band B3 allows only: sonnet" in result.stdout
 
 
 def test_registered_hook_blocks_a_missing_route(tmp_path: Path) -> None:
@@ -1314,3 +1440,1589 @@ def test_effort_is_read_from_the_agent_options_object() -> None:
     ]
     assert efforts == ["low"]
     assert _check(source) == []
+
+
+# ---------------------------------------------------------------------------
+# Lab-host work (OMN-24618, OMN-24710)
+# ---------------------------------------------------------------------------
+
+
+def _lab() -> Any:
+    """The lab-host check module the guard loads by path."""
+    return _GUARD._lab()
+
+
+@pytest.fixture(autouse=True)
+def _dispatching_host_is_not_a_lab_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The check skips a lab host; a test runner may be one, so it never reads its own name."""
+    monkeypatch.setattr(_lab().socket, "gethostname", lambda: "dev-laptop")
+
+
+@pytest.fixture
+def lab_table(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Lab hosts: h201 and h202 from the pool table, labbox from the ssh config."""
+    (tmp_path / ".ssh").mkdir()
+    (tmp_path / ".ssh" / "config").write_text("Host labbox\nHost *\nHost github.com\n")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv(
+        "LANDING_POOL_HOSTS", json.dumps([{"name": "h201"}, {"name": "h202"}])
+    )
+
+
+def _lab_check(prompt: str, label: str = "r") -> list[Any]:
+    source = f"await agent(`{prompt}`, {{ label: '{label}', model: 'sonnet' }})\n"
+    return list(_GUARD.check_workflow_script(source, ALLOWLIST, filename="case.js"))
+
+
+def _refused(findings: list[Any], phrase: str = "no declared placement") -> bool:
+    return len(findings) == 1 and phrase in findings[0].reason
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "run ssh h201 docker ps and report",
+        "ssh -o BatchMode=yes me@labbox uptime",
+        "run docker ps on h202 and list the containers",
+        "systemctl restart onex on h201",
+        "first do a thing\\nthen ssh h201 ls",
+    ],
+)
+def test_lab_host_work_refused_without_declaration(
+    lab_table: None, prompt: str
+) -> None:
+    assert _refused(_lab_check(prompt))
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "scp h201:/tmp/report.txt . and read it",
+        "rsync -a h202:/data/out ./out then summarise",
+        "sftp me@labbox and fetch the log",
+        "first a thing\\nthen scp ./x h201:/tmp/x",
+    ],
+)
+def test_lab_host_work_copy_commands_to_a_lab_host_refused_and_declaration_admits(
+    lab_table: None, prompt: str
+) -> None:
+    """scp, sftp and rsync reach a lab host the way ssh does: no declared placement, no pass (OMN-24618)."""
+    assert _refused(_lab_check(prompt))
+    assert _lab_check(f"{prompt}\\nPLACEMENT: remote-lane") == []
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "scp ./a me@example.org:/tmp/a",
+        "rsync -a ./src/ ./dst/",
+        "the scp and rsync man pages describe copies",
+    ],
+)
+def test_lab_host_work_copy_commands_not_naming_a_lab_host_untouched(
+    lab_table: None, prompt: str
+) -> None:
+    assert _lab_check(prompt) == []
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "ssh h201 ls LOCAL-ONLY:",
+        "ssh h201 ls LOCAL-ONLY:   \\nmore",
+        "ssh h201 ls LOCAL-ONLY: .",
+    ],
+)
+def test_lab_host_work_refused_with_empty_local_only_reason(
+    lab_table: None, prompt: str
+) -> None:
+    assert len(_lab_check(prompt)) == 1
+
+
+_DECLARATIONS = [
+    "PLACEMENT: remote-lane",
+    "PLACEMENT: fable-review",
+    "LOCAL-ONLY: reading a mac-local file the lab cannot reach",
+]
+
+
+@pytest.mark.parametrize("declaration", _DECLARATIONS)
+def test_lab_host_work_allowed_with_declaration_in_prompt(
+    lab_table: None, declaration: str
+) -> None:
+    assert _lab_check(f"{declaration}\\nssh h201 docker ps") == []
+
+
+@pytest.mark.parametrize("declaration", _DECLARATIONS)
+def test_lab_host_work_allowed_with_declaration_in_label(
+    lab_table: None, declaration: str
+) -> None:
+    assert _lab_check("ssh h201 docker ps", label=declaration) == []
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "ssh buildbox.example.com uptime",
+        "the docker image is rebuilt nightly; explain how docker layers work",
+        "summarise the h201 design note",
+        "systemctl --user status mything",
+    ],
+)
+def test_lab_host_work_unrelated_prompt_untouched(lab_table: None, prompt: str) -> None:
+    assert _lab_check(prompt) == []
+
+
+@pytest.fixture
+def lab_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """No pool variable, no table variable, an empty ssh config: nothing is a lab host yet."""
+    for var in (
+        "LANDING_POOL_HOSTS",
+        "ONEX_LAB_RUN_HOSTS",
+        "ONEX_SKILL_OVERLAY_ROOTS",
+        "OMNI_HOME",
+    ):
+        monkeypatch.delenv(var, raising=False)
+    (tmp_path / ".ssh").mkdir()
+    (tmp_path / ".ssh" / "config").write_text("Host *\n")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    return tmp_path
+
+
+def test_lab_host_work_no_table_means_nothing_to_refuse(lab_env: Path) -> None:
+    """With no pool, no table and an empty ssh config nothing is a lab host, whatever the
+    host's own ONEX_LAB_RUN_HOSTS says (lab_env clears every table variable)."""
+    assert _lab_check("ssh h201 ls") == []
+
+
+def test_lab_host_work_agent_tool_refused_and_admitted(lab_table: None) -> None:
+    refused = _GUARD.check_agent_input(
+        {"model": "sonnet", "prompt": "ssh h201 docker ps"}, ALLOWLIST
+    )
+    assert len(refused) == 1
+    admitted = _GUARD.check_agent_input(
+        {
+            "model": "sonnet",
+            "prompt": "ssh h201 docker ps",
+            "description": "PLACEMENT: remote-lane",
+        },
+        ALLOWLIST,
+    )
+    assert admitted == []
+
+
+def _ip(*octets: int) -> str:
+    return ".".join(str(o) for o in octets)
+
+
+_TABLE = """\
+hosts:
+  - name: h301
+    target: ops@tablehost
+    fallback_targets: [spare1, ops@spare2]
+    cap: 4
+  - name: h302
+    target: ops@other
+    available: false
+"""
+
+
+def test_lab_host_work_names_load_from_ssh_config_and_pool_rows(
+    lab_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (lab_env / ".ssh" / "config").write_text(
+        f"Host alpha beta\n  HostName {_ip(10, 9, 9, 9)}\nHost *\nHost github.com\n"
+    )
+    monkeypatch.setenv(
+        "LANDING_POOL_HOSTS", json.dumps([{"name": "h201", "target": "me@gamma"}])
+    )
+    assert _lab().hostnames() == {
+        "alpha",
+        "beta",
+        _ip(10, 9, 9, 9),
+        "h201",
+        "gamma",
+    }
+
+
+def test_lab_host_work_table_names_seen_with_pool_variable_unset(
+    lab_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    table = lab_env / "lab_hosts.yaml"
+    table.write_text(_TABLE)
+    monkeypatch.setenv("ONEX_LAB_RUN_HOSTS", str(table))
+    for prompt in (
+        "ssh h301 uptime",
+        "ssh tablehost docker ps",
+        "docker ps on spare1",
+        "systemctl restart x on spare2",
+    ):
+        assert _refused(_lab_check(prompt))
+
+
+def test_lab_host_work_table_from_overlay_store_snapshot(
+    lab_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The table is found the way the placement code finds it: the store reader's snapshot_root."""
+    root = lab_env / "overlays"
+    (root / "node_overlay_store_read_effect").mkdir(parents=True)
+    (root / "node_overlay_store_read_effect" / "overlay.yaml").write_text(
+        f"snapshot_root: {lab_env}/snap\n"
+    )
+    (lab_env / "snap" / "lab_hosts").mkdir(parents=True)
+    (lab_env / "snap" / "lab_hosts" / "overlay.yaml").write_text(_TABLE)
+    monkeypatch.setenv("ONEX_SKILL_OVERLAY_ROOTS", str(root))
+    assert len(_lab_check("ssh h301 uptime")) == 1
+
+
+_REAL_TABLE = """\
+hosts:
+  - name: h105
+    target: ops@box-a
+    available: false
+  - name: h200
+    target: ops@box-b
+  - name: h201
+    target: ops@box-c
+"""
+
+
+_CLONE_ROOT = "overlays/overlays"
+_READER_ROOT = "overlay-store-reader/overlays/overlays"
+
+
+@pytest.mark.parametrize("store_root", [_CLONE_ROOT, _READER_ROOT])
+def test_lab_table_real_layout_with_only_the_registry_variable_set(
+    lab_env: Path, monkeypatch: pytest.MonkeyPatch, store_root: str
+) -> None:
+    """A tree laid out like the real one: the overlays clone (or the store reader checkout) sits
+    beside the registry root, the store reader's overlay names a snapshot_root under HOME, and
+    OMNI_HOME is the only variable set. The ssh config is empty, so every name comes from the table."""
+    registry = lab_env / "work" / "registry"
+    registry.mkdir(parents=True)
+    reader = lab_env / "work" / store_root
+    (reader / "node_overlay_store_read_effect").mkdir(parents=True)
+    (reader / "node_overlay_store_read_effect" / "overlay.yaml").write_text(
+        "snapshot_root: ~/snap  # where the reader writes\n"
+    )
+    (lab_env / "snap" / "lab_hosts").mkdir(parents=True)
+    (lab_env / "snap" / "lab_hosts" / "overlay.yaml").write_text(_REAL_TABLE)
+    monkeypatch.setenv("OMNI_HOME", str(registry))
+    for prompt in (
+        "ssh h201 docker ps",
+        "ssh h200 uptime",
+        "docker ps on h105",
+        "ssh box-c uptime",
+    ):
+        assert _refused(_lab_check(prompt)), prompt
+    assert _lab_check("ssh buildbox.example.com uptime") == []
+
+
+def test_lab_table_real_layout_first_store_reader_overlay_decides(
+    lab_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The first store reader overlay found decides, as handler_host_capability.snapshot_root does:
+    one with no snapshot_root line yields no table and a later root is not tried."""
+    registry = lab_env / "work" / "registry"
+    registry.mkdir(parents=True)
+    for root, text in ((_CLONE_ROOT, "other: 1\n"), (_READER_ROOT, None)):
+        reader = lab_env / "work" / root
+        (reader / "node_overlay_store_read_effect").mkdir(parents=True)
+        (reader / "node_overlay_store_read_effect" / "overlay.yaml").write_text(
+            text or "snapshot_root: ~/snap\n"
+        )
+    (lab_env / "snap" / "lab_hosts").mkdir(parents=True)
+    (lab_env / "snap" / "lab_hosts" / "overlay.yaml").write_text(_REAL_TABLE)
+    monkeypatch.setenv("OMNI_HOME", str(registry))
+    assert _lab_check("ssh h201 docker ps") == []
+
+
+def test_lab_host_work_ssh_config_alias_seen_with_pool_variable_unset(
+    lab_env: Path,
+) -> None:
+    lab_ip = _ip(10, 1, 2, 3)
+    (lab_env / ".ssh" / "config").write_text(f"Host labalias\n  HostName {lab_ip}\n")
+    assert len(_lab_check("ssh labalias uptime")) == 1
+    assert len(_lab_check(f"ssh {lab_ip} uptime")) == 1
+    # The /24 of a configured lab address is the lab subnet.
+    assert len(_lab_check(f"ssh root@{_ip(10, 1, 2, 77)} docker ps")) == 1
+    assert _lab_check(f"ssh {_ip(10, 1, 3, 3)} uptime") == []
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        f"ssh {_ip(192, 168, 86, 201)} docker ps",
+        f"ssh root@{_ip(192, 168, 1, 45)} uptime",
+        f"ssh {_ip(10, 0, 0, 5)} uptime",
+        f"ssh {_ip(203, 0, 113, 5)} uptime",
+        f"release {_ip(192, 168, 86, 1)} notes mention a router",
+    ],
+)
+def test_lab_host_work_unconfigured_address_untouched(
+    lab_env: Path, prompt: str
+) -> None:
+    """No address range is built in: an address nothing configures is not a lab address."""
+    assert _lab_check(prompt) == []
+
+
+@pytest.mark.parametrize(
+    "reason",
+    ["<reason>", "TBD", "todo", "n/a", "none", "reason", "needed", "because", ".."],
+)
+def test_lab_host_work_local_only_placeholder_reason_refused(
+    lab_table: None, reason: str
+) -> None:
+    assert len(_lab_check(f"LOCAL-ONLY: {reason}\\nssh h201 ls")) == 1
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "reading a mac-local file the lab cannot reach",
+        "the keychain only unlocks on the operator Mac",
+    ],
+)
+def test_lab_host_work_local_only_real_reason_allowed(
+    lab_table: None, reason: str
+) -> None:
+    assert _lab_check(f"LOCAL-ONLY: {reason}\\nssh h201 ls") == []
+
+
+@pytest.mark.parametrize("host", ["h201", "h201.example.org"])
+def test_lab_host_work_skipped_when_the_dispatching_host_is_a_lab_host(
+    lab_table: None, monkeypatch: pytest.MonkeyPatch, host: str
+) -> None:
+    """Lab work belongs on a lab host, so a dispatch made there is not checked; the Mac is."""
+    assert _refused(_lab_check("ssh h202 docker ps"))
+    monkeypatch.setattr(_lab().socket, "gethostname", lambda: host)
+    assert _lab_check("ssh h202 docker ps") == []
+
+
+def _lab_script(prompt_expr: str, setup: str = "", label: str = "r") -> list[Any]:
+    source = f"{setup}\nawait agent({prompt_expr}, {{ label: '{label}', model: 'sonnet' }})\n"
+    return list(_GUARD.check_workflow_script(source, ALLOWLIST, filename="case.js"))
+
+
+def test_lab_host_work_const_held_prompt_read_by_name(lab_table: None) -> None:
+    assert _refused(_lab_script("PROMPT", "const PROMPT = 'ssh h201 docker ps'"))
+    assert len(_lab_script("PROMPT", "const PROMPT = `run\nssh h201 ls`;")) == 1
+
+
+def test_lab_host_work_const_chain_template_and_concat_read(lab_table: None) -> None:
+    setup = "const CMD = 'ssh h201 docker ps'\nconst BODY = `do: ${CMD}`\n"
+    assert len(_lab_script("BODY", setup)) == 1
+    assert len(_lab_script("'prefix ' + CMD", setup)) == 1
+    assert len(_lab_script("`pre ${BODY}`", setup)) == 1
+
+
+def test_lab_host_work_function_built_prompt_read(lab_table: None) -> None:
+    setup = "function build(x) { return `ssh h201 uptime ${x}` }\n"
+    assert _refused(_lab_script("build(1)", setup))
+
+
+def test_lab_host_work_function_parameter_is_what_the_call_passes(
+    lab_table: None,
+) -> None:
+    """A parameter is resolved by the call's argument, which sits in the scanned span."""
+    setup = "function build(x) { return `explain ${x}` }\n"
+    assert _lab_script("build('docker layers')", setup) == []
+    assert _lab_script("build(args.topic)", setup) == []
+    assert _refused(_lab_script("build('ssh h201 ls')", setup))
+    with_command = "function build(x) { return `docker ${x}` }\n"
+    assert _refused(_lab_script("build(args.topic)", with_command), "cannot be read")
+
+
+def test_lab_host_work_const_held_prompt_with_declaration_admitted(
+    lab_table: None,
+) -> None:
+    setup = "const PROMPT = 'PLACEMENT: remote-lane\\nssh h201 docker ps'"
+    assert _lab_script("PROMPT", setup) == []
+    assert (
+        _lab_script(
+            "PROMPT",
+            "const PROMPT = 'ssh h201 ls'",
+            label="LOCAL-ONLY: the keychain lives on this Mac",
+        )
+        == []
+    )
+
+
+def test_lab_host_work_const_held_clean_prompt_untouched(lab_table: None) -> None:
+    assert _lab_script("PROMPT", "const PROMPT = 'summarise the design note'") == []
+    assert _lab_script("`explain ${TOPIC}`", "const TOPIC = 'docker layers'") == []
+
+
+@pytest.mark.parametrize(
+    ("expr", "setup"),
+    [
+        ("args.prompt", ""),
+        ("PROMPT", "const PROMPT = args.prompt"),
+        ("pick(items)", ""),
+        ("`${x}`", "const x = readIt()"),
+    ],
+)
+def test_lab_host_work_unreadable_prompt_refused(
+    lab_table: None, expr: str, setup: str
+) -> None:
+    assert _refused(_lab_script(expr, setup), "cannot be read")
+
+
+def test_lab_host_work_unreadable_prompt_with_declaration_admitted(
+    lab_table: None,
+) -> None:
+    assert _lab_script("args.prompt", label="PLACEMENT: remote-lane") == []
+
+
+# --- variable host (OMN-24710 finding 3) -----------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("expr", "setup"),
+    [
+        # A host from the script's args, in a template, in a concatenation, in a loop.
+        ("`ssh ${args.host} uptime`", ""),
+        ("`ssh ${h} uptime`", "for (const h of ['h201', 'h202']) { void h }"),
+        ("`ssh ${HOST} uptime`", "const HOST = args.host"),
+    ],
+)
+def test_lab_host_work_variable_host_substitution_makes_the_prompt_unreadable(
+    lab_table: None, expr: str, setup: str
+) -> None:
+    findings = _lab_script(expr, setup)
+    assert _refused(findings, "cannot be read")
+    declared = _lab_script(expr, setup, label="PLACEMENT: remote-lane")
+    assert declared == []
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "ssh $HOST uptime",
+        "ssh ${HOST} uptime",
+        "ssh -o BatchMode=yes me@$HOST ls",
+        "ssh me@${HOST}.lan ls",
+        "scp ./x $DEST",
+        'rsync -a ./out "$TARGET":/tmp',
+        "ssh $(cat hosts.txt) uptime",
+        "docker -H $DOCKER_HOST ps",
+        "run docker ps on $HOST",
+    ],
+)
+def test_lab_host_work_variable_host_shell_variable_refused_unless_declared(
+    lab_table: None, prompt: str
+) -> None:
+    """No name matches: the host is a shell variable and cannot be read."""
+    source = f"await agent('{prompt}', {{ label: 'r', model: 'sonnet' }})\n"
+    findings = list(_GUARD.check_workflow_script(source, ALLOWLIST, filename="c.js"))
+    assert _refused(findings), prompt
+    assert "variable" in findings[0].reason
+    declared = source.replace("'r'", "'PLACEMENT: remote-lane'")
+    assert _GUARD.check_workflow_script(declared, ALLOWLIST, filename="c.js") == []
+
+
+def test_lab_host_work_variable_host_resolved_const_is_read_not_refused(
+    lab_table: None,
+) -> None:
+    """A const the script defines is read: a non-lab host passes, a lab host is refused."""
+    prompt = "`ssh ${HOST} uptime`"
+    assert _lab_script(prompt, "const HOST = 'buildbox.example.com'") == []
+    assert _refused(_lab_script(prompt, "const HOST = 'h201'"))
+
+
+def test_lab_host_work_variable_host_in_a_prompt_naming_no_command_untouched(
+    lab_env: Path,
+) -> None:
+    assert _lab_check("the value $HOST is a shell variable; explain it") == []
+    assert _lab_check("price is $5 per hour") == []
+
+
+# --- host on a later line, dotted host (OMN-24710 finding 4) ----------------------------------
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "On h201 run:\\ndocker ps -a",
+        "docker ps -a\\nand do it on h202",
+        "systemctl restart onex\\n\\nthe host is labbox",
+        "run this:\\n\\n    docker ps\\n\\nagainst h201 please",
+    ],
+)
+def test_lab_host_work_multiline_host_refused(lab_table: None, prompt: str) -> None:
+    assert _refused(_lab_check(prompt))
+    assert _lab_check(f"{prompt}\\nPLACEMENT: remote-lane") == []
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "ssh h201.lan uptime",
+        "ssh h202.example.org docker ps",
+        "scp ./x labbox.example:/tmp/x",
+    ],
+)
+def test_lab_host_work_dotted_host_refused(lab_table: None, prompt: str) -> None:
+    assert _refused(_lab_check(prompt))
+    assert _lab_check(f"{prompt}\\nPLACEMENT: remote-lane") == []
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    ["ssh buildbox.h201.example uptime", "ssh x-h201 uptime", "ssh h2011 uptime"],
+)
+def test_lab_host_work_name_inside_another_name_untouched(
+    lab_table: None, prompt: str
+) -> None:
+    assert _lab_check(prompt) == []
+
+
+# --- ROUTE reads what dev reads (OMN-24710 finding 1) -----------------------------------------
+
+
+def _route(model: str, band: str, score: int, dims: str) -> str:
+    return (
+        f"ROUTE: band={band} score={score} dims={dims} dest=lane "
+        f"model={model} effort=high"
+    )
+
+
+def test_route_expansion_second_call_interpolating_the_first_result_is_accepted(
+    lab_table: None,
+) -> None:
+    """A const the prompt names is read by the lab check only: the ROUTE check reads the prompt
+    span and the label, as the base branch does. Reading the first call's text here put the first
+    call's ROUTE (sonnet) ahead of the second call's own (opus) and refused it on ROUTE alone."""
+    first = _route("sonnet", "B3", 9, "S2A1R1V2N1C1J1")
+    second = _route("opus", "B4", 14, "S2A2R2V2N2C2J2")
+    source = (
+        f"const first = await agent('{first}\\nwork', {{ label: 'a', model: 'sonnet' }})\n"
+        f"await agent(first + ' go', {{ label: '{second}', model: 'opus' }})\n"
+    )
+    findings = _GUARD.check_workflow_script(
+        source, ALLOWLIST, filename="c.js", routing=ROUTING
+    )
+    assert findings == []
+
+
+def test_route_expansion_a_real_route_mismatch_is_still_refused(
+    lab_table: None,
+) -> None:
+    """Control: the call's own ROUTE line still has to match its declared model."""
+    first = _route("sonnet", "B3", 9, "S2A1R1V2N1C1J1")
+    source = f"await agent('{first}\\nwork', {{ label: 'a', model: 'opus' }})\n"
+    findings = _GUARD.check_workflow_script(
+        source, ALLOWLIST, filename="c.js", routing=ROUTING
+    )
+    assert len(findings) == 1 and "does not match" in findings[0].reason
+
+
+def test_lab_host_work_real_hook_refuses_then_admits(lab_table: None) -> None:
+    """The registered shell hook, end to end: refused undeclared, silent when declared."""
+    bash = shutil.which("bash")
+    assert bash is not None
+
+    def run(prompt: str) -> subprocess.CompletedProcess[str]:
+        script = (
+            f"await agent(`{_ROUTE_B3}\\n{prompt}`, {{ label: 'r', model: 'sonnet' }})"
+        )
+        payload = json.dumps(
+            {"tool_name": "Workflow", "tool_input": {"script": script}}
+        )
+        return subprocess.run(
+            [bash, str(_HOOK_SCRIPT)],
+            input=payload,
+            capture_output=True,
+            text=True,
+            env={
+                **os.environ,
+                "CLAUDE_PLUGIN_ROOT": str(_REPO_ROOT / "plugins" / "onex"),
+                "CLAUDE_PROJECT_DIR": str(_REPO_ROOT),
+            },
+            cwd=_REPO_ROOT,
+            timeout=_TIMEOUT_S,
+            check=False,
+        )
+
+    refused = run("ssh h201 docker ps")
+    assert refused.returncode == 2, refused.stdout + refused.stderr
+    assert "no declared placement" in refused.stdout
+    assert "PLACEMENT: remote-lane" in refused.stdout
+    admitted = run("PLACEMENT: remote-lane\\nssh h201 docker ps")
+    assert admitted.returncode == 0 and admitted.stdout == ""
+
+
+# ---------------------------------------------------------------------------
+# OMN-24738: the installed shape, the local row, the unresolved substitution
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def installed_plugin(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A copy of ``plugins/onex`` laid out as the plugin cache lays it out: the plugin
+    directory and nothing of the repository (no ``src/``) around it."""
+    root = (
+        tmp_path_factory.mktemp("cache")
+        / "plugins"
+        / "cache"
+        / "omninode-tools-dev"
+        / "onex"
+        / "9.9.9"
+    )
+    shutil.copytree(
+        _REPO_ROOT / "plugins" / "onex",
+        root,
+        ignore=shutil.ignore_patterns("__pycache__", ".venv", "*.pyc"),
+    )
+    return root
+
+
+def _installed_hook(plugin: Path, tool_name: str, tool_input: dict[str, Any]) -> Any:
+    bash = shutil.which("bash")
+    assert bash is not None
+    return subprocess.run(
+        [bash, str(plugin / "hooks" / "scripts" / _HOOK_SCRIPT.name)],
+        input=json.dumps({"tool_name": tool_name, "tool_input": tool_input}),
+        capture_output=True,
+        text=True,
+        env={
+            **os.environ,
+            "CLAUDE_PLUGIN_ROOT": str(plugin),
+            "CLAUDE_PROJECT_DIR": str(_REPO_ROOT),
+        },
+        cwd=_REPO_ROOT,
+        timeout=_TIMEOUT_S,
+        check=False,
+    )
+
+
+def test_lab_host_work_installed_layout_admits_a_benign_agent_call(
+    installed_plugin: Path,
+) -> None:
+    """In the cache layout the lab check has no ``src/`` to load from. That must switch the
+    check off, never refuse every dispatch: a benign call exits 0 and prints nothing."""
+    own = installed_plugin.parents[1] / "src" / "omniclaude" / "handlers"
+    assert not (own / "lab_host_work.py").exists(), "the layout must hold no src/"
+    benign = _installed_hook(
+        installed_plugin,
+        "Agent",
+        {"model": "sonnet", "prompt": f"{_ROUTE_B3}\nsummarise the design note"},
+    )
+    assert benign.returncode == 0, benign.stdout + benign.stderr
+    assert benign.stdout == ""
+    script = (
+        f"await agent(`{_ROUTE_B3}\nsummarise it`, {{ label: 'r', model: 'sonnet' }})"
+    )
+    workflow = _installed_hook(installed_plugin, "Workflow", {"script": script})
+    assert workflow.returncode == 0, workflow.stdout + workflow.stderr
+    assert workflow.stdout == ""
+
+
+def test_lab_host_work_installed_layout_still_refuses_an_unnamed_model(
+    installed_plugin: Path,
+) -> None:
+    """Control: the rest of the guard still runs in the cache layout."""
+    refused = _installed_hook(
+        installed_plugin, "Agent", {"prompt": f"{_ROUTE_B3}\nsummarise it"}
+    )
+    assert refused.returncode == 2, refused.stdout + refused.stderr
+    assert "model" in refused.stdout
+
+
+def test_lab_host_work_installed_layout_repository_layout_still_checks_the_lab(
+    lab_table: None,
+) -> None:
+    """Control: with ``src/`` beside the guard the lab check is loaded and refuses."""
+    assert _GUARD._lab() is not None
+    assert _refused(_lab_check("ssh h201 docker ps"))
+
+
+_LOCAL_TABLE = """\
+hosts:
+  - name: macbox
+    target: dev-mac
+    local: true
+  - name: h201
+    target: lab201
+  - name: parked
+    target: parked-host
+    available: false
+"""
+
+
+def _own_host_env(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, hostname: str, rows: str
+) -> None:
+    (tmp_path / ".ssh").mkdir()
+    (tmp_path / ".ssh" / "config").write_text("Host *\n")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("LANDING_POOL_HOSTS", raising=False)
+    table = tmp_path / "lab_hosts.yaml"
+    table.write_text(rows)
+    monkeypatch.setenv("ONEX_LAB_RUN_HOSTS", str(table))
+    monkeypatch.setattr(_lab().socket, "gethostname", lambda: hostname)
+
+
+def test_lab_host_work_local_row_own_host_is_checked_like_any_mac(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The operator Mac is a ``local: true`` row of the table. The own-host skip never applies to
+    it, whatever its hostname is, or the check is off on the one host it exists for."""
+    _own_host_env(monkeypatch, tmp_path, "dev-mac", _LOCAL_TABLE)
+    assert _refused(_lab_check("ssh h201 docker ps"))
+    assert _refused(_lab_check("docker ps on lab201"))
+    assert _lab_check("PLACEMENT: remote-lane\\nssh h201 docker ps") == []
+
+
+def test_lab_host_work_local_row_own_host_in_the_pool_variable_is_checked(
+    monkeypatch: pytest.MonkeyPatch, lab_env: Path
+) -> None:
+    rows = [{"name": "macbox", "target": "dev-mac", "local": True}, {"name": "h201"}]
+    monkeypatch.setenv("LANDING_POOL_HOSTS", json.dumps(rows))
+    monkeypatch.setattr(_lab().socket, "gethostname", lambda: "dev-mac")
+    assert _refused(_lab_check("ssh h201 docker ps"))
+
+
+@pytest.mark.parametrize(
+    ("hostname", "skipped"),
+    [("lab201", True), ("h201", True), ("dev-mac", False), ("parked-host", False)],
+)
+def test_lab_host_work_local_row_own_host_skip_only_on_a_placeable_row(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    hostname: str,
+    skipped: bool,
+) -> None:
+    """Control: a row where lab work may be placed still skips; a local row and an
+    ``available: false`` row do not."""
+    _own_host_env(monkeypatch, tmp_path, hostname, _LOCAL_TABLE)
+    assert (_lab_check("ssh h201 docker ps") == []) is skipped
+
+
+@pytest.mark.parametrize(
+    ("expr", "setup"),
+    [
+        ("`Summarise ${args.path}`", ""),
+        ("`Summarise ${f}`", "for (const f of files) { void f }"),
+        ("`Summarise ${items.map(i => i.name).join(',')}`", ""),
+        ("fmt('layers')", "const fmt = (n) => `explain docker ${n}`"),
+        ("fmt('layers')", "const fmt = n => `explain docker ${n}`"),
+        (
+            "`Review: ${first}`",
+            "const first = await agent('plan it', { label: 'a', model: 'sonnet' })",
+        ),
+        (
+            "`Review: ${v}`",
+            "const v = pick ? await agent('a', { label: 'x', model: 'sonnet' }) : "
+            "await agent('b', { label: 'y', model: 'sonnet' })",
+        ),
+        ("args.prompt + ' go'", ""),
+    ],
+)
+def test_lab_host_work_unresolved_substitution_with_no_command_word_admitted(
+    lab_table: None, expr: str, setup: str
+) -> None:
+    assert _lab_script(expr, setup) == []
+
+
+@pytest.mark.parametrize(
+    ("expr", "setup"),
+    [
+        ("`ssh ${args.host} uptime`", ""),
+        ("`docker ps ${args.flags}`", ""),
+        ("args.prompt", ""),
+        ("`${v}`", "const v = await agent('a', { label: 'x', model: 'sonnet' })"),
+    ],
+)
+def test_lab_host_work_unresolved_substitution_refused_when_unreadable(
+    lab_table: None, expr: str, setup: str
+) -> None:
+    """A command word with no readable host, or no literal text at all, is still refused."""
+    assert _refused(_lab_script(expr, setup), "cannot be read")
+    assert _lab_script(expr, setup + "\n// x", label="PLACEMENT: remote-lane") == []
+
+
+def test_lab_host_work_unresolved_substitution_admitted_when_no_lab_host_is_known(
+    lab_env: Path,
+) -> None:
+    """An empty name set means no table, no pool and no ssh config: there is nothing to refuse."""
+    assert _lab()._tables(os.environ)[0] == frozenset()
+    assert _lab_script("`Summarise ${args.path}`") == []
+    assert _lab_script("args.prompt") == []
+    assert _lab_check("ssh $HOST ls") == []
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "read ~/.ssh/config and say what h201 is",
+        "open ./.ssh/config then describe h202",
+        "list /opt/bin/docker and h201",
+    ],
+)
+def test_lab_host_work_ssh_config_path_is_not_a_command(
+    lab_table: None, prompt: str
+) -> None:
+    assert _lab_check(prompt) == []
+    assert _refused(_lab_check(f"{prompt}\\nthen ssh h201 uptime"))
+
+
+def test_lab_host_work_table_read_once_per_hook_run(
+    lab_table: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The ssh config and the table are read when the first agent() call is checked, not again
+    for each of the following calls."""
+    reads: list[Path] = []
+    real = _lab()._read
+
+    def counting(path: Path) -> str | None:
+        reads.append(path)
+        return real(path)
+
+    monkeypatch.setattr(_lab(), "_read", counting)
+    calls = "".join(
+        f"await agent(`summarise part {i}`, {{ label: 'c{i}', model: 'sonnet' }})\n"
+        for i in range(25)
+    )
+    assert _GUARD.check_workflow_script(calls, ALLOWLIST, filename="many.js") == []
+    assert len(reads) == 1, reads
+
+
+def _copied_hook(tmp_path: Path) -> Path:
+    """An installed-tree shape independent of the canonical clone and test module."""
+    hooks = tmp_path / "installed" / "hooks"
+    shutil.copytree(_HOOKS_DIR, hooks, ignore=shutil.ignore_patterns("__pycache__"))
+    return hooks / "scripts" / _HOOK_SCRIPT.name
+
+
+def _haiku_payload(tool_name: str, route: str | None) -> dict[str, Any]:
+    if tool_name == "Workflow":
+        tool_input = {"script": _routed_call(route, "haiku")}
+    else:
+        tool_input = {
+            "model": "haiku",
+            "subagent_type": "general-purpose",
+            "description": "mechanical readback",
+            "prompt": f"{route}\nReturn the supplied text" if route else "Return text",
+        }
+    return {"tool_name": tool_name, "tool_input": tool_input}
+
+
+def _stale_clone(tmp_path: Path, *, allowlist_has_haiku: bool = False) -> Path:
+    """A registry root whose omniclaude clone is a full hooks tree without haiku.
+
+    ``allowlist_has_haiku`` keeps haiku in the clone's allowlist, so only its
+    routing contract is stale: a run that consults the clone's contract is then
+    refused by the band table alone, never by the allowlist.
+
+    The layout is the one the hook looks up: ``scripts/`` beside ``lib/`` and
+    ``config/`` under ``plugins/onex/hooks/``, inside a git checkout (``.git``).
+    The allowlist and the routing contract both lack haiku, so any run that
+    consults this clone for its policy, its guard module or its script refuses a
+    haiku call.
+    """
+    registry_root = tmp_path / "stale-registry"
+    clone = registry_root / "omniclaude"
+    hooks = clone / "plugins" / "onex" / "hooks"
+    shutil.copytree(_HOOKS_DIR, hooks, ignore=shutil.ignore_patterns("__pycache__"))
+    # A bare-minimum .git skeleton: the hook never runs git on the clone, and a
+    # git subprocess here would inherit a hook's GIT_DIR (OMN-18434).
+    git_dir = clone / ".git"
+    for sub in ("objects", "refs/heads"):
+        (git_dir / sub).mkdir(parents=True)
+    (git_dir / "HEAD").write_text("ref: refs/heads/dev\n", encoding="utf-8")
+    assert (clone / ".git").exists()
+    config = hooks / "config"
+    if not allowlist_has_haiku:
+        (config / "agent_model_allowlist.json").write_text(
+            json.dumps({"allowed_models": ["sonnet", "opus", "fable"]}),
+            encoding="utf-8",
+        )
+    contract = config / "contract_agent_routing.yaml"
+    original = contract.read_text(encoding="utf-8")
+    stale = original.replace('models: ["haiku"]', "models: []")
+    assert stale != original, "the stale clone must differ from the shipped contract"
+    contract.write_text(stale, encoding="utf-8")
+    for part in ("lib", "scripts", "config"):
+        assert (hooks / part).is_dir(), part
+    return registry_root
+
+
+def _clone_hook(registry_root: Path) -> Path:
+    return (
+        registry_root
+        / "omniclaude"
+        / "plugins"
+        / "onex"
+        / "hooks"
+        / "scripts"
+        / _HOOK_SCRIPT.name
+    )
+
+
+def _replace_once(path: Path, old: str, new: str) -> None:
+    """Rewrite one line of a copied file, failing when the text is not there."""
+    text = path.read_text(encoding="utf-8")
+    assert old in text, f"{old!r} not found in {path.name}"
+    path.write_text(text.replace(old, new), encoding="utf-8")
+
+
+def test_registered_hook_uses_installed_policy_with_stale_clone(tmp_path: Path) -> None:
+    hook = _copied_hook(tmp_path)
+    registry_root = _stale_clone(tmp_path)
+    payload = _haiku_payload("Workflow", _ROUTE_B1_HAIKU)
+    result = _run_hook(payload, tmp_path, hook_script=hook, registry_root=registry_root)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout == ""
+    # Control 1: the same payload through the clone's own full hooks tree is
+    # refused, so the clone really is stale and a hook that ran from it would
+    # exit 2 here instead of 0.
+    from_clone = _run_hook(
+        payload,
+        tmp_path,
+        hook_script=_clone_hook(registry_root),
+        registry_root=registry_root,
+    )
+    assert from_clone.returncode == 2, from_clone.stdout + from_clone.stderr
+    assert (
+        "model: 'haiku' is not an allowed background model"
+        in json.loads(from_clone.stdout)["reason"]
+    )
+    # Control 2: this exact loaded tree's policy decides, even with the same
+    # stale clone and the same payload. A disabled hook cannot pass it.
+    installed_allowlist = hook.parents[1] / "config" / "agent_model_allowlist.json"
+    installed_allowlist.write_text(
+        json.dumps({"allowed_models": ["sonnet", "opus", "fable"]}), encoding="utf-8"
+    )
+    refused = _run_hook(
+        payload, tmp_path, hook_script=hook, registry_root=registry_root
+    )
+    assert refused.returncode == 2, refused.stdout + refused.stderr
+    assert (
+        "model: 'haiku' is not an allowed background model"
+        in json.loads(refused.stdout)["reason"]
+    )
+
+
+def _consult_clone_for(guard: Path, names: tuple[str, ...]) -> None:
+    """Point the named config files of an installed guard module at OMNI_HOME."""
+    for name in names:
+        _replace_once(
+            guard,
+            f'Path(__file__).resolve().parent.parent / "config" / "{name}"',
+            'Path(__import__("os").environ["OMNI_HOME"]) / "omniclaude" '
+            f'/ "plugins" / "onex" / "hooks" / "config" / "{name}"',
+        )
+
+
+@pytest.mark.parametrize(
+    ("consulted", "reason_text"),
+    [
+        ("guard_module", "is not an allowed background model"),
+        ("config_files", "is not an allowed background model"),
+        # The clone's allowlist keeps haiku, so only the stale routing contract
+        # (band B1 with ``models: []``) can refuse this call. A hook that read
+        # the allowlist from its own tree and the contract from the clone is
+        # the one lookup the two allowlist mutants cannot see.
+        ("routing_contract_only", "band B1 dispatches no Claude agent"),
+    ],
+)
+def test_stale_clone_test_goes_red_when_the_clone_is_consulted(
+    consulted: str, reason_text: str, tmp_path: Path
+) -> None:
+    """Each way a hook could read the clone makes the stale-clone payload refuse.
+
+    The installed tree is rewritten so the named lookup goes through
+    ``OMNI_HOME``; the payload that the real hook passes is then refused. This
+    is the red half of ``..._with_stale_clone``: a regression that reads the
+    clone, by any route, fails that test with exit 2 instead of 0.
+    """
+    hook = _copied_hook(tmp_path)
+    registry_root = _stale_clone(
+        tmp_path, allowlist_has_haiku=consulted == "routing_contract_only"
+    )
+    clone_hooks = "${OMNI_HOME}/omniclaude/plugins/onex/hooks"
+    guard = hook.parents[1] / "lib" / "workflow_model_guard.py"
+    if consulted == "guard_module":
+        _replace_once(
+            hook,
+            'GUARD_PY="${SCRIPT_DIR}/../lib/workflow_model_guard.py"',
+            f'GUARD_PY="{clone_hooks}/lib/workflow_model_guard.py"',
+        )
+    elif consulted == "config_files":
+        _consult_clone_for(
+            guard, ("agent_model_allowlist.json", "contract_agent_routing.yaml")
+        )
+    else:
+        _consult_clone_for(guard, ("contract_agent_routing.yaml",))
+    result = _run_hook(
+        _haiku_payload("Workflow", _ROUTE_B1_HAIKU),
+        tmp_path,
+        hook_script=hook,
+        registry_root=registry_root,
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    reason = json.loads(result.stdout)["reason"]
+    assert reason_text in reason, reason
+    if consulted == "routing_contract_only":
+        # The allowlist is not what refused it.
+        assert "is not an allowed background model" not in reason, reason
+
+
+_SCRIPTS_DIR = _HOOKS_DIR / "scripts"
+_LIB_DIR = _HOOKS_DIR / "lib"
+#: A shell file the hook script loads: ``source``/``. "<dir var>/<name>.sh"`` or the
+#: ``_PATH="<dir var>/../lib/<name>.sh"`` assignment hook-gate.sh makes for its bit table.
+_SOURCED_SH = re.compile(
+    r'(?:^\s*(?:source|\.)\s+|_BITS_PATH=)"[^"\n]*?/([A-Za-z0-9_.-]+\.sh)"',
+    re.MULTILINE,
+)
+#: The only sourced files that read OMNI_HOME, and the one thing each reads it for.
+#: Neither reads lib/ or config/ policy: onex-paths.sh derives ONEX_STATE_DIR (log
+#: and state), hook_refusal.sh lists interpreters the refusal recorder may run
+#: under, after the decision has been made.
+_OMNI_HOME_READERS: Final[frozenset[str]] = frozenset(
+    {"onex-paths.sh", "hook_refusal.sh"}
+)
+
+
+def _sourced_closure(entry: Path) -> dict[str, Path]:
+    """Every shell file ``entry`` loads, directly or through a file it loads."""
+    found: dict[str, Path] = {}
+    pending = [entry]
+    while pending:
+        text = pending.pop().read_text(encoding="utf-8")
+        for name in _SOURCED_SH.findall(text):
+            if name in found:
+                continue
+            matches = [
+                d / name for d in (_SCRIPTS_DIR, _LIB_DIR) if (d / name).is_file()
+            ]
+            assert len(matches) == 1, f"{name} did not resolve to one file: {matches}"
+            found[name] = matches[0]
+            pending.append(matches[0])
+    return found
+
+
+#: Words that make a shell line a lookup of policy (config/, the guard module, the
+#: allowlist, the routing contract) rather than of state or a log path.
+_POLICY_WORDS: Final[tuple[str, ...]] = (
+    "config",
+    "workflow_model_guard",
+    "allowlist",
+    "routing",
+)
+_SHELL_ASSIGN = re.compile(
+    r"^(?:export\s+|local\s+|readonly\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$"
+)
+
+
+def _code_lines(text: str) -> list[str]:
+    return [
+        line.strip()
+        for line in text.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+
+
+def _mentions(line: str, names: set[str]) -> bool:
+    return any(re.search(rf"\b{re.escape(name)}\b", line) for name in names)
+
+
+def _omni_home_policy_reads(text: str, *, follow_variables: bool = True) -> list[str]:
+    """Code lines that put a policy path on ``OMNI_HOME``.
+
+    With ``follow_variables`` a variable assigned from ``OMNI_HOME`` (or from such
+    a variable) is followed to a fixed point, so ``root="${OMNI_HOME}/x"`` then
+    ``. "$root/config/y"`` is found; the single-line scan misses that join.
+    """
+    lines = _code_lines(text)
+    tainted = {"OMNI_HOME"}
+    while follow_variables:
+        grew = False
+        for line in lines:
+            match = _SHELL_ASSIGN.match(line)
+            if match and match[1] not in tainted and _mentions(match[2], tainted):
+                tainted.add(match[1])
+                grew = True
+        if not grew:
+            break
+    return [
+        line
+        for line in lines
+        if _mentions(line, tainted) and any(word in line for word in _POLICY_WORDS)
+    ]
+
+
+def test_omni_home_policy_scan_follows_a_variable_joined_to_config() -> None:
+    """The single-line scan misses a path built from OMNI_HOME over two lines."""
+    joined = (
+        'root="${OMNI_HOME}/omniclaude"\n'
+        'hooks="$root/plugins/onex/hooks"\n'
+        '# comment: "$hooks/config" is only prose\n'
+        '. "${hooks}/config/agent_model_allowlist.json"\n'
+    )
+    assert _omni_home_policy_reads(joined, follow_variables=False) == []
+    assert _omni_home_policy_reads(joined) == [
+        '. "${hooks}/config/agent_model_allowlist.json"'
+    ]
+    state_only = (
+        'state="${OMNI_HOME}/.onex_state"\n'
+        'log="$state/hooks.log"\n'
+        'interp="${OMNI_HOME}/omniclaude/.venv/bin/python"\n'
+    )
+    assert _omni_home_policy_reads(state_only) == []
+
+
+def test_hook_policy_lookups_never_read_the_registry_clone() -> None:
+    """OMN-25166 AC1: no lookup of lib/ or config/ goes through OMNI_HOME.
+
+    The hook script, the guard module and the registered hooks.json command carry
+    no OMNI_HOME at all. Of the files the script sources, exactly two read it, one
+    for the ONEX_STATE_DIR path and one for a refusal-recorder interpreter; a
+    third reader, or either of those two reading a config/lib path, fails here.
+    """
+    assert "OMNI_HOME" not in _HOOK_SCRIPT.read_text(encoding="utf-8")
+    assert "OMNI_HOME" not in (_LIB_DIR / "workflow_model_guard.py").read_text(
+        encoding="utf-8"
+    )
+    hooks_json = _HOOKS_JSON.read_text(encoding="utf-8")
+    assert "OMNI_HOME" not in hooks_json
+    assert _registered_command().startswith("${CLAUDE_PLUGIN_ROOT}/hooks/scripts/")
+    closure = _sourced_closure(_HOOK_SCRIPT)
+    # Positive control: the walk reaches the files the hook really loads.
+    assert {
+        "error-guard.sh",
+        "hook-gate.sh",
+        "alert-channel.sh",
+        "hook_refusal.sh",
+        "onex-paths.sh",
+        "repo_guard.sh",
+        "hook_bits.sh",
+    } <= set(closure)
+    readers = {
+        name for name, path in closure.items() if "OMNI_HOME" in path.read_text("utf-8")
+    }
+    assert readers == _OMNI_HOME_READERS, readers
+    for name in sorted(readers):
+        assert _omni_home_policy_reads(closure[name].read_text("utf-8")) == [], name
+
+
+_CONTRACT_FILES: Final[tuple[str, ...]] = (
+    "OMN-24977",
+    "OMN-25097",
+    "OMN-25166",
+    "OMN-25193",
+    "OMN-25213",
+)
+
+
+def _dod_entries(ticket: str) -> list[dict[str, Any]]:
+    contract = yaml.safe_load(
+        (_REPO_ROOT / "contracts" / f"{ticket}.yaml").read_text(encoding="utf-8")
+    )
+    return list(contract["dod_evidence"])
+
+
+@pytest.mark.parametrize("ticket", _CONTRACT_FILES)
+def test_install_proof_checks_name_no_closed_lane(ticket: str) -> None:
+    """A check that only a lane that has ended could satisfy can never pass.
+
+    The installed= row is read for any lane that records the proof, host-bound by
+    the ``installed=<host>:<head>`` cell, not by the name of the lane that wrote it.
+    """
+    commands = [
+        check["check_value"]
+        for entry in _dod_entries(ticket)
+        for check in entry["checks"]
+        if check["check_type"] == "command" and "installed=" in check["check_value"]
+    ]
+    assert commands, ticket
+    for command in commands:
+        # No lane= cell and no lane-shaped name of any kind: the row is read for
+        # whoever installs, not for one lane that has ended.
+        assert not re.search(r"\blane=", command), ticket
+        assert not re.search(r"\bfix\d{3,}", command), ticket
+        assert "installed=[A-Za-z0-9._-]+:[0-9a-f]{40}" in command, ticket
+
+
+def test_omn25166_ac1_is_bound_to_the_omni_home_comment() -> None:
+    """The AC1 entry is bound to the pull request comment, not to pytest alone.
+
+    It greps the files the comment names and then reads the comment at the head.
+    """
+    entry = next(e for e in _dod_entries("OMN-25166") if e["binds_ac"] == ["AC1"])
+    kinds = [check["check_type"] for check in entry["checks"]]
+    assert kinds.count("test_passes") == 1
+    commands = [
+        c["check_value"] for c in entry["checks"] if c["check_type"] == "command"
+    ]
+    assert len(commands) == 1, entry["id"]
+    command = commands[0]
+    for named in (
+        "pre_tool_use_agent_model_guard.sh",
+        "workflow_model_guard.py",
+        "hooks.json",
+    ):
+        assert named in command, named
+    assert "issues/3287/comments" in command
+    _assert_comment_is_bound(command, "OMNI_HOME: head=", _OMNI_HOME_COMMENT_TOKENS)
+
+
+#: What a pull request comment must show before the check reads it as the proof,
+#: beyond its first line: the grep, the two sourced readers, the refusal explained.
+_OMNI_HOME_COMMENT_TOKENS: Final[tuple[str, ...]] = (
+    "grep -n OMNI_HOME",
+    "onex-paths.sh",
+    "hook_refusal.sh",
+    "is not an allowed background model",
+)
+_LAB_COMMENT_TOKENS: Final[tuple[str, ...]] = (
+    "tests/hooks/test_workflow_model_guard.py",
+)
+_BRANCH_TIP_CHECK: Final[str] = (
+    'test "$(git rev-parse origin/omn-24977-haiku-band-routing-contract)" = "$head"'
+)
+
+
+def _commands(ticket: str, needle: str) -> list[str]:
+    return [
+        check["check_value"]
+        for entry in _dod_entries(ticket)
+        for check in entry["checks"]
+        if check["check_type"] == "command" and needle in check["check_value"]
+    ]
+
+
+def _assert_comment_is_bound(
+    command: str, prefix: str, tokens: tuple[str, ...]
+) -> None:
+    """The jq filter selects a comment by its first line AND by what it shows."""
+    assert f'startswith(\\"{prefix}${{head}}\\")' in command, command
+    for token in tokens:
+        assert f'contains(\\"{token}\\")' in command, (token, command)
+
+
+@pytest.mark.parametrize("ticket", _CONTRACT_FILES)
+def test_omni_home_and_lab_comment_checks_read_what_the_comment_shows(
+    ticket: str,
+) -> None:
+    """A prefix match alone accepts an empty comment; the check also reads its body.
+
+    The OMNI_HOME comment must show the grep, name the two sourced readers and
+    explain the refusal; the Lab comment must name the suite that ran, and every
+    Lab check also requires the branch tip to be the head the comment names.
+    """
+    omni = _commands(ticket, "OMNI_HOME: head=")
+    lab = _commands(ticket, "Lab: head=")
+    for command in omni:
+        _assert_comment_is_bound(command, "OMNI_HOME: head=", _OMNI_HOME_COMMENT_TOKENS)
+    for command in lab:
+        _assert_comment_is_bound(command, "Lab: head=", _LAB_COMMENT_TOKENS)
+        assert _BRANCH_TIP_CHECK in command, ticket
+    if ticket != "OMN-24977":
+        assert lab, ticket
+
+
+def _grep_prefix(command: str) -> str:
+    """The part of a contract check that greps OMNI_HOME, before it reads comments."""
+    lines = command.splitlines()
+    cut = next(i for i, line in enumerate(lines) if line.lstrip().startswith("gh api"))
+    return "\n".join(lines[:cut])
+
+
+_OMNI_HOME_GREP_FILES: Final[tuple[str, ...]] = (
+    "plugins/onex/hooks/scripts/pre_tool_use_agent_model_guard.sh",
+    "plugins/onex/hooks/lib/workflow_model_guard.py",
+    "plugins/onex/hooks/hooks.json",
+)
+
+
+def _run_bash(command: str, cwd: Path, env: dict[str, str] | None = None) -> int:
+    return subprocess.run(
+        ["bash", "-c", command],
+        cwd=cwd,
+        env={**scrub_git_location_env(os.environ), **(env or {})},
+        capture_output=True,
+        text=True,
+        timeout=_TIMEOUT_S,
+        check=False,
+    ).returncode
+
+
+@pytest.mark.parametrize(
+    ("ticket", "entry_ac"), [("OMN-25166", "AC1"), ("OMN-25193", "AC2")]
+)
+def test_omni_home_grep_check_requires_exit_one_not_exit_two(
+    ticket: str, entry_ac: str, tmp_path: Path
+) -> None:
+    """grep exits 1 for no match and 2 for a missing file; only 1 is clean.
+
+    Run the grep half of the real contract command four ways: on this tree (clean,
+    exit 0), on a tree whose three files are clean, on a tree whose files hold
+    OMNI_HOME, and on an empty tree where grep itself fails with 2.
+    """
+    entry = next(e for e in _dod_entries(ticket) if e["binds_ac"] == [entry_ac])
+    command = next(
+        c["check_value"]
+        for c in entry["checks"]
+        if c["check_type"] == "command" and "grep -n OMNI_HOME" in c["check_value"]
+    )
+    prefix = _grep_prefix(command)
+    assert _run_bash(prefix, _REPO_ROOT) == 0, "positive control: this tree is clean"
+
+    def tree(root: Path, body: str | None) -> Path:
+        for rel in _OMNI_HOME_GREP_FILES:
+            if body is not None:
+                (root / rel).parent.mkdir(parents=True, exist_ok=True)
+                (root / rel).write_text(body, encoding="utf-8")
+        root.mkdir(parents=True, exist_ok=True)
+        return root
+
+    assert _run_bash(prefix, tree(tmp_path / "clean", "no home here\n")) == 0
+    assert _run_bash(prefix, tree(tmp_path / "reads", 'x="$OMNI_HOME"\n')) != 0
+    # grep exits 2 here (no such file); a check that only asks "did grep match"
+    # reads that as clean.
+    assert _run_bash(prefix, tree(tmp_path / "missing", None)) != 0
+
+
+_INSTALL_ROW = (
+    "ROLLING_WORK_LEDGER.md:1:2026-11-17T05:02:15Z | STATUS | lane=any-lane | "
+    "ticket=OMN-24977 | pr=omniclaude#3287 | installed={host}:{sha} | "
+    "proof=any-b1-haiku-stale-clone | observed={observed} | text"
+)
+_INSTALL_OBSERVED = "Workflow B1 model=haiku effort=low exit=0 stdout=empty stale_clone_without_haiku=true"
+_STUB_LANE_BRIEF = (
+    # The real lane_brief.py grep is a fixed-string search that takes PATTERN and
+    # --tail only; it has no -E, and argparse refuses one with exit 2.
+    "import os, sys\n"
+    "args = sys.argv[1:]\n"
+    "if args[:1] != ['grep'] or '-E' in args:\n"
+    "    sys.exit(2)\n"
+    "needle = args[-1]\n"
+    "for line in open(os.environ['STUB_ROWS'], encoding='utf-8'):\n"
+    "    if needle in line:\n"
+    "        print(line, end='')\n"
+)
+
+
+def _git(repo: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", "-C", str(repo), *args],
+        env=scrub_git_location_env(os.environ),
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=_TIMEOUT_S,
+    ).stdout.strip()
+
+
+def _install_repo(tmp_path: Path) -> tuple[Path, dict[str, str]]:
+    """A repo with installed commit A, a plugin change C, and contract-only HEAD."""
+    repo = tmp_path / "repo"
+    (repo / "plugins" / "onex").mkdir(parents=True)
+    (repo / "contracts").mkdir()
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.email", "t@example.invalid")
+    _git(repo, "config", "user.name", "t")
+    (repo / "plugins" / "onex" / "hook.txt").write_text("v1\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "installed tree")
+    shas = {"installed": _git(repo, "rev-parse", "HEAD")}
+    (repo / "contracts" / "c.yaml").write_text("a\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "contracts only")
+    shas["contracts_only"] = _git(repo, "rev-parse", "HEAD")
+    (repo / "plugins" / "onex" / "hook.txt").write_text("v2\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "plugin change")
+    shas["plugin_changed"] = _git(repo, "rev-parse", "HEAD")
+    return repo, shas
+
+
+@pytest.mark.parametrize("ticket", _CONTRACT_FILES)
+def test_install_proof_check_follows_the_head_through_contract_only_commits(
+    ticket: str, tmp_path: Path
+) -> None:
+    """The row names the head that was installed; a later commit must not void it.
+
+    A check that needs ``installed=<host>:<current HEAD>`` can never pass: the row is
+    written after the push, and dropping ``pending`` is another commit. The check
+    accepts a 40-hex installed sha that is an ancestor of HEAD with no change under
+    ``plugins/onex`` since, and nothing else.
+    """
+    commands = _commands(ticket, "installed=")
+    assert len(commands) == 1, ticket
+    command = commands[0]
+    repo, shas = _install_repo(tmp_path)
+    plugin_root = tmp_path / "plugin"
+    script = plugin_root / "skills" / "lane-brief" / "scripts" / "lane_brief.py"
+    script.parent.mkdir(parents=True)
+    script.write_text(_STUB_LANE_BRIEF, encoding="utf-8")
+    rows = tmp_path / "rows.txt"
+    env = {"OMNI_PLUGIN_ROOT": str(plugin_root), "STUB_ROWS": str(rows)}
+
+    def verdict(head: str, row: str | None) -> int:
+        _git(repo, "checkout", "-q", head)
+        rows.write_text("" if row is None else row + "\n", encoding="utf-8")
+        return _run_bash(command, repo, env)
+
+    good = _INSTALL_ROW.format(
+        host="Host-1.lab", sha=shas["installed"], observed=_INSTALL_OBSERVED
+    )
+    assert verdict(shas["installed"], good) == 0, "positive control: same head"
+    assert verdict(shas["contracts_only"], good) == 0, "contract-only commit after"
+    assert verdict(shas["plugin_changed"], good) != 0, "plugin tree changed since"
+    assert verdict(shas["contracts_only"], None) != 0, "no row"
+    abbreviated = _INSTALL_ROW.format(
+        host="h1", sha=shas["installed"][:12], observed=_INSTALL_OBSERVED
+    )
+    assert verdict(shas["contracts_only"], abbreviated) != 0, "abbreviated sha"
+    wrong_text = _INSTALL_ROW.format(
+        host="h1", sha=shas["installed"], observed="config read back only"
+    )
+    assert verdict(shas["contracts_only"], wrong_text) != 0, "observed text differs"
+    unknown = _INSTALL_ROW.format(host="h1", sha="0" * 40, observed=_INSTALL_OBSERVED)
+    assert verdict(shas["contracts_only"], unknown) != 0, "sha not in this repo"
+
+
+_BASE_RUN_HAIKU_IDS: Final[tuple[str, ...]] = (
+    "test_haiku_route_in_the_haiku_band_passes",
+    "test_haiku_band_accepts_the_efforts_in_its_set",
+)
+
+
+def test_base_run_needs_named_haiku_tests_to_fail() -> None:
+    """The base run of OMN-24977 AC3 is red on haiku behaviour, not on file layout.
+
+    Run unfiltered, the base tree already fails the tests that read contracts/ files
+    the base does not have, so "at least one failure" proves nothing about haiku.
+    The check selects ``-k haiku`` and requires the two named band tests to fail.
+    """
+    entry = next(e for e in _dod_entries("OMN-24977") if e["binds_ac"] == ["AC3"])
+    command = next(
+        c["check_value"] for c in entry["checks"] if c["check_type"] == "command"
+    )
+    assert "-k haiku" in command
+    assert not re.search(r"\d+ failed", command)
+    source = Path(__file__).read_text(encoding="utf-8")
+    for test_id in _BASE_RUN_HAIKU_IDS:
+        assert test_id in command, test_id
+        assert f"def {test_id}(" in source, test_id
+
+
+@pytest.mark.parametrize("ticket", _CONTRACT_FILES)
+def test_no_contract_entry_is_left_pending(ticket: str) -> None:
+    """No entry of these contracts is ``status: pending``, the install proof included.
+
+    A pending entry is skipped by the done gate, so a suite that exempted the
+    ``installed=`` entries stayed green with no install proof at all. The proof is
+    the STATUS row the install check reads; while it is absent the entry fails
+    instead of waiting.
+    """
+    pending = [e["id"] for e in _dod_entries(ticket) if e.get("status") == "pending"]
+    assert pending == [], ticket
+
+
+@pytest.mark.parametrize("tool_name", ["Workflow", "Agent"])
+def test_registered_hook_route_model_mismatch(tool_name: str, tmp_path: Path) -> None:
+    result = _run_hook(_haiku_payload(tool_name, _ROUTE_B3), tmp_path)
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert (
+        "ROUTE model=sonnet does not match declared model 'haiku'"
+        in json.loads(result.stdout)["reason"]
+    )
+
+
+@pytest.mark.parametrize("tool_name", ["Workflow", "Agent"])
+@pytest.mark.parametrize("state", ["missing", "unparsable"])
+def test_haiku_routing_contract_unreadable(
+    tool_name: str, state: str, tmp_path: Path
+) -> None:
+    hook = _copied_hook(tmp_path)
+    payload = _haiku_payload(tool_name, _ROUTE_B1_HAIKU)
+    control = _run_hook(payload, tmp_path, hook_script=hook)
+    assert control.returncode == 0, control.stdout + control.stderr
+    contract = hook.parents[1] / "config" / "contract_agent_routing.yaml"
+    if state == "missing":
+        contract.unlink()
+    else:
+        contract.write_text("bands: [invalid\n", encoding="utf-8")
+    # Even a call without a ROUTE must not bypass an unreadable policy.
+    for route in (_ROUTE_B1_HAIKU, None):
+        result = _run_hook(_haiku_payload(tool_name, route), tmp_path, hook_script=hook)
+        assert result.returncode == 2, result.stdout + result.stderr
+        reason = json.loads(result.stdout)["reason"]
+        assert "guard could not evaluate" in reason
+        assert "routing contract" in reason
+
+
+def test_band_table_pinned() -> None:
+    data = yaml.safe_load(
+        _GUARD.DEFAULT_ROUTING_CONTRACT_PATH.read_text(encoding="utf-8")
+    )
+    expected = {
+        "B0": ([], [], None, None, 300, None),
+        "B1": (["haiku"], ["low", "medium"], 0, 4, 240, None),
+        "B1c": ([], [], 0, 4, 240, None),
+        "B2": (["sonnet"], ["medium", "high"], 5, 8, 1800, 4),
+        "B3": (["sonnet"], ["high"], 9, 13, 3600, 15),
+        "B4": (["opus"], ["high"], 14, 17, 7200, 5),
+        "B5": (["opus", "fable"], ["xhigh", "high"], 18, 21, 10800, 5),
+    }
+    keys = (
+        "models",
+        "efforts",
+        "score_min",
+        "score_max",
+        "timeout_s",
+        "max_concurrent",
+    )
+    assert {
+        band: tuple(row[key] for key in keys) for band, row in data["bands"].items()
+    } == expected
+    assert (
+        data["bands"]["B1"]["destination"]
+        == "Haiku lane, or onex delegate for pure text"
+    )
+    # The guard decides from its own parser, not PyYAML, so pin what that parser
+    # reads: score ranges, timeouts, max_concurrent and destination, per band.
+    parsed = _GUARD.load_routing()
+    expected_parsed = {
+        "B0": (None, None, 300, None, "landing controller / deterministic node"),
+        "B1": (0, 4, 240, None, "Haiku lane, or onex delegate for pure text"),
+        "B1c": (0, 4, 240, None, "Jev (node_typed_decision_effect)"),
+        "B2": (5, 8, 1800, 4, "Codex drafts, Sonnet lane verifies"),
+        "B3": (9, 13, 3600, 15, "Sonnet lane"),
+        "B4": (14, 17, 7200, 5, "Opus lane"),
+        "B5": (18, 21, 10800, 5, "Opus lane plus adversarial verify lane"),
+    }
+    assert {
+        name: (
+            band.score_min,
+            band.score_max,
+            band.timeout_s,
+            band.max_concurrent,
+            band.destination,
+        )
+        for name, band in parsed.bands.items()
+    } == expected_parsed
+    assert {
+        name: (band.models, band.efforts) for name, band in parsed.bands.items()
+    } == {
+        name: (frozenset(models), frozenset(efforts))
+        for name, (models, efforts, *_rest) in expected.items()
+    }
+    # Floors and caps: B1 has no concurrency cap and R and J are the only floor
+    # dimensions. The V=3 floor stays a lane-brief rule (the contract header says
+    # so); a change to either is a decision, so it fails here until re-pinned.
+    assert parsed.bands["B1"].max_concurrent is None
+    assert [
+        (floor.dimension, floor.value, floor.min_band) for floor in parsed.hard_floors
+    ] == [("R", 3, "B4"), ("J", 3, "B4")]
+    no_agent_route = (
+        "ROUTE: band=B1c score=0 dims=S0A0R0V0N0C0J0 dest=node model=haiku effort=low"
+    )
+    findings = _check_routed(_routed_call(no_agent_route, "haiku"))
+    assert len(findings) == 1
+    assert "an agent() or Agent call needs band B1 to B5" in findings[0].reason

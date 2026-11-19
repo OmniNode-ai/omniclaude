@@ -6,8 +6,8 @@
 Runs after the LLM/agentic loop returns text, using the same contract shape as
 the runtime delegation quality gate (node_delegation_quality_gate_reducer).
 
-This module is intentionally standalone — it does NOT import from omnibase_compat
-or omnimarket so it can run inside the plugin lib without those packages installed.
+This module uses the standard library so it can run in the plugin without
+runtime packages installed.
 The field names and category literals match the canonical wire DTOs so that
 downstream consumers (omnidash, projectors) can treat hook-path gate results the
 same way as runtime-path gate results.
@@ -15,8 +15,8 @@ same way as runtime-path gate results.
 Runtime quality gate reference:
     omnimarket/src/omnimarket/nodes/node_delegation_quality_gate_reducer/
         handlers/handler_quality_gate.py  — delta() pure function
-    omnibase_compat/src/omnibase_compat/contracts/delegation/wire/
-        model_quality_gate.py             — ModelQualityGateInput / ModelQualityGateResult
+    omnibase_core.models.delegation.wire.model_quality_gate
+        ModelQualityGateInput / ModelQualityGateResult
 
 Semantic differences from the runtime gate:
     - dod_deterministic / dod_heuristic: not resolved from task_class_contracts.yaml;
@@ -34,7 +34,7 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
-# Mirror the canonical EnumQualityGateCategory literal without importing omnibase_compat
+# Mirror the runtime quality gate's category literals.
 EnumHookQualityGateCategory = Literal["pass", "fail_deterministic", "fail_heuristic"]
 
 # Refusal phrases — matches the runtime gate's _REFUSAL_PHRASES set
@@ -85,7 +85,7 @@ def _strip_thinking_traces(content: str) -> str:
 class ModelHookQualityGateInput:
     """Input to the hook quality gate.
 
-    Mirrors ModelQualityGateInput from omnibase_compat wire DTOs.
+    Mirrors the canonical ModelQualityGateInput wire type.
     All fields are NON-AUTHORITATIVE.
     """
 
@@ -104,7 +104,7 @@ class ModelHookQualityGateInput:
 class ModelHookQualityGateResult:
     """Output of the hook quality gate.
 
-    Mirrors ModelQualityGateResult from omnibase_compat wire DTOs.
+    Mirrors the canonical ModelQualityGateResult wire type.
     All fields are NON-AUTHORITATIVE — hook_path_non_authoritative is always True.
     fail_category="fail_deterministic" is never emitted (hook gate is advisory only).
     """
