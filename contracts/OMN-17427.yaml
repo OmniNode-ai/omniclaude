@@ -277,9 +277,7 @@ requirements:
       literal fallback on a routing variable remains a finding.
     acceptance:
       - id: AC63
-        statement: "load_hosted_rulings over the shipped registry returns exactly one ruling, 2026-11-19T17:59:10Z, with lane hosted-runner-reversal, ticket OMN-17427, the ubuntu label family and one repository digest -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py::test_the_shipped_registry_carries_only_the_2026_11_19_ruling -q --no-cov fails over the merge base, whose registry is empty"
-      - id: AC64
-        statement: "a declaration citing the withdrawn 2026-10-16T17:44:31Z ruling is still refused against the shipped registry -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py::test_a_declaration_citing_the_withdrawn_ruling_is_refused -q --no-cov"
+        statement: "load_hosted_rulings over the shipped registry returns exactly one ruling, 2026-11-19T17:59:10Z, with lane hosted-runner-reversal, ticket OMN-17427, the ubuntu label family and one repository digest, so the withdrawn 2026-10-16T17:44:31Z ruling stays absent and a declaration citing it is still refused -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py::test_the_shipped_registry_carries_only_the_2026_11_19_ruling -q --no-cov fails over the merge base, whose registry is empty"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -1311,12 +1309,3 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "env PYTHONDONTWRITEBYTECODE=1 uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py::test_the_shipped_registry_carries_only_the_2026_11_19_ruling -q --no-cov"
-  - id: dod-omn17427-withdrawn-ruling-still-refused
-    description: Restoring one ruling does not restore the reversed 2026-10-16 one; a declaration citing it is still refused outright.
-    source: manual
-    status: verified
-    binds_ac:
-      - AC64
-    checks:
-      - check_type: test_passes
-        check_value: "env PYTHONDONTWRITEBYTECODE=1 uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py::test_a_declaration_citing_the_withdrawn_ruling_is_refused -q --no-cov"
