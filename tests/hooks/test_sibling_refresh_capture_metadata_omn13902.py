@@ -176,7 +176,41 @@ def test_refreshed_capture_fan_out_preserves_raw_records(
 
     result = rule.apply_transform(payload)
 
-    assert result == original
     assert result is not payload
     assert payload == original
-    assert rule.transform is None
+    if event_type == "content.captured":
+        # OMN-24082: omnimarket's emit registry routes this topic through
+        # redact_capture, which stamps the record and keeps every other
+        # character of a record with no credential-shaped span.
+        assert rule.transform is redact_capture
+        assert result.pop("redaction_state") == "redacted"
+    else:
+        assert rule.transform is None
+    assert result == original
+
+
+def test_content_captured_route_replaces_a_planted_credential_and_hook_event_does_not() -> (
+    None
+):
+    """OMN-24082 seam: the registry's own rule for content.captured publishes a
+    record with the credential-shaped span replaced; hook.event is the control,
+    still raw passthrough, so the check can fail."""
+    planted = "AKIA" + "IOSFODNN7EXAMPLE"
+    payload = {
+        "session_id": "session-1",
+        "content_kind": "tool_result",
+        "content": f"aws key {planted} end",
+    }
+    published = EVENT_REGISTRY["content.captured"].fan_out[0].apply_transform(payload)
+    assert planted not in published["content"]
+    assert published["content"].startswith("aws key ")
+    assert published["content"].endswith(" end")
+    assert payload["content"] == f"aws key {planted} end"
+    control = (
+        EVENT_REGISTRY["hook.event"]
+        .fan_out[0]
+        .apply_transform(
+            {"session_id": "session-1", "content": f"aws key {planted} end"}
+        )
+    )
+    assert planted in control["content"]

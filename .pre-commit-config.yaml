@@ -597,6 +597,16 @@ repos:
         pass_filenames: false
         files: '^(plugins/onex/hooks/(lib/ticket_creation_guard\.py|lib/hook_refusal\.sh|scripts/pre_tool_use_ticket_creation_gate\.sh)|src/omniclaude/nodes/node_hook_refusal_record_effect/handlers/handler_hook_refusal_(record|lane)\.py|tests/hooks/test_refusal_row_lane_omn19381\.py|\.pre-commit-config\.yaml|\.github/workflows/ci\.yml)$'
         stages: [pre-commit]
+      # Paired with hooks-tests in CI, which collects this focused file.
+      - id: workflow-model-policy-regression
+        name: Installed background-agent policy and routing regressions
+        entry: >-
+          env PYTHONDONTWRITEBYTECODE=1 uv run --frozen pytest
+          tests/hooks/test_workflow_model_guard.py -q --no-cov -p no:cacheprovider
+        language: system
+        pass_filenames: false
+        files: '^(plugins/onex/hooks/(lib/workflow_model_guard\.py|config/(agent_model_allowlist\.json|contract_agent_routing\.yaml)|scripts/pre_tool_use_agent_model_guard\.sh)|tests/hooks/test_workflow_model_guard\.py|\.pre-commit-config\.yaml)$'
+        stages: [pre-commit]
       - id: git-command-segment-regression
         name: Git command segment admission and diagnostics (OMN-18936)
         entry: >-
