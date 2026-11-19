@@ -42,3 +42,17 @@ dod_evidence:
       tests/scripts/test_delegation_profile_ownership.py tests/scripts/test_delegation_hook_install_omn22498.py
       -q --no-cov
     cwd: ${OMNI_HOME}/omniclaude
+- id: dod-omn23413-omniclaude-lab-proof
+  description: Runs the customer-asset, installer and delegation hook runner tests on a lab host at the
+    pushed revision through the lab work runner, the deploy probe for the runtime paths this change touches.
+    Hosted CI cannot reach the lab runner, so only the local Done gate runs this item; it binds no criterion.
+  source: manual
+  execution_scope: local_done_gate
+  checks:
+  - check_type: command
+    check_value: env PYTHONDONTWRITEBYTECODE=1 onex lab-work run --repo OmniNode-ai/omniclaude --sha "$(git
+      rev-parse HEAD)" --lane dod-integration-proof-23413-omniclaude --kind test -- env PYTHONDONTWRITEBYTECODE=1
+      uv run --frozen pytest tests/skills/test_customer_asset_resolution.py tests/skills/test_customer_plugin_wheel.py
+      tests/scripts/test_delegation_profile_ownership.py tests/scripts/test_delegation_hook_install_omn22498.py
+      tests/hooks/test_delegation_hook_runner.py -q --no-cov
+    cwd: .
