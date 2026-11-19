@@ -63,6 +63,18 @@ SCM_VERBS: Final[tuple[ModelScmVerb, ...]] = (
         operation="workflow_dispatch",
         replaces="gh workflow run",
     ),
+    ModelScmVerb(
+        verb="variable-set",
+        node=_W,
+        operation="repo_variable_set",
+        replaces="gh variable set",
+    ),
+    ModelScmVerb(
+        verb="variable-get",
+        node=_W,
+        operation="repo_variable_get",
+        replaces="gh variable get",
+    ),
 )
 """
 
@@ -89,6 +101,16 @@ COVERED: dict[str, tuple[list[str], str, str]] = {
         "pr-comment",
         "pr_comment",
     ),
+    "variable set": (
+        ["variable", "set", "NAME", "--repo", ENFORCED, "--body", "v"],
+        "variable-set",
+        "repo_variable_set",
+    ),
+    "variable get": (
+        ["variable", "get", "NAME", "--repo", ENFORCED],
+        "variable-get",
+        "repo_variable_get",
+    ),
     "workflow run": (
         ["workflow", "run", "ci.yml", "--repo", ENFORCED],
         "workflow-run",
@@ -100,7 +122,8 @@ COVERED: dict[str, tuple[list[str], str, str]] = {
 # (RULING 2026-10-12T05:03:28Z): its replacement, onex scm workflow-run, fails on the bus
 # terminal subscribe, so a lane keeps gh for it and every use writes one FRICTION row
 # (tests/scripts/test_gh_lane_fallback.py).
-REFUSED = [v for v in COVERED if v != "workflow run"]
+# `gh variable get` is a read: the shim passes it, so it is covered by the table only.
+REFUSED = [v for v in COVERED if v not in ("workflow run", "variable get")]
 
 # Writes onex scm has no operation for (it refuses merge, arm, rerun and update-branch,
 # naming the landing controller): by AC3 they stay allowed from a lane.
