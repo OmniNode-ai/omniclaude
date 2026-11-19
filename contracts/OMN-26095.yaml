@@ -1,0 +1,36 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-26095
+title: "Record the 2026-11-19T19:01:11Z hosted-placement ruling in the hosted-rulings registry"
+summary: >
+  RULING 2026-11-19T19:01:11Z lets one private repository whose CI imports a
+  package that needs AVX2 run its six CI jobs on GitHub-hosted ubuntu runners,
+  because no lab runner can run that import. The runner-placement gate accepts a
+  hosted job only when the registry in this repository names the repository by
+  digest and the repository's own declaration lists the job. This change adds
+  the registry entry, as data, and the tests that read it. The declaration and
+  the caller pin move in the declaring repository.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn26095-registry-entry
+    statement: "config/private_repo_hosted_rulings.yaml holds one entry for ruling 2026-11-19T19:01:11Z, naming the declaring repository by sha256 only, with the ubuntu label family."
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: config/private_repo_hosted_rulings.yaml holds one entry for ts 2026-11-19T19:01:11Z whose repos_sha256 is the digest of the declaring repository and whose label_families is [ubuntu], and no file, commit message or PR text in this public repository names the declaring repository -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -k '2026_11_19' with the entry removed from the registry"
+evidence_requirements:
+  - kind: tests
+    description: "The registry loads through load_hosted_rulings, carries both 2026-11-19 rulings by content, and admits a six-job declaration under the new entry while refusing the same declaration without it."
+    command: "uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py tests/ci/test_public_runner_placement_omn19998.py -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn26095-registry-entry-read
+    description: "The shipped registry carries the 2026-11-19T19:01:11Z entry and a six-job declaration is accepted under it and refused without it"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -k 2026_11_19"
