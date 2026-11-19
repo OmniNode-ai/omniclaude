@@ -338,7 +338,8 @@ def expand(
         )
         for arrow in _ARROW.finditer(masked, lo, hi):
             # The parameters of an arrow function are bound as ``function`` parameters are.
-            seen.update(_IDENT.findall(arrow[1] or arrow[2]))
+            # ``() =>`` matches group 1 as the empty string and leaves group 2 unset.
+            seen.update(_IDENT.findall(arrow[1] or arrow[2] or ""))
         for ident in _IDENT.finditer(masked, lo, hi):
             name = ident[0]
             if name in seen or name in _SKIP:
