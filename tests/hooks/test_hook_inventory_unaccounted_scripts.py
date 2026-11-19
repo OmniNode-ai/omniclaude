@@ -23,6 +23,7 @@ import importlib.util
 import json
 import re
 import shutil
+import subprocess
 import sys
 from datetime import date
 from pathlib import Path
@@ -192,6 +193,19 @@ def test_the_real_inventory_accounts_for_every_script(tree: Path) -> None:
     """The merged tree is green: no unaccounted-script finding on the real data."""
     assert _read_inventory(tree).get("unregistered_scripts"), "no unregistered rows"
     assert _findings(tree) == ()
+
+
+def test_inventory_validator_accepts_accounted_tree() -> None:
+    """The pre-commit validator accepts the same tree checked for parity."""
+    result = subprocess.run(
+        [sys.executable, "scripts/validation/validate_hook_inventory.py"],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _findings(_REPO_ROOT) == ()
 
 
 def test_a_stray_script_is_reported_by_name_and_stops_when_removed(

@@ -61,8 +61,9 @@ def test_ac4_baseline_preserves_exact_two_file_deletion() -> None:
     # the one retired fix lock (OMN-21429), two path checks (OMN-20566) and the
     # two local CI scripts replaced by core validators (OMN-21516) and the
     # nine trace modules moved into canonical locations (OMN-21943), and the
-    # delegation prompt-classifier stub was deleted (OMN-22498).
-    assert len(baseline.splitlines()) == 957 - 2 - 1 - 2 - 2 - 9 - 1
+    # delegation prompt-classifier stub (OMN-22498) and thirteen unused hook
+    # scripts (OMN-24588) were deleted.
+    assert len(baseline.splitlines()) == 957 - 2 - 1 - 2 - 2 - 9 - 1 - 13
     for suffix in (".sh", "-probe.sh"):
         name = PATTERNS[1] + suffix
         assert not (ROOT / "plugins/onex/hooks/scripts" / name).exists()
