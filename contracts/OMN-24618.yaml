@@ -80,16 +80,16 @@ dod_evidence:
       - check_type: test_passes
         check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -k 'dispatching_host or unconfigured_address or no_table_means_nothing' -q --no-cov"
   - id: dod-lab-host-deploy-impact
-    description: "Deploy impact: the guard is a PreToolUse hook that runs on the operator Mac, not a deployed runtime; the real registered hook refuses an undeclared lab-host dispatch and admits a declared one. The check needs only repository files, so the hosted runner can run it"
+    description: "Deploy impact: the guard is a PreToolUse hook that runs on the operator Mac, not a deployed runtime; the zero-parameter arrow test fails at the merge base, and a gh api read of lab_host_work.py at the fix commit finds the empty-parameter fallback"
     source: manual
     binds_ac:
-      - AC1
+      - AC11
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -k real_hook_refuses_then_admits -q --no-cov"
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -k zero_parameter_arrow -q --no-cov"
       - check_type: command
         check_value: |-
-          grep -c '^def declared(' src/omniclaude/handlers/lab_host_work.py
+          gh api 'repos/OmniNode-ai/omniclaude/contents/src/omniclaude/handlers/lab_host_work.py?ref=0281d04876576e12f9ad83a37fb0f71a25625191' --jq .content | base64 -d | grep -c 'arrow\[2\] or ""'
   - id: dod-lab-host-installed-layout
     description: "The shell hook run from a copy of plugins/onex laid out as the plugin cache lays it out admits a benign dispatch with exit 0 and still refuses an unnamed model; the check needs only repository files, so the hosted runner can run it"
     source: manual
