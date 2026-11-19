@@ -125,6 +125,9 @@ claude = "omniclaude.runtime.plugin:PluginClaude"
 [project.entry-points."onex.node_package"]
 omniclaude = "omniclaude.nodes"
 
+[project.entry-points."onex.claude"]
+customer_assets = "omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.handler_onboarding_assets:customer_assets"
+
 [project.entry-points."onex.nodes"]
 node_agent_inbox_effect = "omniclaude.nodes.node_agent_inbox_effect"
 node_agent_routing_compute = "omniclaude.nodes.node_agent_routing_compute"
@@ -268,7 +271,7 @@ override-dependencies = [
     # pin was one release behind on the day it landed. Not a mistake in that
     # bump: sibling-lock-refresh.yml cannot move an immutable rev, so this pin
     # decays on every omnimarket release until OMN-13902 / OMN-18594 land.
-    "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@dev-20261113184758-038de5032ef7",
+    "omnimarket @ git+https://github.com/OmniNode-ai/omnimarket.git@dev-20261119022921-c08357278343",
 ]
 
 [tool.uv.sources]
@@ -326,7 +329,7 @@ omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence
 # So do not hand-bump this line. If it is stale, run `sibling-lock-refresh.yml`
 # on workflow_dispatch and review the bot PR.
 # OMN-21900: a first-party source names a dev-merge tag, never a sha (first_party_ref validator).
-omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", tag = "dev-20261113184758-038de5032ef7" }
+omnimarket = { git = "https://github.com/OmniNode-ai/omnimarket.git", tag = "dev-20261119022921-c08357278343" }
 
 # OMN-18752: which surface decides the commit a git-sourced sibling must carry.
 # `clone` is claimed only where something enforces it. omnimarket's in-process
@@ -342,6 +345,14 @@ omnimarket = "clone"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/omniclaude"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"plugins/.claude-plugin/marketplace.json" = "omniclaude/resources/customer/plugins/.claude-plugin/marketplace.json"
+"plugins/onex-delegate" = "omniclaude/resources/customer/plugins/onex-delegate"
+"plugins/onex/hooks" = "omniclaude/resources/customer/plugins/onex/hooks"
+"plugins/onex/lib" = "omniclaude/resources/customer/plugins/onex/lib"
+"scripts/install-delegation.sh" = "omniclaude/resources/customer/scripts/install-delegation.sh"
+"pyproject.toml" = "omniclaude/resources/customer/pyproject.toml"
 
 [tool.ruff]
 target-version = "py312"

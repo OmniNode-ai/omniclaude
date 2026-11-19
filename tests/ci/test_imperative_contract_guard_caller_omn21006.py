@@ -70,8 +70,11 @@ FINDING_KEYS = (
 # and one handler_history_postgres direct_db row moved one line; no finding was added.
 # OMN-19998 declared two runner-placement snapshot topics on node_lane_github_read_guard_effect,
 # so the existing dead handler_gh_shim_probe row lists them in declared_topics; no finding was added.
+# OMN-23413 removed one line from manifest_injector.py, so three of its
+# non_live_freestanding_violations rows moved up one line (2599, 2804 and 2818 to
+# 2598, 2803 and 2817); no finding was added or dropped.
 RECORDED_OCC_FINDING_DIGEST = (
-    "97408cf69ee029664f3d7a47b7474643544021d60f081a799464a9d20cdb6c90"
+    "cd133207cc6bfb2177cd437d4422f824db119c7c4d48ea7f3ed714fcc02992dc"
 )
 
 
