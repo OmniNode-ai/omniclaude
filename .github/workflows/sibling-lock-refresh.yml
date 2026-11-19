@@ -199,7 +199,7 @@ jobs:
           # Default sibling set. Git/tag-pinned siblings are safe to include:
           # `uv lock --upgrade-package` cannot move an immutable rev/tag, so
           # those entries stay put and only PyPI-range-pinned siblings move.
-          DEFAULT="omnibase-core omnibase-spi omnibase-compat omnibase-infra omnimarket omniintelligence"
+          DEFAULT="omnibase-core omnibase-spi omnibase-infra omnimarket omniintelligence"
           PACKAGES="${REQUESTED_PACKAGES:-}"
           PACKAGES="${PACKAGES:-$DEFAULT}"
           ARGS=()

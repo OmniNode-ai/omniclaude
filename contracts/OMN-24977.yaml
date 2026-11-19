@@ -1,0 +1,114 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-24977
+title: "The agent routing contract has a band that allows model haiku for low-score mechanical work, and the agent-model guard accepts a haiku ROUTE in it and refuses it in B3 and above"
+summary: >
+  By RULING 2026-11-16T19:43:11Z the orchestration account runs only sonnet and haiku lanes, but no band of
+  contract_agent_routing.yaml allowed model haiku and agent_model_allowlist.json kept it out. Band B1 (score 0 to 4)
+  now allows model haiku at effort low or medium, the allowlist names haiku, and workflow_model_guard.py no longer
+  prints its haiku-removed note: a haiku ROUTE in B2 and above is refused with the band's own allowed models named.
+  B0 and B1c still dispatch no Claude agent and B2 to B5 are unchanged.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn24977-haiku-band
+    statement: "A haiku agent with a valid band B1 ROUTE passes the guard, and haiku in B2 and above is refused."
+    acceptance:
+      - id: "AC1"
+        statement: |-
+          AC1: contract_agent_routing.yaml allows model haiku in one low-score band (B1, or a new band the contract's own structure fits) with the efforts the harness accepts for haiku, and every other band is unchanged -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -q
+      - id: "AC2"
+        statement: |-
+          AC2: a haiku ROUTE in that band passes the guard, haiku in B3 and above is refused, and opus and fable ROUTE lines behave as before -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -q -k haiku
+      - id: "AC3"
+        statement: |-
+          AC3: the new tests fail red on origin/dev and pass green on the branch -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -q on the base commit and on the branch
+      - id: "AC4"
+        statement: |-
+          AC4: the hook installed from the branch on the Mac through adopt_merged.py install-tree --branch accepts one Workflow agent with a haiku ROUTE, recorded as installed= and observed= in a STATUS row -- falsifier: onex-ledger read of the STATUS row naming installed= and observed=
+evidence_requirements:
+  - kind: tests
+    description: "the guard's focused test file, which pins the allowlist, the band sets and the haiku cases"
+    command: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn24977-ac1
+    description: "AC1: the focused test file pins B1 models {haiku} and efforts {low, medium} and B0, B1c, B2, B3, B4, B5 as before; the focused file passes at the head of the branch (re-run 2026-11-17, OMN-25213)"
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov"
+    binds_ac: ["AC1"]
+  - id: dod-omn24977-ac2
+    description: "AC2: the haiku cases (B1 pass at low and medium, effort outside the set refused, B2 to B5 refused naming the band's models, score above the band refused, hard floor refused, the registered hook exits 0 for B1 and 2 for B3) and the unchanged opus, fable and sonnet cases"
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k haiku"
+    binds_ac: ["AC2"]
+  - id: dod-omn24977-ac3
+    description: "AC3: the base run selects -k haiku and requires test_haiku_route_in_the_haiku_band_passes and test_haiku_band_accepts_the_efforts_in_its_set to fail or error on base d3d5bbe8419ffa6d14e5e631ed33b4585ac70d96 (the base tree is a git archive of that commit with the branch's test file copied in), because a base run that only needs one failure is satisfied by the tests that read contract files absent on base (OMN-25213); the full file passes on the branch"
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -p no:randomly"
+      - check_type: command
+        check_value: |-
+          set -o pipefail
+          repo=$(pwd)
+          tmp=$(mktemp -d)
+          git archive d3d5bbe8419ffa6d14e5e631ed33b4585ac70d96 | tar -x -C "$tmp"
+          cp tests/hooks/test_workflow_model_guard.py "$tmp/tests/hooks/"
+          cd "$tmp"
+          out=$(uv run --frozen --project "$repo" python -m pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -p no:randomly -p no:cacheprovider -k haiku -rfE 2>&1 || true)
+          for id in test_haiku_route_in_the_haiku_band_passes test_haiku_band_accepts_the_efforts_in_its_set; do
+            printf '%s\n' "$out" | grep -qE "^(FAILED|ERROR) tests/hooks/test_workflow_model_guard.py::${id}" || exit 1
+          done
+    binds_ac: ["AC3"]
+  - id: dod-omn24977-ac4
+    description: >-
+      AC4: read a STATUS row with installed=<host>:<current HEAD>, a proof= cell ending
+      b1-haiku-stale-clone and the observed acceptance of one Workflow B1 haiku agent while
+      OMNI_HOME names a full hooks clone without haiku. The criterion names the Mac install
+      through adopt_merged.py install-tree. That install was not made, and no lab install was
+      made either: lane fix3287-0317 on a lab host cannot reach the Mac, and install-tree
+      refuses on that host (target onex-plugin-cache: no installed onex record; into a named
+      directory, 6 of 214 staged checks fail, five of them "No module named 'plugins'" and one
+      the --help exit of hook_emit_bounded.py, none in a file this pull request changes).
+      The orchestrator ruled (MSG 2026-11-17T04:58:35Z) not to amend AC4 and to install on the Mac
+      itself; its STATUS row (ledger line 3291) records that install (install-tree,
+      214 checks, none failed). The check reads the row of any lane and any host and accepts a
+      40-hex installed sha that is an ancestor of the head with no change under plugins/onex
+      since (OMN-25213); the row it finds is the one lane fix3287-0517 wrote for
+      installed=<lab host>:94f564ef6f683b1d842b7f30a8409a8163361c67, the lab host's loaded plugin tree (identical to
+      that head under plugins/onex), whose hook admitted one Workflow B1 haiku agent (OMN-25213).
+      A config grep is not install evidence.
+    source: manual
+    execution_scope: local_done_gate
+    checks:
+      - check_type: command
+        check_value: |-
+          set -o pipefail
+          head=$(git rev-parse HEAD)
+          rows=$(python3 "${OMNI_PLUGIN_ROOT:?}/skills/lane-brief/scripts/lane_brief.py" grep --tail 100000 'installed=' \
+            | grep -E 'installed=[A-Za-z0-9._-]+:[0-9a-f]{40}' \
+            | grep -F ' | STATUS | ' \
+            | grep -E 'proof=[A-Za-z0-9._-]*b1-haiku-stale-clone' \
+            | grep -F 'observed=Workflow B1 model=haiku effort=low exit=0 stdout=empty stale_clone_without_haiku=true' || true)
+          for sha in $(printf '%s\n' "$rows" | grep -oE 'installed=[A-Za-z0-9._-]+:[0-9a-f]{40}' | sed 's/^.*://' | sort -u); do
+            if git merge-base --is-ancestor "$sha" "$head" && git diff --quiet "$sha" "$head" -- plugins/onex; then
+              exit 0
+            fi
+          done
+          exit 1
+  - id: dod-omn24977-ac4-hosted
+    description: "AC4 (hosted half): the registered hook, run from the installed policy while OMNI_HOME names a stale clone without haiku, admits one Workflow B1 haiku agent and exits 0; this test fails on the merge base, where no band allows haiku. The install-proof row itself is read by dod-omn24977-ac4, which only the lane's local done gate can run"
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k test_registered_hook_uses_installed_policy_with_stale_clone"
+    binds_ac: ["AC4"]

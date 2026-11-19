@@ -1,0 +1,105 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-25213
+title: "Review findings 1 to 3 on omniclaude PR 3287 at head 94f564ef6f68 are fixed or argued: the install proof is a STATUS row or an amended AC4, the contract entries are no longer pending, and the Lab comment is at the new head"
+summary: >
+  The review of omniclaude#3287 at head 94f564ef6f68 asked for the install proof, the OMNI_HOME comment and the Lab
+  comment at the new head, and tightened four checks. This change binds the OMNI_HOME and Lab comment checks to what
+  the comment shows (not its first line alone), makes the grep half of the OMNI_HOME check require exit 1 so a missing
+  file is not clean, follows an OMNI_HOME variable joined to a config path, lets the install-proof check accept an
+  installed sha that is an ancestor of the head with no plugins/onex change since, makes the base run of OMN-24977 AC3
+  name two failing haiku tests, and adds OMN-25193 to the contract list. The install proof is the orchestrator's: it ruled not to amend AC4 and to install on the Mac.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn25213-review-3287
+    statement: "The blocking review findings at head 94f564ef6f68 are fixed with tests red on that head, or argued in a pull request comment."
+    acceptance:
+      - id: "AC1"
+        statement: |-
+          AC1: every blocking finding (1 to 3) of the review at head 94f564ef6f68 is fixed with a test red on that head and green on the new head, or argued with evidence in a PR comment -- falsifier: `uv run pytest tests/hooks/test_workflow_model_guard.py -q` on the lab at the new head passes while the new tests fail against the source of head 94f564ef6f68
+      - id: "AC2"
+        statement: |-
+          AC2: the install proof is a STATUS row carrying installed=<host>:<new head sha> and observed= text, or AC4 of OMN-24977 is amended with the orchestrator's authorisation, and the four contract entries are no longer pending -- falsifier: `onex-ledger` read of a STATUS row naming installed=<host>:<new head sha> and observed=
+      - id: "AC3"
+        statement: |-
+          AC3: non-blocking findings 4 to 7 are fixed or argued: OMN-25193 is in the contract file list, the band B1 assertion is exact, the base run needs a named haiku failure, and the grep exit code and variable-join checks are tightened -- falsifier: `uv run pytest tests/hooks/test_workflow_model_guard.py -q` red on head 94f564ef6f68 for each tightened check and green at the new head
+      - id: "AC4"
+        statement: |-
+          AC4: the required suites pass on a lab host at the new head (run in named parts when a whole suite times out), the head is pushed to the PR's own branch, and a PR comment starts with Lab: head= followed by the full new head sha -- falsifier: `uv run pytest tests/hooks/test_workflow_model_guard.py -q` run on a lab host through lab-run placement, then `onex scm pr-view OmniNode-ai/omniclaude#3287` listing the Lab: head= comment
+evidence_requirements:
+  - kind: tests
+    description: "the guard focused test file"
+    command: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn25213-ac1
+    description: "AC1: the OMNI_HOME comment and Lab comment checks read what the comment shows, the grep half requires exit 1, and the install check follows an installed head through contract-only commits; the new tests fail against the contracts of head 94f564ef6f68 and pass on this head"
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov"
+      - check_type: command
+        check_value: |-
+          set -o pipefail
+          head=$(git rev-parse HEAD)
+          rc=0
+          grep -n OMNI_HOME plugins/onex/hooks/scripts/pre_tool_use_agent_model_guard.sh \
+            plugins/onex/hooks/lib/workflow_model_guard.py plugins/onex/hooks/hooks.json || rc=$?
+          test "$rc" -eq 1 || exit 1
+          gh api "repos/OmniNode-ai/omniclaude/issues/3287/comments" --paginate \
+            --jq ".[].body | select(startswith(\"OMNI_HOME: head=${head}\") and contains(\"grep -n OMNI_HOME\") and contains(\"onex-paths.sh\") and contains(\"hook_refusal.sh\") and contains(\"is not an allowed background model\"))" \
+            | grep -q .
+    binds_ac: ["AC1"]
+  - id: dod-omn25213-ac2
+    description: >-
+      AC2: the orchestrator ruled not to amend AC4 of OMN-24977 and installed the pull request on the Mac
+      (its STATUS row, ledger line 3291). Lane fix3287-0517 wrote the STATUS row the check reads:
+      installed=<lab host>:94f564ef6f683b1d842b7f30a8409a8163361c67 with the observed Workflow B1 haiku admission. The check
+      accepts an installed 40-hex sha that is an ancestor of the head with no change under plugins/onex since.
+    source: manual
+    execution_scope: local_done_gate
+    checks:
+      - check_type: command
+        check_value: |-
+          set -o pipefail
+          head=$(git rev-parse HEAD)
+          rows=$(python3 "${OMNI_PLUGIN_ROOT:?}/skills/lane-brief/scripts/lane_brief.py" grep --tail 100000 'installed=' \
+            | grep -E 'installed=[A-Za-z0-9._-]+:[0-9a-f]{40}' \
+            | grep -F ' | STATUS | ' \
+            | grep -E 'proof=[A-Za-z0-9._-]*b1-haiku-stale-clone' \
+            | grep -F 'observed=Workflow B1 model=haiku effort=low exit=0 stdout=empty stale_clone_without_haiku=true' || true)
+          for sha in $(printf '%s\n' "$rows" | grep -oE 'installed=[A-Za-z0-9._-]+:[0-9a-f]{40}' | sed 's/^.*://' | sort -u); do
+            if git merge-base --is-ancestor "$sha" "$head" && git diff --quiet "$sha" "$head" -- plugins/onex; then
+              exit 0
+            fi
+          done
+          exit 1
+    binds_ac: ["AC2"]
+  - id: dod-omn25213-ac3
+    description: "AC3: OMN-25193 is in the contract file list, the band B1 assertion reads the exact refusal, the base run needs two named haiku tests to fail, and the grep exit code and the OMNI_HOME variable join are checked"
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov"
+    binds_ac: ["AC3"]
+  - id: dod-omn25213-ac4
+    description: "AC4: the focused file passes on a lab host at the new head, the head is pushed to the pull request's own branch, and a pull request comment starts with Lab: head= and the new head sha and names the suite"
+    source: manual
+    execution_scope: local_done_gate
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov"
+      - check_type: command
+        check_value: |-
+          set -o pipefail
+          head=$(git rev-parse HEAD)
+          test "$(git rev-parse origin/omn-24977-haiku-band-routing-contract)" = "$head"
+          gh api "repos/OmniNode-ai/omniclaude/issues/3287/comments" --paginate \
+            --jq ".[].body | select(startswith(\"Lab: head=${head}\") and contains(\"tests/hooks/test_workflow_model_guard.py\"))" \
+            | grep -q .
+    binds_ac: ["AC4"]

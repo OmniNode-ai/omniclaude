@@ -131,7 +131,7 @@ def _classes(hits: list[object]) -> set[str]:
         ),
         # Workflow config — the class the knowledge-base gap also proves.
         (".github/workflows/ci.yml", f"# broker {LAN_LITERAL}\n", "real-lan-ip"),
-        # Test corpus — the omnibase_compat CRITICAL shape.
+        # Test corpus with a literal address in fixture data.
         ("tests/unit/test_x.py", f'BROKER = "{LAN_LITERAL}:19092"\n', "real-lan-ip"),
         # Shipped source docstring.
         (

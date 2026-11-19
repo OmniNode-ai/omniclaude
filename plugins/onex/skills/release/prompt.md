@@ -39,7 +39,6 @@ When `/release [args]` is invoked:
 
 ```python
 TIER_GRAPH: dict[int, list[str]] = {
-    0: ["omnibase_compat"],
     1: ["omnibase_spi", "omnibase_core"],  # Co-release: circular dep
     2: ["omnibase_infra", "omniintelligence", "omnimemory"],
     3: ["omniclaude"],
@@ -49,7 +48,6 @@ TIER_GRAPH: dict[int, list[str]] = {
 # NOTE: Within tier 1, omnibase_spi is bumped first (core depends on spi),
 # then omnibase_core is bumped and both are pinned to each other's new version.
 ALL_REPOS: list[str] = [
-    "omnibase_compat",
     "omnibase_spi",
     "omnibase_core",
     "omnibase_infra",
@@ -60,7 +58,6 @@ ALL_REPOS: list[str] = [
 
 # Known inter-repo dependencies (downstream -> upstream, from pyproject.toml)
 DEPENDENCY_MAP: dict[str, list[str]] = {
-    "omnibase_compat": [],
     "omnibase_spi": ["omnibase_core"],  # circular: co-released in same tier
     "omnibase_core": ["omnibase_spi"],  # circular: co-released in same tier
     "omnibase_infra": ["omnibase_core", "omnibase_spi"],

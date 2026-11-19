@@ -566,7 +566,6 @@ class TestModelInvariants:
             "OmniNode-ai/omniclaude",
             "OmniNode-ai/omnibase_core",
             "OmniNode-ai/omnibase_infra",
-            "OmniNode-ai/omnibase_compat",
             "OmniNode-ai/omnidash",
             "OmniNode-ai/omnimarket",
         }

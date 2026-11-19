@@ -4,8 +4,8 @@ Run the unstick-queue recovery loop. Mechanical task; no user interaction requir
 
 ## Steps
 
-1. Resolve repo list from `--repos`, else `ONEX_QUEUE_REPOS` env, else the canonical set:
-   `omniclaude, omnibase_core, omnibase_spi, omnibase_infra, omnibase_compat, omniintelligence, omnimemory, omninode_infra, onex_change_control, omnimarket`.
+1. Use `--repos` when supplied, then `ONEX_QUEUE_REPOS`. Otherwise use
+   `DEFAULT_REPOS` from `scripts/lib/run-unstick-queue.py` and append `omnimarket`.
 
 2. Invoke the runner:
 

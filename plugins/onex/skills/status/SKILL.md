@@ -90,8 +90,8 @@ Never query repository state directly. Never open PRs or push code. Read-only
 snapshot only.
 ````
 
-Use `model="sonnet"` for the snapshot agent (haiku is removed from background
-dispatch; trivial text work goes to `onex delegate`).
+Use `model="sonnet"` for the snapshot agent (haiku is allowed only for band-B1
+mechanical work in the routing contract; a snapshot read is judged work, so sonnet).
 
 ## Failure modes
 
