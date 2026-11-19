@@ -34,3 +34,5 @@ dod_evidence:
     checks:
       - check_type: command
         check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q -k 2026_11_19"
+    binds_ac:
+      - "AC1"
