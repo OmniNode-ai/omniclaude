@@ -6,15 +6,57 @@
 # names that repository, covers every hosted label's image family, and (where
 # the gate can read a ledger) is a RULING row on the ledger.
 #
-# EMPTY since 2026-10-19 (OMN-17427). The operator's words, after GitHub
-# reported 90 percent of the included Enterprise Actions minutes used: "make it
-# impossible to run private repos actions on github". That reverses RULING
-# 2026-10-16T17:44:31Z (lane orchestrator-bb1a, OMN-19998), the one entry this
-# registry carried, so every hosted-eligible declaration is now refused.
-# tests/scripts/test_private_repo_runner_placement_gate.py pins it empty.
+# RESTORED on 2026-11-19 (RULING 2026-11-19T17:59:10Z, lane hosted-runner-reversal,
+# OMN-17427), which amends 2026-09-14T11:38:53Z and 2026-09-15T22:03:34Z.
+#
+# This registry was emptied on 2026-10-19 after GitHub reported 90 percent of
+# the included Enterprise Actions minutes used: "make it impossible to run
+# private repos actions on github", reversing RULING 2026-10-16T17:44:31Z.
+# That premise was cost, and it no longer holds. Measured from the org billing
+# usage API on 2026-11-19 for Nov 1 to 19: 6,858,162 Actions Linux minutes,
+# $41,149 gross, $41,180 discount, net $0.00, with coverage at 100 percent on
+# all 19 days across daily volumes from 116,390 to 599,326 minutes. The only
+# billed SKUs that month were Enterprise Cloud and Secret Protection.
+#
+# The 2026-10-16 ruling is NOT restored: it stays reversed, and a declaration
+# citing it is still refused. Only the two 2026-11-19 rulings below are live,
+# and each names one private repository, by digest, alone.
+#
+# What the withdrawal also fixed is untouched: a hosted LITERAL FALLBACK on a
+# routing variable (`fromJSON(vars.X || '["ubuntu-latest"]')`) remains a
+# finding whatever the variable holds, because the day X is unset it runs
+# hosted. Eligibility is a DECLARED placement, never an implicit one.
 #
 # repos_sha256 holds the sha256 of each lowercased `owner/name` the ruling
 # names, never the name: this repository is public and its hygiene gate
 # refuses a private repository's name in the tree.
 schema: 1
-rulings: []
+rulings:
+  # The declaring repository's jobs that reach the cluster through SSM (a public AWS
+  # endpoint) or touch nothing outside the checkout. Out of scope under the
+  # ruling, and so absent from the declaration: the two terraform jobs holding
+  # a helm or kubernetes provider connection, every job on the customer pools,
+  # and any job reading a lab credential.
+  - ts: "2026-11-19T17:59:10Z"
+    lane: hosted-runner-reversal
+    ticket: OMN-17427
+    repos_sha256:
+      # sha256 of the lowercased owner/name; this repository is public and its
+      # hygiene gate refuses a private repository's name in the tree.
+      - a1d6884cdfb17a057eb2d4d79648d36a9f64b816d47bf68ee73a133e41da35f6
+    label_families:
+      - ubuntu
+  # RULING 2026-11-19T19:01:11Z (lane orchestrator-31d9-swarm, OMN-25674), in
+  # the operator's words "1 is fine": the declaring repository's CI imports
+  # pedalboard, which needs AVX2, and no lab runner can run that import, so
+  # its six CI jobs run on GitHub-hosted ubuntu runners. Covers exactly those
+  # six jobs, declared in its own .github/hosted-eligible-jobs.yaml.
+  - ts: "2026-11-19T19:01:11Z"
+    lane: orchestrator-31d9-swarm
+    ticket: OMN-25674
+    repos_sha256:
+      # sha256 of the lowercased owner/name; this repository is public and its
+      # hygiene gate refuses a private repository's name in the tree.
+      - e214108405f61fc116f080d0d980e075abf42e7929a8e19a5e819869cd573b59
+    label_families:
+      - ubuntu
