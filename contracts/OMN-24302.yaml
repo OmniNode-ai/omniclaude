@@ -34,7 +34,7 @@ dod_evidence:
       - AC1
     checks:
       - check_type: test_passes
-        check_value: uv run pytest tests/hooks/test_generate_event_registry.py tests/hooks/test_registry_consistency.py -q --no-cov
+        check_value: uv run pytest tests/unit/hooks/test_hook_claude_capture_omn19513.py -q --no-cov -k the_registry_projects_omnimarkets_publish_transform
         cwd: ${OMNI_HOME}/omniclaude
   - id: dod-omn24302-ac2-planted-credential
     description: The rule the registry holds for content.captured replaces a planted credential-shaped span and keeps the rest of the record; hook.event is the raw control.
