@@ -48,14 +48,28 @@ def _plugin_with_stub_runner(tmp_path: Path) -> Path:
     return plugin
 
 
+_NO_TIMEOUT = frozenset({"timeout", "gtimeout"})
+
+
 def _bin_without_timeout(tmp_path: Path) -> Path:
-    """Only jq is added; neither timeout nor gtimeout is reachable."""
+    """Every program in /usr/bin and /bin, plus jq, except timeout and gtimeout.
+
+    The hook's PATH is this one directory, so a Linux runner, whose /usr/bin
+    always has coreutils timeout, proves the fallback too instead of skipping.
+    """
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     jq = shutil.which("jq")
     if jq is None:
         pytest.skip("jq is required by the hook")
     (bin_dir / "jq").symlink_to(jq)
+    for system_dir in (Path("/usr/bin"), Path("/bin")):
+        for program in system_dir.iterdir():
+            link = bin_dir / program.name
+            if program.name in _NO_TIMEOUT or link.exists() or link.is_symlink():
+                continue
+            if program.is_file() and os.access(program, os.X_OK):
+                link.symlink_to(program)
     return bin_dir
 
 
@@ -64,7 +78,7 @@ def test_hook_delegates_when_no_timeout_command_exists(tmp_path: Path) -> None:
     home = tmp_path / "home"
     (home / ".omninode" / "delegation").mkdir(parents=True)
     (home / ".omninode" / "delegation" / "hooks-delegation.json").write_text("{}")
-    path = f"{_bin_without_timeout(tmp_path)}:/usr/bin:/bin"
+    path = str(_bin_without_timeout(tmp_path))
     found = subprocess.run(
         ["/bin/bash", "-c", "command -v timeout || command -v gtimeout"],
         env={"PATH": path},
@@ -72,8 +86,7 @@ def test_hook_delegates_when_no_timeout_command_exists(tmp_path: Path) -> None:
         text=True,
         check=False,
     )
-    if found.returncode == 0:  # a Linux /usr/bin has timeout: nothing to prove
-        pytest.skip(f"timeout is on the system path here: {found.stdout.strip()}")
+    assert found.returncode != 0, f"timeout is still reachable: {found.stdout.strip()}"
     env = {
         "HOME": str(home),
         "PATH": path,
