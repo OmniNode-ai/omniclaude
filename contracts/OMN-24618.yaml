@@ -36,6 +36,8 @@ requirements:
         statement: "AC10: the command pattern ignores the ssh or docker in a path such as ~/.ssh/config, and the host table and ssh config are read once per hook run -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k 'ssh_config_path or table_read_once' fails without the dot and slash lookbehind or with a read per agent() call"
       - id: AC11
         statement: "AC11: a zero-parameter arrow function in a Workflow agent() prompt is read, not crashed on: a clean prompt is admitted and a prompt doing lab-host work is still refused -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k zero_parameter_arrow fails with the TypeError when the arrow parameter text is None"
+      - id: AC12
+        statement: "AC12: the shell hook run from a copy of plugins/onex laid out as the plugin cache lays it out, under an interpreter whose installed omniclaude package holds the lab check, refuses undeclared lab-host work and admits each declared one, while with no copy reachable the check stays off -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k installed_layout fails at the merge base, where the guard looks only beside its own checkout"
 evidence_requirements:
   - kind: tests
     description: "lab_host_work refused, allowed and unrelated fixtures pass"
@@ -130,3 +132,11 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -k zero_parameter_arrow -q --no-cov"
+  - id: dod-lab-host-installed-package
+    description: "The installed guard finds the lab check in the interpreter's installed omniclaude package when the plugin tree has no src/: undeclared lab-host work is refused and each declaration admits it; with no copy reachable the check is off (control). The hook is a PreToolUse hook on the operator Mac, not a deployed runtime; the check needs only repository files, so the hosted runner can run it"
+    source: manual
+    binds_ac:
+      - AC12
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -k installed_layout -q --no-cov"

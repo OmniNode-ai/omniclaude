@@ -2087,7 +2087,12 @@ def installed_plugin(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return root
 
 
-def _installed_hook(plugin: Path, tool_name: str, tool_input: dict[str, Any]) -> Any:
+def _installed_hook(
+    plugin: Path,
+    tool_name: str,
+    tool_input: dict[str, Any],
+    env: dict[str, str] | None = None,
+) -> Any:
     bash = shutil.which("bash")
     assert bash is not None
     return subprocess.run(
@@ -2099,6 +2104,7 @@ def _installed_hook(plugin: Path, tool_name: str, tool_input: dict[str, Any]) ->
             **os.environ,
             "CLAUDE_PLUGIN_ROOT": str(plugin),
             "CLAUDE_PROJECT_DIR": str(_REPO_ROOT),
+            **(env or {}),
         },
         cwd=_REPO_ROOT,
         timeout=_TIMEOUT_S,
@@ -2145,6 +2151,76 @@ def test_lab_host_work_installed_layout_repository_layout_still_checks_the_lab(
     """Control: with ``src/`` beside the guard the lab check is loaded and refuses."""
     assert _GUARD._lab() is not None
     assert _refused(_lab_check("ssh h201 docker ps"))
+
+
+_LAB_SOURCE = Path("omniclaude") / "handlers" / "lab_host_work.py"
+_UNDECLARED = "ssh h201 docker ps and report"
+
+
+def _no_site_python(tmp_path: Path, pythonpath: Path | None = None) -> str:
+    """An interpreter with no site-packages (``-S``), so the only copy of the lab check it can
+    find is one a test places: this repository's ``src/`` is on no path it reads."""
+    python = tmp_path / "python-no-site"
+    path = f'PYTHONPATH="{pythonpath}" ' if pythonpath else ""
+    python.write_text(f'#!/bin/sh\n{path}exec "{sys.executable}" -S "$@"\n')
+    python.chmod(0o755)
+    return str(python)
+
+
+@pytest.fixture
+def installed_lab_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> dict[str, str]:
+    """The hook's environment on a host whose lab table names h201, with no registry clone."""
+    for var in ("ONEX_LAB_RUN_HOSTS", "ONEX_SKILL_OVERLAY_ROOTS", "ONEX_REGISTRY_ROOT"):
+        monkeypatch.delenv(var, raising=False)
+    (tmp_path / ".ssh").mkdir()
+    (tmp_path / ".ssh" / "config").write_text("Host *\n")
+    return {
+        "HOME": str(tmp_path),
+        "LANDING_POOL_HOSTS": json.dumps([{"name": "h201"}]),
+        "PLUGIN_PYTHON_BIN": _no_site_python(tmp_path),
+        "OMNI_HOME": str(tmp_path / "no-registry"),
+    }
+
+
+def _workflow(prompt: str) -> dict[str, Any]:
+    script = f"await agent(`{_ROUTE_B3}\\n{prompt}`, {{ label: 'r', model: 'sonnet' }})"
+    return {"script": script}
+
+
+def _place_lab_source(root: Path) -> None:
+    target = root / _LAB_SOURCE
+    target.parent.mkdir(parents=True)
+    shutil.copy(_REPO_ROOT / "src" / _LAB_SOURCE, target)
+
+
+def test_lab_host_work_installed_layout_control_no_copy_reachable_means_off(
+    installed_plugin: Path, installed_lab_env: dict[str, str]
+) -> None:
+    """Control: with no copy of the lab check reachable from the installed layout the check is
+    off. That is the state the test below changes, and it proves the test sees the copy."""
+    result = _installed_hook(
+        installed_plugin, "Workflow", _workflow(_UNDECLARED), installed_lab_env
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_lab_host_work_installed_layout_finds_the_installed_package(
+    installed_plugin: Path, installed_lab_env: dict[str, str], tmp_path: Path
+) -> None:
+    """The plugin tree has no ``src/``, and the interpreter's installed ``omniclaude`` package
+    holds the check: the installed guard refuses undeclared lab work and admits a declared one."""
+    site = tmp_path / "site-packages"
+    _place_lab_source(site)
+    env = {**installed_lab_env, "PLUGIN_PYTHON_BIN": _no_site_python(tmp_path, site)}
+    refused = _installed_hook(installed_plugin, "Workflow", _workflow(_UNDECLARED), env)
+    assert refused.returncode == 2, refused.stdout + refused.stderr
+    assert "no declared placement" in refused.stdout
+    assert "PLACEMENT: remote-lane" in refused.stdout
+    declared = _workflow(f"PLACEMENT: remote-lane\\n{_UNDECLARED}")
+    admitted = _installed_hook(installed_plugin, "Workflow", declared, env)
+    assert admitted.returncode == 0 and admitted.stdout == "", admitted.stdout
 
 
 _LOCAL_TABLE = """\
