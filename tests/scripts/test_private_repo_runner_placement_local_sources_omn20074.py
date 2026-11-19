@@ -89,8 +89,11 @@ def _git(cwd: Path, *args: str) -> str:
         check=True,
         capture_output=True,
         text=True,
+        # The scrub drops GIT_CONFIG*, so restore the suite's ~/.gitconfig isolation (OMN-16584).
         env={
             **scrub_git_location_env(os.environ),
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_CONFIG_NOSYSTEM": "1",
             "GIT_AUTHOR_NAME": "fixture",
             "GIT_AUTHOR_EMAIL": "fixture@example.invalid",
             "GIT_COMMITTER_NAME": "fixture",

@@ -1,0 +1,37 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-25070
+title: onex-validate-links pre-commit hook runs the link check module
+summary: >-
+  The repository's onex-validate-links hook now runs the module command instead of the console
+  script. The evidence gate requires a pull request citing OMN-25070 to carry contracts/OMN-25070.yaml.
+  The contract checks the hook entry and runs the module, failing at the merge base where the console
+  script remains.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn25070-validate-links-module
+    statement: The onex-validate-links hook runs omnibase_core's link check by module path, not by
+      the console script omnibase_core will remove.
+    acceptance:
+      - id: AC6
+        statement: >-
+          AC6: the onex-validate-links hook entry in .pre-commit-config.yaml ends with python -m
+          omnibase_core.nodes.node_markdown_links_check_compute.runtime_markdown_links_check --verbose
+          and that module exits 0 on this repository -- falsifier: the check below fails at the merge
+          base, where the entry is bash scripts/uv-run-worktree-safe.sh onex-validate-links --verbose
+dod_evidence:
+  - id: dod-omn25070-validate-links-module
+    description: The hook entry runs the link check module, and the module passes on this repository.
+    source: manual
+    binds_ac: [AC6]
+    checks:
+      - check_type: command
+        check_value: >-
+          uv run --frozen python -c "import yaml; c = yaml.safe_load(open('.pre-commit-config.yaml'));
+          e = [h['entry'] for r in c['repos'] for h in r.get('hooks', []) if h['id'] == 'onex-validate-links'];
+          m = 'python -m omnibase_core.nodes.node_markdown_links_check_compute.runtime_markdown_links_check --verbose';
+          assert len(e) == 1 and e[0].endswith(m), e" && uv run --frozen python -m
+          omnibase_core.nodes.node_markdown_links_check_compute.runtime_markdown_links_check --verbose
+        cwd: "${OMNI_HOME}/omniclaude"
