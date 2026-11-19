@@ -1818,14 +1818,16 @@ def test_the_declaration_needs_no_comment_marker(tmp_path: Path) -> None:
     assert _run_eligible(module, root, tmp_path, _rulings_file(tmp_path)) == 0
 
 
-def test_the_shipped_registry_carries_only_the_2026_11_19_ruling() -> None:
+def test_the_shipped_registry_carries_only_the_two_2026_11_19_rulings() -> None:
     """RULING 2026-11-19T17:59:10Z restored eligibility for one private repo.
 
     The 2026-10-19 withdrawal emptied this registry because GitHub had
     reported 90 percent of the included Enterprise Actions minutes used. The
     2026-11-19 ruling amends it on measurement: over Nov 1 to 19 the org ran
     6,858,162 Actions Linux minutes at $41,149 gross and net $0.00, 100
-    percent covered on every one of the 19 days.
+    percent covered on every one of the 19 days. RULING 2026-11-19T19:01:11Z
+    then named a second private repository, whose CI imports a package that
+    needs AVX2, which no lab runner has.
 
     Pinned by CONTENT, not by count, so widening the registry to another
     repository or another label family has to be a deliberate edit here. The
@@ -1834,17 +1836,93 @@ def test_the_shipped_registry_carries_only_the_2026_11_19_ruling() -> None:
     """
     module = _module()
     rulings = module.load_hosted_rulings(module.DEFAULT_HOSTED_RULINGS)
-    assert sorted(rulings) == ["2026-11-19T17:59:10Z"]
-    only = rulings["2026-11-19T17:59:10Z"]
-    assert only.lane == "hosted-runner-reversal"
-    assert only.ticket == "OMN-17427"
-    assert only.label_families == ("ubuntu",)
+    assert sorted(rulings) == ["2026-11-19T17:59:10Z", AVX2_RULING_TS]
+    first = rulings["2026-11-19T17:59:10Z"]
+    assert first.lane == "hosted-runner-reversal"
+    assert first.ticket == "OMN-17427"
+    assert first.label_families == ("ubuntu",)
     # sha256 of the one lowercased owner/name the ruling covers. The name
     # itself stays out of this public tree, which is why the registry keys
     # repositories by digest at all.
-    assert only.repo_hashes == frozenset(
+    assert first.repo_hashes == frozenset(
         {"a1d6884cdfb17a057eb2d4d79648d36a9f64b816d47bf68ee73a133e41da35f6"}
     )
+    second = rulings[AVX2_RULING_TS]
+    assert second.lane == "orchestrator-31d9-swarm"
+    assert second.ticket == "OMN-25674"
+    assert second.label_families == ("ubuntu",)
+    assert second.repo_hashes == frozenset({AVX2_REPO_SHA256})
+
+
+AVX2_RULING_TS = "2026-11-19T19:01:11Z"
+AVX2_REPO_SHA256 = "e214108405f61fc116f080d0d980e075abf42e7929a8e19a5e819869cd573b59"
+AVX2_JOBS = (
+    "lint",
+    "typecheck",
+    "test-unit",
+    "quality-gate",
+    "tests-gate",
+    "ci-summary",
+)
+
+
+def test_the_2026_11_19_19_01_11_entry_admits_the_six_declared_jobs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The shipped entry is read, and a declaration of six jobs under it passes.
+
+    The repository the entry names is private and so is not spelled in this
+    tree: the fixture repository is made to hash to the entry's digest, and
+    only the digest is asserted. Without that mapping the same declaration is
+    refused, so the pass below comes from the shipped entry and nothing else.
+    """
+    module = _module()
+    shipped = module.DEFAULT_HOSTED_RULINGS
+    rulings = module.load_hosted_rulings(shipped)
+    assert AVX2_RULING_TS in rulings
+    ruling = rulings[AVX2_RULING_TS]
+    assert ruling.admits(["ubuntu-latest"])
+    assert not ruling.admits(["macos-latest"])
+    assert not ruling.covers("OmniNode-ai/fixture")
+
+    root = _tree(
+        tmp_path / "repo",
+        "ci.yml",
+        _light_workflow(*AVX2_JOBS, runs_on="ubuntu-latest"),
+    )
+    _declare(root, *(("ci.yml", job, AVX2_RULING_TS) for job in AVX2_JOBS))
+    assert _run_eligible(module, root, tmp_path, shipped) == 2
+    assert AVX2_RULING_TS in capsys.readouterr().err
+
+    real_hash = module.repo_hash
+    monkeypatch.setattr(
+        module,
+        "repo_hash",
+        lambda slug: (
+            AVX2_REPO_SHA256
+            if slug.lower() == "omninode-ai/fixture"
+            else real_hash(slug)
+        ),
+    )
+    assert ruling.covers("OmniNode-ai/fixture")
+    assert _run_eligible(module, root, tmp_path, shipped) == 0
+    out = capsys.readouterr().out
+    for job in AVX2_JOBS:
+        assert (
+            f"eligible: ci.yml::{job} runs GitHub-hosted under RULING "
+            f"{AVX2_RULING_TS} (OMN-25674)"
+        ) in out
+
+    # A seventh, undeclared hosted job is still refused.
+    root = _tree(
+        tmp_path / "repo",
+        "ci.yml",
+        _light_workflow(*AVX2_JOBS, "extra", runs_on="ubuntu-latest"),
+    )
+    assert _run_eligible(module, root, tmp_path, shipped) == 1
+    assert "ci.yml::extra" in capsys.readouterr().err
 
 
 def test_a_declaration_citing_the_withdrawn_ruling_is_refused(
