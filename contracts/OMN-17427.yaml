@@ -266,6 +266,18 @@ requirements:
         statement: run_sync visits both a registry clone and a canonical clone beside the registry root; the sibling sync regression fails when run_sync discovers only registry-root clones.
       - id: AC62
         statement: A canonical clone reachable through both registry discovery and a declared sibling home is visited exactly once by resolved path.
+  - id: req-hosted-eligibility-restored-narrowly
+    statement: >-
+      The hosted-rulings registry carries RULING 2026-11-19T17:59:10Z and
+      nothing else. That ruling amends the 2026-09-14 ban and the 2026-09-15
+      budget-block ruling on measurement: over Nov 1 to 19 the org ran
+      6,858,162 Actions Linux minutes at $41,149 gross and net $0.00, covered
+      100 percent on all 19 days. The withdrawn 2026-10-16T17:44:31Z ruling
+      stays absent, so a declaration citing it is still refused, and a hosted
+      literal fallback on a routing variable remains a finding.
+    acceptance:
+      - id: AC63
+        statement: "load_hosted_rulings over the shipped registry returns exactly one ruling, 2026-11-19T17:59:10Z, with lane hosted-runner-reversal, ticket OMN-17427, the ubuntu label family and one repository digest, so the withdrawn 2026-10-16T17:44:31Z ruling stays absent and a declaration citing it is still refused -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py::test_the_shipped_registry_carries_only_the_2026_11_19_ruling -q --no-cov fails over the merge base, whose registry is empty"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -1288,3 +1300,12 @@ dod_evidence:
               assert len(clones) == 2 and {clone.resolve() for clone in clones} == {service, sibling}, clones
           print("PASS: registry and sibling discovery deduplicates resolved paths")
           '
+  - id: dod-omn17427-hosted-registry-carries-one-ruling
+    description: The shipped hosted-rulings registry carries the 2026-11-19 ruling alone, asserted by content (lane, ticket, label family, repository digest) rather than by count, so widening it is a deliberate edit. Fails over the merge base, whose registry is empty.
+    source: manual
+    status: verified
+    binds_ac:
+      - AC63
+    checks:
+      - check_type: test_passes
+        check_value: "env PYTHONDONTWRITEBYTECODE=1 uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py::test_the_shipped_registry_carries_only_the_2026_11_19_ruling -q --no-cov"
