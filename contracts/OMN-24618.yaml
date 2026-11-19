@@ -34,6 +34,8 @@ requirements:
         statement: "AC9: an unresolved substitution is refused only when the reached text holds a command word with no readable host or holds no literal text, an empty name set refuses nothing, and arrow parameters and earlier agent results are bound -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k unresolved_substitution fails when every unresolved identifier refuses"
       - id: AC10
         statement: "AC10: the command pattern ignores the ssh or docker in a path such as ~/.ssh/config, and the host table and ssh config are read once per hook run -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k 'ssh_config_path or table_read_once' fails without the dot and slash lookbehind or with a read per agent() call"
+      - id: AC11
+        statement: "AC11: a zero-parameter arrow function in a Workflow agent() prompt is read, not crashed on: a clean prompt is admitted and a prompt doing lab-host work is still refused -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k zero_parameter_arrow fails with the TypeError when the arrow parameter text is None"
 evidence_requirements:
   - kind: tests
     description: "lab_host_work refused, allowed and unrelated fixtures pass"
@@ -120,3 +122,11 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -k 'ssh_config_path or table_read_once' -q --no-cov"
+  - id: dod-lab-host-zero-parameter-arrow
+    description: "A zero-parameter arrow in an agent() prompt no longer raises TypeError in the guard; a clean prompt is admitted and lab-host work is still refused"
+    source: manual
+    binds_ac:
+      - AC11
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -k zero_parameter_arrow -q --no-cov"
