@@ -25,8 +25,8 @@ CONFIG = Path(__file__).resolve().parents[2] / ".pre-commit-config.yaml"
 CORE_REPO = "https://github.com/OmniNode-ai/omnibase_core"
 OCC_REPO = "https://github.com/OmniNode-ai/onex_change_control"
 # The first dev-merge tag of omnibase_core that contains the exporting merge commit.
-EXPORTING_TAG = "dev-20261018024445-b6ee996befa1"
-TOPICS_AND_TODOS_PIN = "dev-20261018024445-b6ee996befa1"
+EXPORTING_TAG = "dev-20261119101844-59e0293aeaef"
+TOPICS_AND_TODOS_PIN = "dev-20261119101844-59e0293aeaef"
 
 
 def _owners(hook_id: str) -> list[tuple[str, str, dict[str, Any]]]:

@@ -32,7 +32,7 @@ def test_validator_hook_has_one_core_registration(hook_id: str) -> None:
     repo, hook = matches[0]
     assert repo["repo"] == CORE_REPO
     assert repo["rev"].startswith("dev-")
-    assert repo["rev"] == "dev-20261101103701-2fc5e461fca7"
+    assert repo["rev"] == "dev-20261119101844-59e0293aeaef"
     assert "entry" not in hook
 
 
