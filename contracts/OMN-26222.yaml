@@ -46,4 +46,4 @@ dod_evidence:
     status: "verified"
     checks:
       - check_type: "test_passes"
-        check_value: "tests/unit/skills/test_awaiting_reply_skill.py"
+        check_value: "uv run pytest tests/unit/skills/test_awaiting_reply_skill.py -q --no-cov"
