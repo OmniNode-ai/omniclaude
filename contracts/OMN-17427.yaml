@@ -278,6 +278,8 @@ requirements:
     acceptance:
       - id: AC63
         statement: "load_hosted_rulings over the shipped registry returns exactly one ruling, 2026-11-19T17:59:10Z, with lane hosted-runner-reversal, ticket OMN-17427, the ubuntu label family and one repository digest, so the withdrawn 2026-10-16T17:44:31Z ruling stays absent and a declaration citing it is still refused -- falsifier: uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py::test_the_shipped_registry_carries_only_the_2026_11_19_ruling -q --no-cov fails over the merge base, whose registry is empty"
+      - id: AC64
+        statement: "AC64: the reusable workflow's branch fetch carries --prune, so a ref under refs/remotes/origin/ does not survive the deletion of its branch on a runner whose clone persists, and the gate stops judging a branch that no longer exists -- falsifier: uv run pytest tests/workflows/test_private_repo_runner_placement_workflow.py::test_the_branch_fetch_prunes_deleted_heads -q --no-cov fails over the merge base, whose fetch has no --prune"
 evidence_requirements:
   - kind: tests
     description: "Ticket-creation guard tests pass, including the registered hook end to end"
@@ -1309,3 +1311,12 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "env PYTHONDONTWRITEBYTECODE=1 uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py::test_the_shipped_registry_carries_only_the_2026_11_19_ruling -q --no-cov"
+  - id: dod-omn17427-branch-fetch-prunes
+    description: The reusable workflow's branch fetch carries --prune, asserted on the step that holds the refs/heads refspec rather than on the file text. The job runs on self-hosted runners whose work directory persists, so without it a refs/remotes/origin ref outlives its branch and the gate judges a branch that no longer exists; measured on a private caller, 2026-11-20, where seven deleted branches still produced all 185 breaches. Fails over the merge base, whose fetch has no --prune.
+    source: manual
+    status: verified
+    binds_ac:
+      - AC64
+    checks:
+      - check_type: test_passes
+        check_value: "env PYTHONDONTWRITEBYTECODE=1 uv run pytest tests/workflows/test_private_repo_runner_placement_workflow.py::test_the_branch_fetch_prunes_deleted_heads -q --no-cov"
