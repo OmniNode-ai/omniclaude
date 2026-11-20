@@ -137,6 +137,28 @@ def test_the_gate_judges_every_branch_that_runs_workflows() -> None:
     )
 
 
+def test_the_branch_fetch_prunes_deleted_heads() -> None:
+    """OMN-17427: a deleted branch must stop being judged.
+
+    This job runs on self-hosted runners whose work directory persists, so a
+    fetch without --prune leaves refs/remotes/origin/<branch> behind after the
+    branch is deleted and the gate keeps judging it. Measured on a private
+    caller, 2026-11-20: seven deleted branches still produced all 185
+    breaches on the next run. Without this flag a breach on a stale branch
+    cannot be cleared by deleting the branch.
+    """
+    steps = _document()["jobs"]["private-repo-runner-placement"]["steps"]
+    fetch = next(
+        str(step["run"])
+        for step in steps
+        if "+refs/heads/*:refs/remotes/origin/*" in str(step.get("run", ""))
+    )
+    assert "--prune" in fetch, (
+        "the branch fetch must prune: the runner's clone persists, so a ref "
+        "survives its branch and the gate judges a branch that does not exist"
+    )
+
+
 def test_hosted_refusal_regressions_run_in_ci_and_precommit() -> None:
     from scripts.ci.ci_summary_gate import GATE_JOBS, STRICT_SUCCESS_JOBS
 
