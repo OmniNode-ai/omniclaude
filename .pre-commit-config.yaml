@@ -1791,7 +1791,7 @@ repos:
 
       - id: validate-spdx-headers
         name: ONEX SPDX Header Requirement
-        entry: bash scripts/uv-run-worktree-safe.sh onex spdx validate
+        entry: bash scripts/uv-run-worktree-safe.sh python -m omnibase_core.cli.cli_commands spdx validate
         language: system
         pass_filenames: true
         files: ^(src|tests|scripts|examples)/.*\.(py|sh|bash|yml|yaml|toml)$
