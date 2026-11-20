@@ -40,3 +40,10 @@ dod_evidence:
     checks:
       - check_type: "command"
         check_value: "grep -q 'id: awaiting_reply' plugins/distribution_manifest.yaml && test -s plugins/onex/skills/awaiting_reply/SKILL.md"
+  - id: "dod-awaiting-reply-skill-unit"
+    description: "The unit test pins the skill frontmatter, its single onex skill command and its manifest entry."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "test_passes"
+        check_value: "tests/unit/skills/test_awaiting_reply_skill.py"
