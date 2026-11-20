@@ -232,6 +232,24 @@ def test_the_onex_command_defaults_to_the_internal_venv_then_path(
     assert mod.resolve_onex_command() == ["onex"]
 
 
+def test_the_internal_venv_runs_the_core_cli_as_a_module(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # OMN-25070: omnibase-core stops declaring the onex console script, so the
+    # internal venv holds a python but no onex; the core CLI runs as a module.
+    python = tmp_path / ".venv" / "bin" / "python"
+    python.parent.mkdir(parents=True)
+    python.write_text("#!/bin/sh\n", encoding="utf-8")
+    python.chmod(0o755)
+    monkeypatch.delenv("ONEX_SCM_CLI", raising=False)
+    monkeypatch.setenv("OMNIBASE_INTERNAL_HOME", str(tmp_path))
+    assert mod.resolve_onex_command() == [
+        str(python),
+        "-m",
+        "omnibase_core.cli.cli_commands",
+    ]
+
+
 # --------------------------------------------------- end to end (real git)
 @pytest.fixture
 def clean_worktree(tmp_path: Path) -> tuple[Path, Path]:
