@@ -21,6 +21,14 @@ requirements:
           omnibase_core.nodes.node_markdown_links_check_compute.runtime_markdown_links_check --verbose
           and that module exits 0 on this repository -- falsifier: the check below fails at the merge
           base, where the entry is bash scripts/uv-run-worktree-safe.sh onex-validate-links --verbose
+  - id: req-omn25070-no-launcher-callers
+    statement: No CI step, pre-commit hook or prune script in omniclaude runs the onex launcher from the
+      internal venv, so they keep working once only omninode-onex declares it.
+    acceptance:
+      - id: AC3
+        statement: "AC3 (this repository's launcher-move part): CI and hook callers run python -m omnibase_core.cli.cli_commands,
+          and the prune scripts resolve the internal venv to its python running that module -- falsifier: the
+          bound test and check fail at the merge base, where they run uv run onex and resolve .venv/bin/onex"
 dod_evidence:
   - id: dod-omn25070-validate-links-module
     description: The hook entry runs the link check module, and the module passes on this repository.
@@ -35,3 +43,13 @@ dod_evidence:
           assert len(e) == 1 and e[0].endswith(m), e" && uv run --frozen python -m
           omnibase_core.nodes.node_markdown_links_check_compute.runtime_markdown_links_check --verbose
         cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn25070-ac3-no-launcher-calls
+    description: The CI and hook callers run the core CLI as a module, and the prune scripts resolve the internal
+      venv to its python. The test and the grep fail at the merge base.
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: test_passes
+        check_value: uv run --frozen pytest -q tests/scripts/test_worktree_auto_prune_pr_heads_omn20977.py -k
+          internal_venv && ! grep -nE '^[^#]*(uv run onex |worktree-safe.sh onex )' .github/workflows/ci.yml .pre-commit-config.yaml
+        cwd: ${OMNI_HOME}/omniclaude
