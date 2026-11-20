@@ -106,6 +106,16 @@ components:
   backing_nodes:
   - node_skill_autopilot_orchestrator
   rationale: 'class=dispatch with disqualifying findings: [''missing_node''] (broken/boundary-bypass/ambiguous -> not beta-admissible).'
+- id: awaiting_reply
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: dispatch
+  path: plugins/onex/skills/awaiting_reply/SKILL.md
+  backing_nodes:
+  - node_awaiting_reply_compute
+  - node_awaiting_reply_effect
+  rationale: class=dispatch shim to node_awaiting_reply_compute and node_awaiting_reply_effect in omnimarket (the node-home ratchet keeps nodes out of this repository), OMN-26222.
 - id: baseline
   kind: skill
   exposure: beta
