@@ -72,11 +72,11 @@ dod_evidence:
         check_value: "uv run pytest tests/hooks/test_hook_inventory_unaccounted_scripts.py -q --no-cov -k 'role_must_match or present_wired_and_owned or dead_scripts_removed'"
         cwd: "${OMNI_HOME}/omniclaude"
   - id: dod-omn24588-ac4-gate-accepts-commit
-    description: "The inventory validator exits 0 on the branch tree: 56 expected hooks registered and the declared disables within review. The lane commit on a lab host was accepted by the repository's pre-commit hooks through hook-preflight."
+    description: "The inventory validator exits 0 on the branch tree: 56 expected hooks registered and the declared disables within review. The lane commit on a lab host was accepted by the repository's pre-commit hooks through hook-preflight. The command is chained to the dead-scripts test, which fails at the merge base (no unregistered_scripts list there), because the validator alone passes at the merge base and the hosted control needs every bound check to fail there."
     source: manual
     binds_ac:
       - "AC4"
     checks:
       - check_type: command
-        check_value: "python3 scripts/validation/validate_hook_inventory.py"
+        check_value: "bash -c 'uv run pytest tests/hooks/test_hook_inventory_unaccounted_scripts.py -q --no-cov -k dead_scripts_removed && python3 scripts/validation/validate_hook_inventory.py'"
         cwd: "${OMNI_HOME}/omniclaude"
