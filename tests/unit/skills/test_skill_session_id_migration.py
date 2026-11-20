@@ -16,7 +16,6 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 TARGETS = [
     "plugins/onex/skills/_lib/dod-evidence-runner/dod_evidence_runner.py",
     "plugins/onex/skills/env_sync_alert/_lib/check.py",
-    "plugins/onex/hooks/scripts/codex_cost_wrapper.py",
 ]
 
 # OMN-19153 retired the dod-evidence-runner's own telemetry emit, which was its

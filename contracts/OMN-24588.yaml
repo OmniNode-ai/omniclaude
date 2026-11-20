@@ -1,0 +1,82 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-24588
+title: "Every hook script is registered, declared or listed with an owner, and the dead ones are removed"
+summary: >
+  A whole-inventory review found 59 hook scripts on disk with no record in
+  hook_inventory.yaml: 14 reached by a registered hook and 45 not. Thirteen of
+  the 45 were dead (registered nowhere, called by nothing, at most a test of
+  their own) and are deleted with their tests; the other 32 are listed under a
+  new unregistered_scripts key with kind, role, owner and the file that names
+  them. A new test fails on any script on disk that no list accounts for. The
+  check is a test because hook_inventory.py is baselined by the
+  canonical-file-shape ratchet and may not grow.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn24588-every-script-accounted
+    statement: Every script in the hook scripts directory is registered, declared, listed as unregistered or reached by a registered hook.
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: every hook script on disk is either registered, declared in the inventory, listed as unregistered with its kind, role and owner, or reached by a registered hook -- falsifier: uv run pytest tests/hooks/test_hook_inventory_unaccounted_scripts.py -q -k real_inventory_accounts"
+  - id: req-omn24588-fails-at-base
+    statement: The check fails on the base tree and names a stray script.
+    acceptance:
+      - id: "AC2"
+        statement: "AC2: the new test fails on the base tree, where 45 scripts are unaccounted, and a stray script added to the tree is named by the test and stops being named when removed -- falsifier: uv run pytest tests/hooks/test_hook_inventory_unaccounted_scripts.py -q -k stray_script"
+  - id: req-omn24588-dead-removed-live-listed
+    statement: The dead scripts are removed and every listed script has an owner and a role that matches whether it can refuse.
+    acceptance:
+      - id: "AC3"
+        statement: "AC3: the 13 dead scripts and their tests are gone, and the 32 live-but-unlisted scripts are listed, each with an owner and a role that matches whether it can refuse a tool call -- falsifier: uv run pytest tests/hooks/test_hook_inventory_unaccounted_scripts.py -q -k role_must_match"
+  - id: req-omn24588-gate-accepts-commit
+    statement: On a lab host the omniclaude pre-commit gate accepts a commit on the branch and the inventory validator exits 0.
+    acceptance:
+      - id: "AC4"
+        statement: "AC4: integrated: on a lab host the omniclaude pre-commit gate accepts a commit on the branch, and the inventory validator exits 0 -- falsifier: python3 scripts/validation/validate_hook_inventory.py exits non-zero on the branch tree, or the pre-commit hook-inventory-gate refuses the commit"
+evidence_requirements:
+  - kind: tests
+    description: "The unaccounted-script tests pass"
+    command: "uv run pytest tests/hooks/test_hook_inventory_unaccounted_scripts.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn24588-ac1-real-inventory-accounts
+    description: "On the branch tree no script on disk is unaccounted and no listed row is malformed, stale, duplicated, also declared or role-mismatched. Fails at the merge base, where 45 scripts are on disk with no record and no unregistered_scripts list exists."
+    source: manual
+    binds_ac:
+      - "AC1"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_hook_inventory_unaccounted_scripts.py -q --no-cov -k real_inventory_accounts"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn24588-ac2-stray-script-named
+    description: "A stray script added to a copy of the tree is named by UNACCOUNTED_SCRIPT and stops being named when removed; deleting a dormant row brings its finding back. The same test file run against origin/dev gives 10 failed and 2 passed, and the checker names 45 unaccounted scripts there."
+    source: manual
+    binds_ac:
+      - "AC2"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_hook_inventory_unaccounted_scripts.py -q --no-cov -k 'stray_script or removing_a_listed_row'"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn24588-ac3-roles-and-dead-removed
+    description: "A recorder row for a script that can refuse, or a safety-gate row for one that cannot, is a role mismatch; every row's file exists, is wired to the right list and has an owner; the 13 deleted scripts stay gone."
+    source: manual
+    binds_ac:
+      - "AC3"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_hook_inventory_unaccounted_scripts.py -q --no-cov -k 'role_must_match or present_wired_and_owned or dead_scripts_removed'"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn24588-ac4-gate-accepts-commit
+    description: "The inventory validator exits 0 on the branch tree: 56 expected hooks registered and the declared disables within review. The lane commit on a lab host was accepted by the repository's pre-commit hooks through hook-preflight. The command is chained to the dead-scripts test, which fails at the merge base (no unregistered_scripts list there), because the validator alone passes at the merge base and the hosted control needs every bound check to fail there."
+    source: manual
+    binds_ac:
+      - "AC4"
+    checks:
+      - check_type: command
+        check_value: "bash -c 'uv run pytest tests/hooks/test_hook_inventory_unaccounted_scripts.py -q --no-cov -k dead_scripts_removed && python3 scripts/validation/validate_hook_inventory.py'"
+        cwd: "${OMNI_HOME}/omniclaude"
