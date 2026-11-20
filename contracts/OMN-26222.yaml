@@ -1,0 +1,61 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-26222"
+title: "Awaiting-reply skill is a dispatch shim to the omnimarket awaiting-reply nodes"
+summary: >
+  Adds the awaiting_reply dispatch skill, which calls the omnimarket compute and effect nodes and holds no classification, drafting or sending logic of its own.
+
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn26222-awaiting-reply-skill
+    statement: "The awaiting_reply skill is a dispatch shim to the omnimarket awaiting-reply nodes."
+    acceptance:
+      - id: "AC1"
+        statement: |-
+          AC1: the skill file and its distribution manifest entry exist -- falsifier: `grep -q 'id: awaiting_reply' plugins/distribution_manifest.yaml && test -s plugins/onex/skills/awaiting_reply/SKILL.md` exits 1 at the merge base
+      - id: "AC2"
+        statement: |-
+          AC2: the skill is a bootstrap dispatch shim with one onex skill command and a manifest entry naming both backing nodes -- falsifier: `uv run pytest tests/unit/skills/test_awaiting_reply_skill.py -q --no-cov` fails at the merge base, where the skill does not exist
+evidence_requirements:
+  - kind: "tests"
+    description: "The skill dispatch form gate and the skill-to-node coverage test accept the new skill."
+    command: "uv run pytest tests/unit/nodes/test_skill_node_coverage.py tests/scripts/test_skill_dispatch_receipt_mode_gate.py -q"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-awaiting-reply-skill-shape"
+    description: "The skill declares skill_kind dispatch with one onex skill command and passes the receipt-mode gate."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/scripts/test_skill_dispatch_receipt_mode_gate.py -q"
+  - id: "dod-awaiting-reply-skill-coverage"
+    description: "The skill-to-node coverage test accepts the skill as a bootstrap shim whose nodes live in omnimarket."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "uv run pytest tests/unit/nodes/test_skill_node_coverage.py -q"
+  - id: "dod-awaiting-reply-skill-deploy"
+    description: "The skill file and its manifest entry exist, which a hosted runner can check."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "command"
+        check_value: "grep -q 'id: awaiting_reply' plugins/distribution_manifest.yaml && test -s plugins/onex/skills/awaiting_reply/SKILL.md"
+    binds_ac: ["AC1"]
+  - id: "dod-awaiting-reply-skill-unit"
+    description: "The unit test pins the skill frontmatter, its single onex skill command and its manifest entry."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/unit/skills/test_awaiting_reply_skill.py -q --no-cov"
+    binds_ac: ["AC2"]
