@@ -306,4 +306,10 @@ def test_delegation_switch_onex_hooks_cli_round_trip(tmp_path: Path) -> None:
     # fail here. "WARN: runner exited" is the hosted cold-start case the
     # other tests accept (the runner started past the hook's 5 s limit).
     routed = "BLOCK tool=Agent" in on_log and "result=DELEGATED:" in on_log
+    # A classified task whose model is unavailable also proves the enabled
+    # hook ran. Failure must pass through; real answering has its own journey.
+    routed = routed or any(
+        f"PASS tool=Agent result=not_delegatable:{reason}" in on_log
+        for reason in ("failed", "timed_out", "no_onex", "no_answer")
+    )
     assert routed or "WARN: runner exited" in on_log, on_log

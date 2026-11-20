@@ -3,10 +3,9 @@
 """Scope tests for ``.github/workflows/ban-hardcoded-runner-ip.yml`` (OMN-17993).
 
 The reusable gate forbids the literal lab runner address. Until OMN-17993 it
-scanned ``.github/workflows/**`` only. omnibase_compat — a repository that
-ships this very workflow — carried that exact literal as a fixture value under
-``tests/``, and the gate reported green over it. Every repository that
-inherited the workflow had the same blind spot.
+scanned ``.github/workflows/**`` only. One repository carried that exact
+literal in a test fixture while the gate reported green. Every repository
+using the workflow had the same blind spot.
 
 These tests execute the workflow's own shell body against throwaway
 repositories, so the assertion is on behaviour rather than on the YAML reading
@@ -63,7 +62,7 @@ def _run_scan(repo: Path) -> subprocess.CompletedProcess[str]:
 
 @pytest.mark.unit
 def test_tests_tree_violation_is_now_rejected(tmp_path: Path) -> None:
-    """The omnibase_compat CRITICAL shape: the banned literal as a test fixture.
+    """The gate rejects the banned literal when it appears in a test fixture.
 
     RED against the pre-OMN-17993 workflow, which never looked at tests/.
     """

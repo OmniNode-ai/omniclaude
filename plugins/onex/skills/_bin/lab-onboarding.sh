@@ -92,7 +92,7 @@ BOOT_FREE_DISK_GB=15      # free disk required at the moment the stack boots
 MODE2_PORTS="5436 19092 16379 8085 8086"
 VM_SPEC="a macOS 14 (or newer) VM with 4 vCPU, 8 GB RAM and 50 GB disk (the stock Tart macOS image as pulled, 17 GB free: do not resize it), on a host with that much to spare (Tart or UTM on an Apple-silicon Mac, or a hosted Mac such as EC2 Mac)"
 
-REPOS="omnibase_compat omnibase_core omnibase_spi omnibase_infra omnimarket omniclaude omnidash"
+REPOS="omnibase_core omnibase_spi omnibase_infra omnimarket omniclaude omnidash"
 GITHUB_ORG_URL="https://github.com/OmniNode-ai"
 
 # At least 3 attempts, 5-10 s apart, for everything that touches the network.

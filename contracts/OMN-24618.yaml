@@ -1,0 +1,142 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-24618
+title: "The Workflow guard refuses a Mac agent prompt that does lab-host work unless it declares placement"
+summary: >
+  Extends the PreToolUse Workflow/Agent dispatch gate (workflow_model_guard.py)
+  to refuse an agent() prompt that runs ssh, scp, sftp, rsync, docker or systemctl
+  against a lab host unless the prompt or label declares remote-lane placement, a Fable
+  review, or LOCAL-ONLY with a non-empty reason.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn24618-lab-host-placement
+    statement: "A Workflow or Agent prompt that runs ssh, scp, sftp, rsync, docker or systemctl against a lab host is refused unless it declares PLACEMENT: remote-lane, PLACEMENT: fable-review or LOCAL-ONLY with a reason."
+    acceptance:
+      - id: AC1
+        statement: "AC1: an agent() prompt doing lab-host work with no placement declaration is refused, and each of the three declarations admits it -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -k lab_host_work -q --no-cov with the host-work check removed from workflow_model_guard.py"
+      - id: AC2
+        statement: "AC2: the ROUTE check reads only the prompt span plus label, and only the lab check reads the const-expanded prompt, so a second call interpolating the first call's result with a different ROUTE model is accepted -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k route_expansion fails with the expanded text fed to the ROUTE check"
+      - id: AC3
+        statement: "AC3: the lab host table resolves as the placement code resolves it (overlays clone and overlay-store-reader checkout beside the registry root), so with only the registry variable set ssh to a table host, ssh to a second table host and docker on a third (a host marked unavailable) are refused -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k lab_table_real_layout fails with an extra overlays path segment"
+      - id: AC4
+        statement: "AC4: a command whose host is a substitution or shell variable is lab-host work unless declared, and an unresolved substitution makes the prompt unreadable -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k variable_host fails when an unresolved substitution is admitted"
+      - id: AC5
+        statement: "AC5: a host named on a later line than its command word and a dotted host name are both refused -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k 'multiline_host or dotted_host' fails with the per-line search"
+      - id: AC6
+        statement: "AC6: the lab check skips a dispatching host that is itself a lab host and builds in no address range, and its logic lives in src/omniclaude/handlers/lab_host_work.py so the baselined guard file does not grow -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k 'dispatching_host or unconfigured_address' fails when the host or the range check is removed"
+      - id: AC7
+        statement: "AC7: the shell hook run from a copy of plugins/onex laid out as the plugin cache lays it out (no src/ beside it) admits a benign Agent call and a benign Workflow script with exit 0 and no output, and still refuses an Agent call that names no model -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k installed_layout fails when the guard raises on the missing lab module"
+      - id: AC8
+        statement: "AC8: the own-host skip never applies to a local true row or an available false row, so with the launching host as a local true row and the hostname set to its target an ssh command to a lab host is refused, while a placeable row still skips -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k local_row_own_host fails when a local row counts as a lab host"
+      - id: AC9
+        statement: "AC9: an unresolved substitution is refused only when the reached text holds a command word with no readable host or holds no literal text, an empty name set refuses nothing, and arrow parameters and earlier agent results are bound -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k unresolved_substitution fails when every unresolved identifier refuses"
+      - id: AC10
+        statement: "AC10: the command pattern ignores the ssh or docker in a path such as ~/.ssh/config, and the host table and ssh config are read once per hook run -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k 'ssh_config_path or table_read_once' fails without the dot and slash lookbehind or with a read per agent() call"
+      - id: AC11
+        statement: "AC11: a zero-parameter arrow function in a Workflow agent() prompt is read, not crashed on: a clean prompt is admitted and a prompt doing lab-host work is still refused -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k zero_parameter_arrow fails with the TypeError when the arrow parameter text is None"
+      - id: AC12
+        statement: "AC12: the shell hook run from a copy of plugins/onex laid out as the plugin cache lays it out, under an interpreter whose installed omniclaude package holds the lab check, refuses undeclared lab-host work and admits each declared one, while with no copy reachable the check stays off -- falsifier: uv run pytest tests/hooks/test_workflow_model_guard.py -q --no-cov -k installed_layout fails at the merge base, where the guard looks only beside its own checkout"
+evidence_requirements:
+  - kind: tests
+    description: "lab_host_work refused, allowed and unrelated fixtures pass"
+    command: "uv run pytest tests/hooks -k lab_host_work -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-lab-host-work-refused
+    description: "A Workflow agent() prompt that does lab-host work with no declared placement is refused by the real hook; each of remote-lane placement, a Fable review and LOCAL-ONLY with a reason admits it"
+    source: manual
+    binds_ac:
+      - AC1
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -k lab_host_work -q --no-cov"
+  - id: dod-lab-host-route-and-table
+    description: "The ROUTE check reads only the prompt span plus label, and the lab host table resolves as the placement code resolves it"
+    source: manual
+    binds_ac:
+      - AC2
+      - AC3
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -k 'route_expansion or lab_table_real_layout' -q --no-cov"
+  - id: dod-lab-host-variable-and-multiline
+    description: "A variable host, an unresolved substitution, a host on a later line and a dotted host name are each lab-host work unless declared"
+    source: manual
+    binds_ac:
+      - AC4
+      - AC5
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -k 'variable_host or multiline_host or dotted_host' -q --no-cov"
+  - id: dod-lab-host-own-host-and-file
+    description: "The lab check skips a lab dispatching host, builds in no address range and lives in its own module"
+    source: manual
+    binds_ac:
+      - AC6
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -k 'dispatching_host or unconfigured_address or no_table_means_nothing' -q --no-cov"
+  - id: dod-lab-host-deploy-impact
+    description: "Deploy impact: the guard is a PreToolUse hook that runs on the operator Mac, not a deployed runtime; the zero-parameter arrow test fails at the merge base, and a gh api read of lab_host_work.py at the fix commit finds the empty-parameter fallback"
+    source: manual
+    binds_ac:
+      - AC11
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -k zero_parameter_arrow -q --no-cov"
+      - check_type: command
+        check_value: |-
+          gh api 'repos/OmniNode-ai/omniclaude/contents/src/omniclaude/handlers/lab_host_work.py?ref=0281d04876576e12f9ad83a37fb0f71a25625191' --jq .content | base64 -d | grep -c 'arrow\[2\] or ""'
+  - id: dod-lab-host-installed-layout
+    description: "The shell hook run from a copy of plugins/onex laid out as the plugin cache lays it out admits a benign dispatch with exit 0 and still refuses an unnamed model; the check needs only repository files, so the hosted runner can run it"
+    source: manual
+    binds_ac:
+      - AC7
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -k installed_layout -q --no-cov"
+  - id: dod-lab-host-local-row
+    description: "The own-host skip does not apply to a local true row or an unavailable row"
+    source: manual
+    binds_ac:
+      - AC8
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -k local_row_own_host -q --no-cov"
+  - id: dod-lab-host-unresolved-substitution
+    description: "An unresolved substitution refuses only with an unreadable command word or no literal text; an empty name set refuses nothing"
+    source: manual
+    binds_ac:
+      - AC9
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -k unresolved_substitution -q --no-cov"
+  - id: dod-lab-host-ssh-path-and-read-once
+    description: "A path holding ssh or docker is not a command, and the table is read once per run"
+    source: manual
+    binds_ac:
+      - AC10
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -k 'ssh_config_path or table_read_once' -q --no-cov"
+  - id: dod-lab-host-zero-parameter-arrow
+    description: "A zero-parameter arrow in an agent() prompt no longer raises TypeError in the guard; a clean prompt is admitted and lab-host work is still refused"
+    source: manual
+    binds_ac:
+      - AC11
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -k zero_parameter_arrow -q --no-cov"
+  - id: dod-lab-host-installed-package
+    description: "The installed guard finds the lab check in the interpreter's installed omniclaude package when the plugin tree has no src/: undeclared lab-host work is refused and each declaration admits it; with no copy reachable the check is off (control). The hook is a PreToolUse hook on the operator Mac, not a deployed runtime; the check needs only repository files, so the hosted runner can run it"
+    source: manual
+    binds_ac:
+      - AC12
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_workflow_model_guard.py -k installed_layout -q --no-cov"

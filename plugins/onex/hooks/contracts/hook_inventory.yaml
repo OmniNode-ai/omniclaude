@@ -1965,6 +1965,274 @@ disabled_hooks:
         together.
 
 # ---------------------------------------------------------------------------
+# unregistered_scripts — every script in scripts/ that hooks.json does not register,
+# no expected/disabled row declares and no registered hook reaches by path.
+# ---------------------------------------------------------------------------
+# Added by the whole-inventory review of 2026-11-15 (OMN-17005): 59 scripts were on
+# disk with no record at all, 14 of them reached by a registered hook and 45 not. The
+# 13 that were dead (no registration on any surface, no caller, at most a test of
+# their own) were deleted in the same change; the 32 below are accounted for here.
+# tests/hooks/test_hook_inventory_unaccounted_scripts.py fails on a script on disk that is
+# in none of the lists, and on an entry here whose script is gone, is also registered or
+# declared, malformed, or whose evidence file does not name it (the evidence is the file
+# that registers, calls or documents it). The lib that backs the pre-commit gate ignores
+# this key: that file is baselined and may not grow.
+#
+#   kind: live     -- run from a surface other than hooks.json (named in `referenced_from`)
+#         library  -- sourced by another script; no entrypoint of its own
+#         harness  -- a test or probe script, never a hook
+#         dormant  -- nothing registers or calls it; `removal_blocker` says what still
+#                     names it. Dormant entries are removal candidates, not decisions to keep.
+#   role: safety_gate -- can refuse a tool call
+#         recorder    -- observes or injects context and never refuses
+#         support     -- not a Claude event hook (CI check, operator command, helper)
+# The refusal reading behind `role` is lib `refusing_scripts`: none of the 32 can refuse.
+unregistered_scripts:
+  - script: "delegation-config.sh"
+    kind: "library"
+    role: "support"
+    owner: "omniclaude hooks lane"
+    referenced_from: "plugins/onex/hooks/scripts/post-tool-delegation-counter.sh"
+    note: >
+      Sourced settings reader for the delegation scripts; it has no entrypoint.
+  - script: "deploy.sh"
+    kind: "live"
+    role: "support"
+    owner: "omniclaude hooks lane"
+    referenced_from: "plugins/onex/hooks/scripts/common.sh"
+    note: >
+      Operator installer for the status line launcher and the plugin venv; common.sh tells the operator to run it. Not a Claude event hook.
+  - script: "grep_guard_no_polymorphic_agent.sh"
+    kind: "live"
+    role: "support"
+    owner: "omniclaude hooks lane"
+    referenced_from: ".github/workflows/ci.yml"
+    note: >
+      A CI check run by ci.yml, not a Claude event hook.
+  - script: "hook-runtime-client.sh"
+    kind: "library"
+    role: "support"
+    owner: "omniclaude hooks lane"
+    referenced_from: "plugins/onex/hooks/scripts/post-tool-delegation-counter.sh"
+    note: >
+      Sourced runtime client helper for the delegation scripts; it has no entrypoint.
+  - script: "onex-lane-pair-reconcile.sh"
+    kind: "live"
+    role: "support"
+    owner: "omniclaude hooks lane"
+    referenced_from: "CLAUDE.md"
+    note: >
+      Operator command that reconciles lane open and close pairs; documented in CLAUDE.md and run by hand, not by a hook.
+  - script: "onex-lane-reconcile.sh"
+    kind: "live"
+    role: "support"
+    owner: "omniclaude hooks lane"
+    referenced_from: "CLAUDE.md"
+    note: >
+      Operator command that fails when a lane has no terminal record; documented in CLAUDE.md and run from a closeout or tick, not by a hook.
+  - script: "permission_denied_logger.sh"
+    kind: "dormant"
+    role: "recorder"
+    owner: "omniclaude hooks lane"
+    note: >
+      Nothing registers it on any surface and no script, library or workflow runs it.
+    removal_blocker: >
+      tests that name it: tests/hooks/test_permission_denied_logger.py
+  - script: "post-skill-delegation-enforcer.sh"
+    kind: "dormant"
+    role: "recorder"
+    owner: "omniclaude hooks lane"
+    note: >
+      Nothing registers it on any surface and no script, library or workflow runs it.
+    removal_blocker: >
+      tests that name it: tests/hooks/test_error_guard.sh, tests/hooks/test_hook_error_visibility.py, tests/unit/hook_runtime/test_subagent_exemption_shell.py, tests/unit/hooks/scripts/test_post_skill_delegation_enforcer.py; also named (comments, docs or prose) in: plugins/onex/hooks/scripts/post-tool-delegation-counter.sh, plugins/onex/hooks/scripts/pre_tool_use_agent_dispatch_gate.sh, plugins/onex/hooks/scripts/pre_tool_use_delegation.sh
+  - script: "post-tool-use-test-reminder.sh"
+    kind: "dormant"
+    role: "recorder"
+    owner: "omniclaude hooks lane"
+    note: >
+      Nothing registers it on any surface and no script, library or workflow runs it.
+    removal_blocker: >
+      tests that name it: tests/hooks/test_hook_repo_scoping.py
+  - script: "post_tool_use_cost_accounting.sh"
+    kind: "live"
+    role: "recorder"
+    owner: "omniclaude hooks lane"
+    referenced_from: "plugins/onex/hooks/hooks-delegation.v1.json"
+    note: >
+      PostToolUse cost recorder of the customer delegation install; never refuses.
+  - script: "post_tool_use_cron_action_guard.sh"
+    kind: "dormant"
+    role: "recorder"
+    owner: "omniclaude hooks lane"
+    note: >
+      Nothing registers it on any surface and no script, library or workflow runs it.
+    removal_blocker: >
+      tests that name it: plugins/onex/tests/hooks/test_cron_bootstrap_enforcement.py
+  - script: "post_tool_use_output_suppressor.sh"
+    kind: "dormant"
+    role: "recorder"
+    owner: "omniclaude hooks lane"
+    note: >
+      Nothing registers it on any surface and no script, library or workflow runs it.
+    removal_blocker: >
+      tests that name it: tests/unit/hooks/test_skill_output_suppressor.py; also named (comments, docs or prose) in: CLAUDE.md, plugins/onex/hooks/scripts/post_tool_use_secret_redact_guard.sh
+  - script: "post_tool_use_return_path_auditor.sh"
+    kind: "dormant"
+    role: "recorder"
+    owner: "omniclaude hooks lane"
+    note: >
+      Nothing registers it on any surface and no script, library or workflow runs it.
+    removal_blocker: >
+      also named (comments, docs or prose) in: plugins/onex/hooks/scripts/common.sh
+  - script: "post_tool_use_subagent_tool_log.sh"
+    kind: "dormant"
+    role: "recorder"
+    owner: "omniclaude hooks lane"
+    note: >
+      Nothing registers it on any surface and no script, library or workflow runs it.
+    removal_blocker: >
+      tests that name it: tests/hooks/test_subagent_tool_log_agent_id_sanitize.py; also named (comments, docs or prose) in: plugins/onex/skills/dispatch_worker/SKILL.md, src/omniclaude/hooks/lib/dispatch_record_writer.py
+  - script: "post_tool_use_team_observability.sh"
+    kind: "dormant"
+    role: "recorder"
+    owner: "omniclaude hooks lane"
+    note: >
+      Nothing registers it on any surface and no script, library or workflow runs it.
+    removal_blocker: >
+      tests that name it: tests/hooks/test_hook_edge_lane.py, tests/hooks/test_team_observability.py, tests/unit/hooks/scripts/test_shell_session_id_migration.py; also named (comments, docs or prose) in: plugins/onex/hooks/contracts/hook_edge_lane.yaml, scripts/validation/validate_hook_edge_lane.py
+  - script: "post_tool_use_trajectory.sh"
+    kind: "dormant"
+    role: "recorder"
+    owner: "omniclaude hooks lane"
+    note: >
+      Nothing registers it on any surface and no script, library or workflow runs it.
+    removal_blocker: >
+      also named (comments, docs or prose) in: src/omniclaude/hooks/post_tool_use_trajectory.py
+  - script: "pre-commit-no-inprocess-fallback.sh"
+    kind: "live"
+    role: "support"
+    owner: "omniclaude hooks lane"
+    referenced_from: ".pre-commit-config.yaml"
+    note: >
+      A pre-commit and CI check, not a Claude event hook.
+  - script: "pre_tool_use_dispatch_mode_guardrail.sh"
+    kind: "dormant"
+    role: "recorder"
+    owner: "omniclaude hooks lane"
+    note: >
+      Nothing registers it on any surface and no script, library or workflow runs it.
+    removal_blocker: >
+      also named (comments, docs or prose) in: plugins/onex/hooks/scripts/pre_tool_use_agent_dispatch_gate.sh
+  - script: "pre_tool_use_permissions.py"
+    kind: "dormant"
+    role: "support"
+    owner: "omniclaude hooks lane"
+    note: >
+      Nothing registers it on any surface and no script, library or workflow runs it.
+    removal_blocker: >
+      also named (comments, docs or prose) in: plugins/onex/hooks/lib/bash_guard.py
+  - script: "session-end.sh"
+    kind: "live"
+    role: "recorder"
+    owner: "omniclaude hooks lane"
+    referenced_from: "plugins/onex/hooks/hooks-delegation.v1.json"
+    note: >
+      SessionEnd hook of the customer delegation install; records the session end and never refuses.
+  - script: "session-start.sh"
+    kind: "live"
+    role: "recorder"
+    owner: "omniclaude hooks lane"
+    referenced_from: "plugins/onex/hooks/hooks-delegation.v1.json"
+    note: >
+      SessionStart hook of the customer delegation install (scripts/install-delegation.sh); injects context and never refuses.
+  - script: "session_start_onex_cli_pin_check.sh"
+    kind: "dormant"
+    role: "recorder"
+    owner: "omniclaude hooks lane"
+    note: >
+      Nothing registers it on any surface and no script, library or workflow runs it.
+    removal_blocker: >
+      tests that name it: plugins/onex-delegate/tests/test_marketplace_cli_pin.py, plugins/onex/tests/test_onex_cli_pin_check_hook.py; also named (comments, docs or prose) in: plugins/onex-delegate/plugin-compat.yaml, plugins/onex/plugin-compat.yaml
+  - script: "statusline.sh"
+    kind: "live"
+    role: "support"
+    owner: "omniclaude hooks lane"
+    referenced_from: "plugins/onex/hooks/scripts/deploy.sh"
+    note: >
+      The status line renderer; deploy.sh installs the stable launcher that runs it. Not a Claude event hook.
+  - script: "stop.sh"
+    kind: "dormant"
+    role: "recorder"
+    owner: "omniclaude hooks lane"
+    note: >
+      Nothing registers it on any surface and no script, library or workflow runs it.
+    removal_blocker: >
+      tests that name it: tests/hooks/test_error_guard.sh, tests/hooks/test_hook_error_visibility.py; also named (comments, docs or prose) in: plugins/onex/hooks/lib/agent_summary_banner.py, plugins/onex/hooks/lib/friction_observer_adapter.py, plugins/onex/hooks/lib/response_intelligence.py, plugins/onex/hooks/scripts/common.sh
+  - script: "subagent-start.sh"
+    kind: "dormant"
+    role: "recorder"
+    owner: "omniclaude hooks lane"
+    note: >
+      Nothing registers it on any surface and no script, library or workflow runs it.
+    removal_blocker: >
+      tests that name it: tests/hooks/test_hook_event_names.py, tests/hooks/test_subagent_start.py, tests/unit/hook_runtime/test_subagent_exemption_shell.py; also named (comments, docs or prose) in: CLAUDE.md, plugins/onex/hooks/scripts/post-tool-delegation-counter.sh
+  - script: "test-hooks.sh"
+    kind: "harness"
+    role: "support"
+    owner: "omniclaude hooks lane"
+    referenced_from: "scripts/check_hook_event_names.sh"
+    note: >
+      Hook smoke harness that runs guards as subprocesses; check_hook_event_names.sh skips it by name.
+  - script: "test_injection_probe.sh"
+    kind: "harness"
+    role: "support"
+    owner: "omniclaude hooks lane"
+    referenced_from: "scripts/check_hook_event_names.sh"
+    note: >
+      OMN-10606 injection mechanism probe; check_hook_event_names.sh skips it by name.
+  - script: "user-prompt-delegation-rule.sh"
+    kind: "dormant"
+    role: "recorder"
+    owner: "omniclaude hooks lane"
+    note: >
+      Nothing registers it on any surface and no script, library or workflow runs it.
+    removal_blocker: >
+      tests that name it: tests/hooks/test_error_guard.sh, tests/hooks/test_hook_error_visibility.py; also named (comments, docs or prose) in: plugins/onex/hooks/scripts/test-hooks.sh
+  - script: "user-prompt-submit.sh"
+    kind: "dormant"
+    role: "recorder"
+    owner: "omniclaude hooks lane"
+    note: >
+      Nothing registers it on any surface and no script, library or workflow runs it.
+    removal_blocker: >
+      tests that name it: tests/contracts/test_omn21116_retired_hook_closure.py, tests/hooks/test_error_guard.sh, tests/hooks/test_hook_error_visibility.py, tests/hooks/test_injection_regression.py, tests/hooks/test_session_raw_outcome.py, tests/scripts/test_launcher_pinning.py; also named (comments, docs or prose) in: plugins/onex/hooks/lib/extraction_event_emitter.py, plugins/onex/hooks/scripts/session-start.sh, plugins/onex/hooks/scripts/test-hooks.sh, plugins/onex/hooks/scripts/user-prompt-delegation-rule.sh, plugins/onex/hooks/scripts/user_prompt_submit_bus_mirror.sh, src/omniclaude/hooks/event_registry.py
+  - script: "user_prompt_bootstrap_injector.sh"
+    kind: "dormant"
+    role: "recorder"
+    owner: "omniclaude hooks lane"
+    note: >
+      Nothing registers it on any surface and no script, library or workflow runs it.
+    removal_blocker: >
+      tests that name it: plugins/onex/tests/hooks/test_cron_bootstrap_enforcement.py; also named (comments, docs or prose) in: plugins/onex/hooks/scripts/test_injection_probe.sh
+  - script: "user_prompt_session_phase_enforcement.sh"
+    kind: "dormant"
+    role: "recorder"
+    owner: "omniclaude hooks lane"
+    note: >
+      Nothing registers it on any surface and no script, library or workflow runs it.
+    removal_blocker: >
+      tests that name it: tests/unit/hooks/test_session_phase_enforcement.py; also named (comments, docs or prose) in: scripts/hook_interpreter.py
+  - script: "user_prompt_structured_handoff_nudge.sh"
+    kind: "dormant"
+    role: "recorder"
+    owner: "omniclaude hooks lane"
+    note: >
+      Nothing registers it on any surface and no script, library or workflow runs it.
+    removal_blocker: >
+      also named (comments, docs or prose) in: plugins/onex/hooks/scripts/test_injection_probe.sh
+
+# ---------------------------------------------------------------------------
 # additive_bindings — rows of the adapter contract that register no script.
 # ---------------------------------------------------------------------------
 # An additive binding row (client_bindings.claude_code, kind additive, in omnimarket's

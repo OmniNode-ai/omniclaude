@@ -97,8 +97,17 @@ jobs:
       # jobs while this gate reported its repository green from `dev`. The gate
       # reads the other branches from refs/remotes/origin/*, one commit deep,
       # and refuses when they are absent -- a checkout alone holds one tree.
+      #
+      # OMN-17427: --prune IS LOAD-BEARING. This job runs on self-hosted
+      # runners whose work directory persists between runs, so without it a
+      # refs/remotes/origin/* ref survives the deletion of its branch and the
+      # gate keeps judging a branch that no longer exists. Measured on a
+      # private caller, 2026-11-20: seven branches deleted from GitHub still
+      # produced all 185 of that repository's breaches on the next run, because
+      # the fetch never dropped their refs. A fetch that cannot drop a ref
+      # makes a deleted branch unclearable.
       - name: Fetch every branch tip
-        run: git fetch --no-tags --depth=1 origin '+refs/heads/*:refs/remotes/origin/*'
+        run: git fetch --no-tags --prune --depth=1 origin '+refs/heads/*:refs/remotes/origin/*'
 
       - name: Resolve the gate pin
         id: pin

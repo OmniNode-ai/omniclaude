@@ -511,24 +511,15 @@ def test_invalid_encryption_config_journals_neither_capture_class(
     assert journal.list_pending(jdir) == []
 
 
-@pytest.mark.parametrize("event_type", ["hook.event", "content.captured"])
 @pytest.mark.usefixtures("encryption_on")
-def test_encrypted_capture_survives_refreshed_fan_out(
-    jdir: Path, event_type: str
-) -> None:
+def test_encrypted_capture_survives_refreshed_fan_out(jdir: Path) -> None:
+    """hook.event publishes as passthrough: the sealed envelope opens unchanged."""
+    event_type = "hook.event"
     key_text = _throwaway_key()
     store = FakeStore(key_text)
-    if event_type == "hook.event":
-        written = claude_capture.capture(
-            _stdin_with_marker(), journal_dir=jdir, key_reader=store
-        )
-    else:
-        written = content_capture.capture(
-            {"session_id": SESSION, "prompt": MARKER},
-            kind="prompt",
-            journal_dir=jdir,
-            key_reader=store,
-        )
+    written = claude_capture.capture(
+        _stdin_with_marker(), journal_dir=jdir, key_reader=store
+    )
     assert written == 1
     (sealed,) = _journalled(jdir, event_type)
     original = json.loads(json.dumps(sealed))
@@ -540,3 +531,34 @@ def test_encrypted_capture_survives_refreshed_fan_out(
     opened = _open(published, key_text, EnumHookPayloadClass(event_type))
     assert MARKER in json.dumps(opened)
     assert store.seen == [KEY_REF]
+
+
+@pytest.mark.usefixtures("encryption_on")
+def test_content_captured_sealed_envelope_is_hashed_by_the_publish_transform(
+    jdir: Path,
+) -> None:
+    """OMN-24082 routes content.captured through redact_capture, and that
+    transform hashes the undeclared ``payload_encryption`` field, so a sealed
+    envelope no longer opens after publish. Encryption is off by default
+    (test_the_shipped_contract_is_off_with_no_key_reference); this test pins the
+    measured conflict so that turning encryption on for this topic is a
+    deliberate step, and fails when omnimarket's contract starts to carry the
+    envelope through.
+    """
+    key_text = _throwaway_key()
+    store = FakeStore(key_text)
+    written = content_capture.capture(
+        {"session_id": SESSION, "prompt": MARKER},
+        kind="prompt",
+        journal_dir=jdir,
+        key_reader=store,
+    )
+    assert written == 1
+    (sealed,) = _journalled(jdir, "content.captured")
+    rule = EVENT_REGISTRY["content.captured"].fan_out[0]
+    published = rule.apply_transform(sealed)
+    assert MARKER not in json.dumps(published)
+    assert published["redaction_state"] == "redacted"
+    assert isinstance(published["payload_encryption"], str)
+    assert published["payload_encryption"].startswith("sha256:")
+    assert published["payload_encryption"] != sealed["payload_encryption"]

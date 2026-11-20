@@ -57,7 +57,12 @@ def _git(cwd: Path, *args: str) -> str:
         check=True,
         capture_output=True,
         text=True,
-        env=scrub_git_location_env(os.environ),
+        # The scrub drops GIT_CONFIG*, so restore the suite's ~/.gitconfig isolation (OMN-16584).
+        env={
+            **scrub_git_location_env(os.environ),
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_CONFIG_NOSYSTEM": "1",
+        },
     ).stdout.strip()
 
 

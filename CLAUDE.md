@@ -100,8 +100,9 @@ scripts, 38 with no explicit model on a structural re-count, a 29 percent miss r
 surfaced only in a forensics pass hours later. The dispatch seam is the only place the
 omission is observable before the cost is paid.
 
-**Allowlist file**: `plugins/onex/hooks/config/agent_model_allowlist.json` — ships `opus`,
-`sonnet`, `haiku`. It is JSON, not YAML like its neighbours, on purpose: the checker sits on a
+**Allowlist file**: `plugins/onex/hooks/config/agent_model_allowlist.json` — ships `fable`,
+`haiku`, `opus`, `sonnet`. Haiku joined by RULING 2026-11-16T19:43:11Z (OMN-24977) and only for band
+B1 of the routing contract: the list says which models may run at all, the contract says where. It is JSON, not YAML like its neighbours, on purpose: the checker sits on a
 fail-closed path and must parse its own policy with the standard library alone, or a missing
 PyYAML would refuse every dispatch on the machine. There is deliberately **no `inherit`
 entry** — an inherited model is the defect, so no spelling of it passes.
@@ -150,8 +151,13 @@ The dimensions, bands (allowed models, efforts, timeout, max_concurrent) and har
 (R=3 or J=3 means band B4 or above) live in `plugins/onex/hooks/config/contract_agent_routing.yaml` (beside the allowlist, which keeps
 only `allowed_models`), parsed by a strict in-module YAML-subset parser with the standard library only. A missing or unparsable ROUTE, a model or effort outside the band's
 set, a score that is not the sum of its dims, a floor-triggered band below B4, and a band below
-the one the score implies are all refused. Bands B0, B1 and B1c dispatch no Claude agent, so an
-`agent()` call carrying one is refused.
+the one the score implies are all refused. Bands B0 and B1c dispatch no Claude agent, so an
+`agent()` call carrying one is refused. **Band B1 allows model `haiku` only, at effort `low` or
+`medium`** (score 0 to 4, low-score mechanical work: run one script and return its output, post a
+given text, read a file and list fields); the band sets only the two efforts that mechanical work
+needs (the lab harness admitted both; a retry on 2026-11-17 reached the account weekly-limit refusal again, so no completed haiku run at either effort is recorded). A haiku ROUTE in B2 and above is refused with
+the band's own allowed models named ("band B3 allows only: sonnet"), and so is a haiku ROUTE whose
+score implies B2 or above but claims B1.
 
 **How to see a block.** Feed the hook a violating payload directly:
 

@@ -180,7 +180,7 @@ contract   -> node_release/contract.yaml
 
 ## Target execution — release phases
 
-The target pipeline processes repos in dependency-tier order (tier 0 → tier N):
+The target pipeline processes repos from the lowest configured dependency tier to the highest:
 
 1. **GATE**: Validate gate attestation (if provided) or proceed automatically
 2. **BUMP**: For each repo — infer or apply version bump; update `pyproject.toml` + `__version__` <!-- skill-boundary-ok: repo iteration is performed by node_release, this skill only dispatches -->
@@ -208,15 +208,14 @@ Repos are released in dependency-tier order to guarantee downstream consumers ge
 
 | Tier | Repos |
 |------|-------|
-| Tier 1 | omnibase_compat |
-| Tier 2 | omnibase_core |
-| Tier 3 | omnibase_spi |
-| Tier 4 | omnibase_infra |
-| Tier 5 | omniclaude, omniintelligence, omnimemory, omnimarket |
-| Tier 6 | omninode_infra, omnidash |
+| Tier 1 | omnibase_core |
+| Tier 2 | omnibase_spi |
+| Tier 3 | omnibase_infra |
+| Tier 4 | omniclaude, omniintelligence, omnimemory, omnimarket |
+| Tier 5 | omnidash |
 
-Tier N+1 repos pin the released version of Tier N repos. If a Tier 2 release fails,
-Tiers 3 through 6 are BLOCKED.
+Tier N+1 repos pin the released version of Tier N repos. If a Tier 1 release fails,
+Tiers 2 through 5 are BLOCKED.
 
 ## Target error table
 

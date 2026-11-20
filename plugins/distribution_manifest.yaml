@@ -106,6 +106,16 @@ components:
   backing_nodes:
   - node_skill_autopilot_orchestrator
   rationale: 'class=dispatch with disqualifying findings: [''missing_node''] (broken/boundary-bypass/ambiguous -> not beta-admissible).'
+- id: awaiting_reply
+  kind: skill
+  exposure: hidden
+  owning_package: internal
+  surface_class: dispatch
+  path: plugins/onex/skills/awaiting_reply/SKILL.md
+  backing_nodes:
+  - node_awaiting_reply_compute
+  - node_awaiting_reply_effect
+  rationale: class=dispatch shim to node_awaiting_reply_compute and node_awaiting_reply_effect in omnimarket (the node-home ratchet keeps nodes out of this repository), OMN-26222.
 - id: baseline
   kind: skill
   exposure: beta
@@ -1315,22 +1325,6 @@ components:
   path: plugins/onex/hooks/scripts/ensure-plugin-venv.sh
   backing_nodes: []
   rationale: shared helper / deploy-setup tooling / test-probe (not a distributable Claude event hook).
-- id: hooks/scripts/epic_postaction_gate.sh
-  kind: hook
-  exposure: beta
-  owning_package: onex-automation-beta
-  surface_class: hook_script
-  path: plugins/onex/hooks/scripts/epic_postaction_gate.sh
-  backing_nodes: []
-  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
-- id: hooks/scripts/epic_preflight_gate.sh
-  kind: hook
-  exposure: beta
-  owning_package: onex-automation-beta
-  surface_class: hook_script
-  path: plugins/onex/hooks/scripts/epic_preflight_gate.sh
-  backing_nodes: []
-  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
 - id: hooks/scripts/error-guard.sh
   kind: hook
   exposure: hidden
@@ -1339,14 +1333,6 @@ components:
   path: plugins/onex/hooks/scripts/error-guard.sh
   backing_nodes: []
   rationale: shared helper / deploy-setup tooling / test-probe (not a distributable Claude event hook).
-- id: hooks/scripts/file-path-convention-inject.sh
-  kind: hook
-  exposure: beta
-  owning_package: onex-automation-beta
-  surface_class: hook_script
-  path: plugins/onex/hooks/scripts/file-path-convention-inject.sh
-  backing_nodes: []
-  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
 - id: hooks/scripts/grep_guard_no_polymorphic_agent.sh
   kind: hook
   exposure: beta
@@ -1491,28 +1477,12 @@ components:
   path: plugins/onex/hooks/scripts/post_tool_use_auto_checkpoint.sh
   backing_nodes: []
   rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
-- id: hooks/scripts/post_tool_use_auto_hostile_review.sh
-  kind: hook
-  exposure: beta
-  owning_package: onex-automation-beta
-  surface_class: hook_script
-  path: plugins/onex/hooks/scripts/post_tool_use_auto_hostile_review.sh
-  backing_nodes: []
-  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
 - id: hooks/scripts/post_tool_use_changeset_guard.sh
   kind: hook
   exposure: beta
   owning_package: onex-automation-beta
   surface_class: hook_script
   path: plugins/onex/hooks/scripts/post_tool_use_changeset_guard.sh
-  backing_nodes: []
-  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
-- id: hooks/scripts/post_tool_use_commit_verify.sh
-  kind: hook
-  exposure: beta
-  owning_package: onex-automation-beta
-  surface_class: hook_script
-  path: plugins/onex/hooks/scripts/post_tool_use_commit_verify.sh
   backing_nodes: []
   rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
 - id: hooks/scripts/post_tool_use_cost_accounting.sh
@@ -1529,22 +1499,6 @@ components:
   owning_package: onex-automation-beta
   surface_class: hook_script
   path: plugins/onex/hooks/scripts/post_tool_use_cron_action_guard.sh
-  backing_nodes: []
-  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
-- id: hooks/scripts/post_tool_use_env_var_sync.sh
-  kind: hook
-  exposure: beta
-  owning_package: onex-automation-beta
-  surface_class: hook_script
-  path: plugins/onex/hooks/scripts/post_tool_use_env_var_sync.sh
-  backing_nodes: []
-  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
-- id: hooks/scripts/post_tool_use_kafka_poison_message_guard.sh
-  kind: hook
-  exposure: beta
-  owning_package: onex-automation-beta
-  surface_class: hook_script
-  path: plugins/onex/hooks/scripts/post_tool_use_kafka_poison_message_guard.sh
   backing_nodes: []
   rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
 - id: hooks/scripts/post_tool_use_output_capture_metadata.sh
@@ -1579,14 +1533,6 @@ components:
   path: plugins/onex/hooks/scripts/post_tool_use_secret_redact_guard.sh
   backing_nodes: []
   rationale: behavior-changing Claude event hook (OMN-16277). Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only); narrowly-scoped security control (same class as the SubagentStop secret-leak guard, OMN-15062) that masks secret-shaped patterns in raw Bash tool_response text before it reaches the transcript, registered in hooks.json alongside the other live PreToolUse/PostToolUse/SubagentStop hooks.
-- id: hooks/scripts/post_tool_use_state_verify.sh
-  kind: hook
-  exposure: beta
-  owning_package: onex-automation-beta
-  surface_class: hook_script
-  path: plugins/onex/hooks/scripts/post_tool_use_state_verify.sh
-  backing_nodes: []
-  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
 - id: hooks/scripts/post_tool_use_subagent_tool_log.sh
   kind: hook
   exposure: beta
@@ -1609,14 +1555,6 @@ components:
   owning_package: onex-automation-beta
   surface_class: hook_script
   path: plugins/onex/hooks/scripts/post_tool_use_trajectory.sh
-  backing_nodes: []
-  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
-- id: hooks/scripts/post_tool_use_tsc_check.sh
-  kind: hook
-  exposure: beta
-  owning_package: onex-automation-beta
-  surface_class: hook_script
-  path: plugins/onex/hooks/scripts/post_tool_use_tsc_check.sh
   backing_nodes: []
   rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
 - id: hooks/scripts/pre-commit-no-inprocess-fallback.sh
@@ -1681,14 +1619,6 @@ components:
   owning_package: onex-automation-beta
   surface_class: hook_script
   path: plugins/onex/hooks/scripts/pre_tool_use_branch_protection_guard.sh
-  backing_nodes: []
-  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
-- id: hooks/scripts/pre_tool_use_changeset_guard.sh
-  kind: hook
-  exposure: beta
-  owning_package: onex-automation-beta
-  surface_class: hook_script
-  path: plugins/onex/hooks/scripts/pre_tool_use_changeset_guard.sh
   backing_nodes: []
   rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
 - id: hooks/scripts/pre_tool_use_context_scope_auditor.sh
@@ -1963,14 +1893,6 @@ components:
   path: plugins/onex/hooks/scripts/pre_tool_use_worktree_guard.sh
   backing_nodes: []
   rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
-- id: hooks/scripts/register-tab.sh
-  kind: hook
-  exposure: hidden
-  owning_package: internal
-  surface_class: hook_script
-  path: plugins/onex/hooks/scripts/register-tab.sh
-  backing_nodes: []
-  rationale: shared helper / deploy-setup tooling / test-probe (not a distributable Claude event hook).
 - id: hooks/scripts/session-end.sh
   kind: hook
   exposure: beta
@@ -2105,14 +2027,6 @@ components:
   owning_package: onex-automation-beta
   surface_class: hook_script
   path: plugins/onex/hooks/scripts/stop.sh
-  backing_nodes: []
-  rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
-- id: hooks/scripts/stop_failure_logger.sh
-  kind: hook
-  exposure: beta
-  owning_package: onex-automation-beta
-  surface_class: hook_script
-  path: plugins/onex/hooks/scripts/stop_failure_logger.sh
   backing_nodes: []
   rationale: behavior-changing Claude event hook. Beta-CANDIDATE pending Phase 2 hook verification (automation opt-in only).
 - id: hooks/scripts/stop_quality_gate.sh

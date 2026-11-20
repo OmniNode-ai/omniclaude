@@ -19,8 +19,9 @@
 #   ./scripts/prune-worktrees.sh --execute --worktrees-root /path/to/worktrees
 #
 # Requirements:
-#   - the onex CLI (scm pr-heads): $ONEX_SCM_CLI wins, else the venv entry
-#     point under $OMNIBASE_INTERNAL_HOME (.venv/bin/onex), else `onex` on PATH
+#   - the onex CLI (scm pr-heads): $ONEX_SCM_CLI wins, else the venv under
+#     $OMNIBASE_INTERNAL_HOME (.venv/bin/python -m omnibase_core.cli.cli_commands),
+#     else `onex` on PATH
 #   - git
 #   - python3 (parses the pr-heads JSON; also the pre-removal snapshot)
 #
@@ -100,8 +101,9 @@ remote_to_slug() {
 # ---------------------------------------------------------------------------
 # The onex CLI that answers `scm pr-heads` (OMN-20977). $ONEX_SCM_CLI holds a
 # full command line (e.g. "uv run --project /path onex"); otherwise prefer the
-# venv entry point under $OMNIBASE_INTERNAL_HOME, which carries the omnimarket
-# that serves the verb; otherwise a bare `onex` from PATH.
+# venv under $OMNIBASE_INTERNAL_HOME, which carries the omnimarket that serves
+# the verb, running the core CLI as a module (omnibase-core no longer declares
+# the onex script, OMN-25070); otherwise a bare `onex` from PATH.
 # ---------------------------------------------------------------------------
 resolve_onex_command() {
   if [[ -n "${ONEX_SCM_CLI:-}" ]]; then
@@ -109,9 +111,9 @@ resolve_onex_command() {
     return
   fi
   if [[ -n "${OMNIBASE_INTERNAL_HOME:-}" ]]; then
-    local candidate="${OMNIBASE_INTERNAL_HOME%/}/.venv/bin/onex"
-    if [[ -x "$candidate" ]]; then
-      printf '%s' "$candidate"
+    local python="${OMNIBASE_INTERNAL_HOME%/}/.venv/bin/python"
+    if [[ -x "$python" ]]; then
+      printf '%s' "$python -m omnibase_core.cli.cli_commands"
       return
     fi
   fi

@@ -44,7 +44,7 @@ INSTALL_PLUGIN_ROOT="${INSTALL_ROOT}/plugin/plugins/onex"
 INSTALL_SCRIPTS_DIR="${INSTALL_PLUGIN_ROOT}/hooks/scripts"
 ROLLBACK_MANIFEST="${INSTALL_ROOT}/rollback-manifest.json"
 
-CLAUDE_SETTINGS="${HOME}/.claude/settings.json"
+CLAUDE_SETTINGS="${CLAUDE_CONFIG_DIR:-${HOME}/.claude}/settings.json"
 CLAUDE_SETTINGS_BACKUP_DIR="${INSTALL_ROOT}/backups"
 
 SOURCE_HOOK_CONFIG="${REPO_ROOT}/plugins/onex/hooks/hooks-delegation.v1.json"
@@ -133,45 +133,26 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --apply)        APPLY=true; DRY_RUN=false; shift ;;
-    --uninstall)    UNINSTALL=true; DRY_RUN=false; shift ;;
-    --from-source)
-      if [[ $# -lt 2 || -z "${2:-}" ]]; then
-        log_err "--from-source requires a path"
-        usage >&2
-        exit 2
-      fi
-      FROM_SOURCE="$2"
-      shift 2
-      ;;
-    --python)
-      if [[ $# -lt 2 || -z "${2:-}" ]]; then
-        log_err "--python requires an interpreter path"
-        usage >&2
-        exit 2
-      fi
-      PYTHON_BIN="$2"
-      shift 2
-      ;;
-    --endpoint-url)
-      if [[ $# -lt 2 || -z "${2:-}" ]]; then
-        log_err "--endpoint-url requires a URL"
-        usage >&2
-        exit 2
-      fi
-      ENDPOINT_URL="$2"
-      shift 2
-      ;;
-    --skip-pip)     SKIP_PIP=true; shift ;;
-    --skip-smoke)   SKIP_SMOKE=true; shift ;;
+    --apply)        APPLY=true; DRY_RUN=false; shift; continue ;;
+    --uninstall)    UNINSTALL=true; DRY_RUN=false; shift; continue ;;
+    --from-source)  requirement="a path"; destination=FROM_SOURCE ;;
+    --python)       requirement="an interpreter path"; destination=PYTHON_BIN ;;
+    --endpoint-url) requirement="a URL"; destination=ENDPOINT_URL ;;
+    --skip-pip)     SKIP_PIP=true; shift; continue ;;
+    --skip-smoke)   SKIP_SMOKE=true; shift; continue ;;
     -h|--help)      usage; exit 0 ;;
     *)              log_err "unknown argument: $1"; usage >&2; exit 2 ;;
   esac
+  if [[ $# -lt 2 || -z "${2:-}" ]]; then
+    log_err "$1 requires $requirement"
+    exit 2
+  fi
+  printf -v "$destination" '%s' "$2"
+  shift 2
 done
 
 if "${APPLY}" && "${UNINSTALL}"; then
   log_err "--apply and --uninstall are mutually exclusive"
-  usage >&2
   exit 2
 fi
 
@@ -234,11 +215,6 @@ check_source_files() {
 
 ensure_install_dir() {
   log_step "ensure install dirs (${INSTALL_ROOT})"
-  if [[ -d "${INSTALL_ROOT}" ]]; then
-    log_info "exists: ${INSTALL_ROOT}"
-  else
-    run_or_dry mkdir -p "${INSTALL_ROOT}"
-  fi
   run_or_dry mkdir -p "${INSTALL_SCRIPTS_DIR}" "${CLAUDE_SETTINGS_BACKUP_DIR}"
 }
 
@@ -356,9 +332,7 @@ import sys
 
 import yaml
 
-source_path = pathlib.Path(sys.argv[1])
-overlay_path = pathlib.Path(sys.argv[2])
-legacy_path = pathlib.Path(sys.argv[3])
+source_path, overlay_path, legacy_path = map(pathlib.Path, sys.argv[1:4])
 endpoint_url = sys.argv[4]
 
 
@@ -387,8 +361,7 @@ for container in (legacy, existing_overlay):
         if backend_id:
             # Endpoint overlays also carry model bindings and backend-specific
             # settings. Reinstallation must not discard those saved fields.
-            preserved = dict(backend)
-            preserved["backend_id"] = str(backend_id)
+            preserved = {**backend, "backend_id": str(backend_id)}
             if existing_endpoint:
                 preserved["endpoint_url"] = existing_endpoint
             backends_by_id[str(backend_id)] = preserved
@@ -404,7 +377,7 @@ if endpoint_url:
             )
             preserved["endpoint_url"] = endpoint_url
 
-overlay = {"backends": list(backends_by_id.values())}
+overlay = {**legacy, **existing_overlay, "backends": list(backends_by_id.values())}
 overlay_path.parent.mkdir(parents=True, exist_ok=True)
 overlay_path.write_text(yaml.dump(overlay, default_flow_style=False, sort_keys=False))
 print(f"wrote {len(overlay['backends'])} endpoint overlay entries to {overlay_path}")
@@ -508,13 +481,12 @@ else:
     settings = {}
 
 existing = settings.setdefault("hooks", {})
-# Drop entries an earlier version of this installer wrote (under the install
-# root but not in the current set, e.g. the old hook-scripts/ copies that
-# could not run). Every other hook, including other tools' rows such as the
-# OMN-23413 gateway groups, stays exactly where it is (OMN-22498).
-new_cmds = {h.get("command") for gs in delegation_hooks.values() for g in gs for h in g.get("hooks", [])}
+# Drop every entry this installer wrote (under the install root), then add
+# the current set below, so a re-install also updates an entry's fields such
+# as its timeout (OMN-23413). Every other hook, including other tools' rows
+# such as another tool's hook groups, stays exactly where it is (OMN-22498).
 for event in list(existing):
-    groups = [{**g, "hooks": [h for h in g.get("hooks", []) if f"{sys.argv[3]}/" not in (h.get("command") or "") or h.get("command") in new_cmds]} for g in existing[event]]
+    groups = [{**g, "hooks": [h for h in g.get("hooks", []) if f"{sys.argv[3]}/" not in (h.get("command") or "")]} for g in existing[event]]
     existing[event] = [g for g in groups if g["hooks"]]
     if not existing[event]: existing.pop(event)
 # Merge per-event arrays without duplicating commands already present.
@@ -723,6 +695,14 @@ main() {
   check_claude_cli
   resolve_python
   check_source_files
+  "${PYTHON_BIN}" - "${ROLLBACK_MANIFEST}" "${CLAUDE_SETTINGS}" <<'PY'
+import json, pathlib, sys
+manifest, settings = map(pathlib.Path, sys.argv[1:])
+if manifest.exists():
+    prior = json.loads(manifest.read_text()).get("claude_settings")
+    if not prior or pathlib.Path(prior).resolve() != settings.resolve():
+        raise SystemExit("Delegation belongs to another Claude profile; uninstall that profile before changing it.")
+PY
 
   ensure_install_dir
   install_python_package

@@ -748,17 +748,17 @@ def resolve_onex_command() -> list[str]:
 
     ``$ONEX_SCM_CLI`` (a full command line, e.g. ``uv run --project <dir>
     onex``) wins. Otherwise prefer the venv entry point under
-    ``$OMNIBASE_INTERNAL_HOME`` — the project whose dependencies register the
-    ``scm`` verb group — and otherwise a bare ``onex`` from PATH.
+    ``$OMNIBASE_INTERNAL_HOME`` (its python runs the core CLI as a module, which
+    registers the ``scm`` verbs; OMN-25070) and otherwise a bare ``onex``.
     """
     declared = os.environ.get("ONEX_SCM_CLI", "").strip()
     if declared:
         return shlex.split(declared)
     internal_home = os.environ.get("OMNIBASE_INTERNAL_HOME", "").strip()
     if internal_home:
-        candidate = Path(internal_home) / ".venv" / "bin" / "onex"
-        if candidate.is_file() and os.access(candidate, os.X_OK):
-            return [str(candidate)]
+        python = Path(internal_home) / ".venv" / "bin" / "python"
+        if python.is_file() and os.access(python, os.X_OK):
+            return [str(python), "-m", "omnibase_core.cli.cli_commands"]
     return ["onex"]
 
 

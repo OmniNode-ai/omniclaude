@@ -610,7 +610,7 @@ class TaskClassifier:
                 confidence = 0.0
 
         # Extract keywords (intent keywords + domain terms + significant words)
-        keywords: list[str] = []
+        keywords = []
 
         # 1. Extract intent keywords (action verbs)
         for _intent, kws in self.INTENT_KEYWORDS.items():

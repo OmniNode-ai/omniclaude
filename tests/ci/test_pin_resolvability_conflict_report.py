@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: MIT
 """The pin-resolvability report names the conflicting pins (OMN-19655).
 
-``scripts/ci/verify_pypi_pin_resolvability.py`` is vendored byte-for-byte from
-omnibase_infra, where it and these tests originate. It runs in this repo's
+``scripts/ci/verify_pypi_pin_resolvability.py`` and these tests originated in
+omnibase_infra. The script runs in this repo's
 release workflow and, since OMN-19655, before merge in
 ``pin-resolvability-gate.yml``. A red verdict must say which pins collide.
 """

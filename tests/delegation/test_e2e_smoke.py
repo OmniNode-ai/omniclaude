@@ -278,7 +278,8 @@ class TestFailOpenImplementTask:
 
         assert exit_code == 0
         printed = mock_print.call_args[0][0]
-        assert printed == "not_delegatable"
+        # OMN-23413: the runner names the reason it passes a task through.
+        assert printed == "not_delegatable:classifier"
 
     def test_classifier_debug_blocked_end_to_end(self) -> None:
         """Full pipeline: sensitivity gate passes, classifier blocks DEBUG intent."""

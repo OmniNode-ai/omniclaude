@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import shlex
 from pathlib import Path
 
 import pytest
@@ -55,10 +57,17 @@ def _collect_all_hook_commands_with_source() -> list[tuple[str, str, str]]:
 
 
 def _resolve_command(command: str) -> Path:
-    """Expand ${CLAUDE_PLUGIN_ROOT} to the canonical plugin root and return the path."""
+    """Expand ${CLAUDE_PLUGIN_ROOT} and return the script path the command runs.
+
+    Leading NAME=value environment assignments (for example
+    ``ONEX_DELEGATION_HOOK=prompts <script>``, OMN-23413) are skipped.
+    """
     plugin_root = str(Path(__file__).parent.parent.parent / "plugins" / "onex")
     resolved = command.replace("${CLAUDE_PLUGIN_ROOT}", plugin_root)
-    return Path(resolved)
+    words = shlex.split(resolved)
+    while len(words) > 1 and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=\S*", words[0]):
+        words.pop(0)
+    return Path(words[0]) if words else Path(resolved)
 
 
 _ALL_HOOK_COMMANDS_WITH_SOURCE = _collect_all_hook_commands_with_source()

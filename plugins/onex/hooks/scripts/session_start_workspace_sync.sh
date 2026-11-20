@@ -115,9 +115,8 @@ source "${_SCRIPT_DIR}/onex-paths.sh" 2>/dev/null || true
 #
 # This line said "clones/venv: in sync" throughout, and it was not lying: the
 # reconciler it quotes (onex-host-reconcile, formerly omnibase_infra/scripts/reconcile-host.sh) checks
-# core.bare through its clone-health verifier, but only over
-# SIBLING_CLONE_MANIFEST -- omnibase_infra, omnibase_core, omnibase_spi,
-# omnibase_compat, omnimarket. That is the runtime-image sibling set.
+# core.bare through its clone-health verifier over SIBLING_CLONE_MANIFEST,
+# the runtime-image sibling set.
 # `omniclaude` is not in it, so the one clone that decides whether any hook
 # runs at all is the one clone nothing was looking at.
 #
