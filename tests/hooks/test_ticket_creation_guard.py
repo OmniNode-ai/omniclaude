@@ -39,6 +39,7 @@ import shutil
 import subprocess
 import sys
 from collections.abc import Mapping
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Final
@@ -162,6 +163,9 @@ def test_policy_is_read_from_config_not_hardcoded(tmp_path: Path) -> None:
                 )["defect_diagnosis"],
                 "route_rows": json.loads(_POLICY_JSON.read_text(encoding="utf-8"))[
                     "route_rows"
+                ],
+                "sprint_project": json.loads(_POLICY_JSON.read_text(encoding="utf-8"))[
+                    "sprint_project"
                 ],
             }
         ),
@@ -602,6 +606,83 @@ def test_the_projectid_spelling_is_refused_too() -> None:
 def test_a_null_or_empty_project_is_not_a_project() -> None:
     assert "project_set" not in _codes(_create(project=None))
     assert "project_set" not in _codes(_create(project=""))
+
+
+# --- OMN-26203 (ruling 2026-11-20T13:52:49Z): the current sprint's project is admitted ----------
+
+
+def _sprint_name(start_offset_days: int, end_offset_days: int) -> str:
+    """A sprint project name whose window is placed relative to the clock of the call, never a literal."""
+    today = datetime.now(UTC).date()
+    start = today + timedelta(days=start_offset_days)
+    end = today + timedelta(days=end_offset_days)
+    return f"Sprint {start.isoformat()} \u2192 {end.isoformat()}: Fixture Theme"
+
+
+def test_a_create_naming_the_current_sprint_project_is_admitted() -> None:
+    assert _check(_create(project=_sprint_name(-3, 3))) == []
+
+
+def test_the_window_edges_are_inside_the_sprint() -> None:
+    assert _check(_create(project=_sprint_name(0, 6))) == []
+    assert _check(_create(project=_sprint_name(-6, 0))) == []
+
+
+def test_a_sprint_that_ended_or_has_not_started_is_refused() -> None:
+    assert "project_set" in _codes(_create(project=_sprint_name(-8, -1)))
+    assert "project_set" in _codes(_create(project=_sprint_name(1, 7)))
+
+
+def test_the_sprint_window_is_read_from_the_name_by_date() -> None:
+    handler = _GUARD._handler("handler_sprint_project_gate")
+    policy = POLICY.sprint_project
+    name = "Sprint 2031-05-05 \u2192 2031-05-11: Fixture"
+    assert handler.is_current_sprint(name, policy, date(2031, 5, 5))
+    assert handler.is_current_sprint(name, policy, date(2031, 5, 11))
+    assert not handler.is_current_sprint(name, policy, date(2031, 5, 4))
+    assert not handler.is_current_sprint(name, policy, date(2031, 5, 12))
+
+
+def test_any_other_project_is_still_refused() -> None:
+    assert "project_set" in _codes(_create(project="Post-Beta Hardening"))
+    assert "project_set" in _codes(_create(project="Sprint planning notes"))
+
+
+def test_a_project_id_is_refused_even_beside_the_current_sprint_name() -> None:
+    payload = _create(project=_sprint_name(-3, 3))
+    payload["projectId"] = "7ab68a44-653e-40e1-a770-b5e6a964b159"
+    assert "project_set" in _codes(payload)
+
+
+def test_a_policy_with_no_sprint_project_refuses_at_load(tmp_path: Path) -> None:
+    with pytest.raises(_GUARD.PolicyError):
+        _GUARD.load_policy(_policy_without("sprint_project", tmp_path))
+
+
+def test_a_sprint_name_pattern_with_no_window_groups_refuses_at_load(
+    tmp_path: Path,
+) -> None:
+    raw = json.loads(_POLICY_JSON.read_text(encoding="utf-8"))
+    raw["sprint_project"] = {"name_pattern": "^Sprint"}
+    written = tmp_path / "policy.json"
+    written.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(_GUARD.PolicyError, match="start' and 'end"):
+        _GUARD.load_policy(written)
+
+
+def test_registered_hook_admits_a_create_in_the_current_sprint_and_blocks_another(
+    tmp_path: Path,
+) -> None:
+    payload = {
+        "tool_name": "mcp__linear-server__save_issue",
+        "tool_input": _create(project=_sprint_name(-3, 3)),
+    }
+    admitted = _run_hook(payload, tmp_path)
+    assert admitted.returncode == 0, admitted.stdout + admitted.stderr
+    payload["tool_input"] = _create(project="Post-Beta Hardening")
+    blocked = _run_hook(payload, tmp_path)
+    assert blocked.returncode == 2, blocked.stdout + blocked.stderr
+    assert "project_set" in blocked.stdout + blocked.stderr
 
 
 def test_the_project_refusal_names_the_ruling() -> None:

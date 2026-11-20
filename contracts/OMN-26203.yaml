@@ -1,0 +1,42 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-26203
+title: "Commitments become current-sprint Linear tickets and the fill places lanes from unowned sprint tickets"
+summary: >
+  The ticket-creation gate's rule 2 admits a create whose project is the current sprint's (the project whose
+  name carries a window holding today, read from policy data) and still refuses any other project and every
+  projectId; a create with no project stays admitted.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn26203-gate-admits-sprint-project
+    statement: "The create gate admits the current sprint's project by name and refuses any other project."
+    acceptance:
+      - id: AC1
+        statement: "AC1: a resolved, wired mechanism enforces RULING 2026-11-20T13:52:49Z lane=orchestrator-31d9-swarm, linked to it by a CORRECTION row carrying mechanism=<repo path> -- falsifier: `python3 plugins/omni/skills/queue-status/scripts/ruling_mechanisms.py` no longer lists 2026-11-20T13:52:49Z as unmechanized"
+evidence_requirements:
+  - kind: tests
+    description: "The real guard over the payload the create-ticket skill documents: current sprint admitted, window edges, another project and a projectId refused, a policy with no sprint_project refused at load."
+    command: uv run pytest tests/hooks/test_ticket_creation_guard.py -q --no-cov -k "sprint or project or policy"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn26203-gate-sprint-project
+    description: "The gate admits the current sprint's project and refuses every other project."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: >-
+          uv run pytest tests/hooks/test_ticket_creation_guard.py -q --no-cov -k "sprint or project"
+  - id: dod-omn26203-integration-proof
+    description: "Run the gate's sprint-project tests on a lab host at the pushed head; the local Done gate runs this unbound check."
+    source: manual
+    execution_scope: local_done_gate
+    checks:
+      - check_type: command
+        check_value: env PYTHONDONTWRITEBYTECODE=1 onex lab-work run --repo OmniNode-ai/omniclaude --sha "$(git rev-parse HEAD)" --lane dod-integration-proof-26203 --kind test -- env PYTHONDONTWRITEBYTECODE=1 uv run --frozen pytest tests/hooks/test_ticket_creation_guard.py -q --no-cov -k "sprint or project"
+        cwd: .

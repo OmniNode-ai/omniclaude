@@ -485,6 +485,9 @@
       }
     ]
   },
+  "sprint_project": {
+    "name_pattern": "^Sprint (?P<start>\\d{4}-\\d{2}-\\d{2}) \u2192 (?P<end>\\d{4}-\\d{2}-\\d{2})"
+  },
   "lane_intake": {
     "label": "lane-created",
     "stamp_prefix": "created-by-lane:"

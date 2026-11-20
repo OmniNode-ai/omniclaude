@@ -43,10 +43,9 @@ A create is admitted only when all seven hold:
 
 1. ``parentId`` is present, **or** the description declares the issue an epic
    on a line of its own.
-2. NO project is named -- neither ``project`` (MCP surface) nor ``projectId``
-   (REST spelling). Operator ruling 2026-09-30T14:30:05Z: every new ticket is
-   created in the Backlog with no project. This inverts the original OMN-17942
-   rule 2, which required one.
+2. NO project is named but the current sprint's, by name (``project``, MCP surface;
+   a ``projectId`` is never admitted). Rulings 2026-09-30T14:30:05Z and 2026-11-20T13:52:49Z:
+   a new ticket goes in the current sprint's project or in the Backlog with no project.
 3. The description carries a binding line, on a line of its own. The shape of
    that line, the rewrites applied to what it carries, and every form the
    binding may take are declared ONCE, in ``config/gate_binding_grammar.json``,
@@ -625,6 +624,7 @@ class Policy:
     #: malformed declaration refuses at load time -- with everything else --
     #: rather than at the first create that happens to carry a binding line.
     gate_grammar: GateGrammar
+    sprint_project: Any = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -953,6 +953,9 @@ def load_policy(path: Path | None = None, grammar_path: Path | None = None) -> P
         ),
         route_rows=_handler("handler_ticket_route_gate").load_rows(
             raw.get("route_rows"), source, PolicyError
+        ),
+        sprint_project=_handler("handler_sprint_project_gate").load_policy(
+            raw.get("sprint_project"), source, PolicyError
         ),
     )
 
@@ -1908,30 +1911,10 @@ def check_save_issue(
             )
         )
 
-    # Rule 2 -- NO project (operator ruling 2026-09-30T14:30:05Z: "all new
-    # tickets need to go into the backlog not into a project"). Inverts the
-    # OMN-17942 original, which refused a create that named no project.
-    if _is_present(tool_input.get("project")) or _is_present(
-        tool_input.get("projectId")
-    ):
-        findings.append(
-            Finding(
-                code="project_set",
-                field="project",
-                reason=(
-                    "the create sets a project, but the operator ruled "
-                    "(2026-09-30T14:30:05Z, ledger RULING lane=orchestrator-0c2f "
-                    "ticket=OMN-17427) that every new ticket is created in the "
-                    "Backlog with NO project"
-                ),
-                fix=(
-                    "remove project and projectId from the create; leave the "
-                    "state at Backlog. A parent epic link is fine. Moving a "
-                    "ticket into a sprint project is the operator's call, made "
-                    "later with an update, never at creation"
-                ),
-            )
-        )
+    # Rule 2 -- no project but the current sprint's (rulings 2026-09-30T14:30:05Z, 2026-11-20T13:52:49Z).
+    findings += _handler("handler_sprint_project_gate").project_findings(
+        tool_input, policy.sprint_project, Finding
+    )
 
     # Rule 3 -- a binding line.
     binding = _binding_kind(description, policy) if description_readable else None

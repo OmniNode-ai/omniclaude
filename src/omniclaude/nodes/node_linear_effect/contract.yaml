@@ -80,6 +80,12 @@ capabilities:
       refused with the route switch at refuse, and a hand edit of a standard
       ticket's contract block or title is refused whatever the switch.
 
+  - name: linear.ticketing.sprint_project_gate
+    description: >
+      handler_sprint_project_gate owns rule 2 of the Mac ticket-creation hook: a create
+      is admitted with no project or with the current sprint's project (the project whose
+      name carries a window holding today), and any other project is refused.
+
   - name: linear.ticketing.closeout_instruction_audit
     description: >
       handler_done_closeout_instructions audits skill and workflow roots for
@@ -195,6 +201,10 @@ handler_routing:
       handler:
         module: omniclaude.nodes.node_linear_effect.handlers.handler_ticket_route_gate
         name: route_update_findings
+    - operation: ticket_sprint_project_gate
+      handler:
+        module: omniclaude.nodes.node_linear_effect.handlers.handler_sprint_project_gate
+        name: project_findings
     - operation: ticket_done_receipt_policy
       handler:
         module: omniclaude.nodes.node_linear_effect.handlers.handler_done_receipt_policy
