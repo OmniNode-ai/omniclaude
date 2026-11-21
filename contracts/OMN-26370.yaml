@@ -1,0 +1,64 @@
+schema_version: "1.0.0"
+ticket_id: OMN-26370
+title: omniclaude census baseline PR 3305 reads every required check green on its head
+summary: >-
+  The census baseline branch for omniclaude failed repo-evidence / dod-verify at its merge_base step
+  ("no test-side change: the bound tests cannot be shown to fail at the merge base"): it changed only
+  the ratchet file and a contract, so the verifier had no test to overlay on the merge base. The fix adds
+  tests/ci/test_ledger_file_census_per_file_table_omn26318.py, a test that fails at the merge base (no
+  per-file table) and passes at the head. No ratchet row, baseline file or check definition changes.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn26370-checks-green
+    statement: The census baseline PR reads every required check green on its head without loosening any gate.
+    acceptance:
+      - id: AC1
+        statement: >-
+          AC1: the check runs of omniclaude#3305 named CI Summary and repo-evidence / dod-verify read
+          conclusion success on the PR's current head -- falsifier: python3 pr_state_local.py --pr
+          OmniNode-ai/omniclaude#3305 prints ci=GREEN with red= empty
+      - id: AC2
+        statement: >-
+          AC2: no ratchet row, baseline file or check definition is loosened in the fix diff, and the
+          census node run on the branch prints state=ok -- falsifier: git diff origin/dev...HEAD over
+          config/ledger_file_census_ratchet.yaml shows no raised count, and the census node run on a lab
+          host exits 0
+evidence_requirements:
+  - kind: tests
+    description: The per-file table test passes at the head and fails at the merge base.
+    command: uv run pytest tests/ci/test_ledger_file_census_per_file_table_omn26318.py -q
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+  - id: dod-omn26370-ac1-bound-test
+    description: >-
+      The test the merge_base step overlays: it passes at the head, and at the merge base (no per-file
+      table in the ratchet file) all of its checks fail, so dod-verify can show the bound tests red there.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC1
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/ci/test_ledger_file_census_per_file_table_omn26318.py -q
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn26370-ac2-no-loosening
+    description: >-
+      The ratchet row and the line total never exceed the measured baseline (62 files, 243 lines), the
+      table size equals the row, and the row itself still reads 62. A raised count turns this red.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC2
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/ci/test_ledger_file_census_per_file_table_omn26318.py -q -k "row_and_line_total or size_equals"
+        cwd: ${OMNI_HOME}/omniclaude
+      - check_type: command
+        check_value: >-
+          grep -Fxq '  omniclaude: 62' config/ledger_file_census_ratchet.yaml
+        cwd: ${OMNI_HOME}/omniclaude
