@@ -1,0 +1,80 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+---
+schema_version: "1.0.0"
+ticket_id: "OMN-26381"
+title: "A retro skill reviews one session, sorts each finding into navigation, missing check or standard, and files each through friction records and the ticket node"
+summary: >
+  Adds the retro bootstrap skill, adapted from an MIT-licensed source with its notice kept. It reviews one session from its transcript and ledger rows, sorts each finding into navigation, missing automated check or standard, and writes each through the friction-record skill and, for a missing check, the ticket node. It restates no friction format or threshold.
+
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn26381-retro-skill
+    statement: "The retro skill reviews one session and plugs into the friction skills instead of duplicating them."
+    acceptance:
+      - id: "AC1"
+        statement: |-
+          AC1: `plugins/onex/skills/retro/SKILL.md` exists with a header that credits the source repository and carries the full MIT copyright and permission notice -- falsifier: uv run pytest tests/skills/test_retro_skill.py -k notice -q reads the file and asserts the licence text and the source URL
+      - id: "AC2"
+        statement: |-
+          AC2: the skill sorts each finding into navigation, missing automated check or standard, says a mechanical error gets a deterministic check first, and writes each finding as a FRICTION row and a missing check as a ticket through the ticket node -- falsifier: uv run pytest tests/skills/test_retro_skill.py -k categories -q asserts the three categories, the deterministic-check rule and both write routes
+      - id: "AC3"
+        statement: |-
+          AC3: the skill refers to `friction_triage` and `friction-record` by name and defines no friction format or threshold of its own -- falsifier: uv run pytest tests/skills/test_retro_skill.py -k plugs_in -q asserts both references and the absence of a row grammar or count threshold
+      - id: "AC4"
+        statement: |-
+          AC4: the skill carries a worked example from the session of 2026-11-21 covering the parked bottom-layer lines, the stale swap reading and the hosts never added to the lane pool, each sorted into a category -- falsifier: uv run pytest tests/skills/test_retro_skill.py -k worked_example -q asserts the three findings and a category for each
+      - id: "AC5"
+        statement: |-
+          AC5: the skill is classified in the distribution manifest, the plugin's skill checks pass, and the PR body says how retro relates to friction_triage and friction-record -- falsifier: uv run pytest tests/skills -q -k "retro or manifest"
+evidence_requirements:
+  - kind: "tests"
+    description: "The retro skill tests fail at the merge base, where the skill and its manifest row do not exist, and pass on the branch."
+    command: "uv run pytest tests/skills/test_retro_skill.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: "dod-retro-notice"
+    description: "The skill header credits the source repository and carries the licence notice."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/skills/test_retro_skill.py -k notice -q --no-cov"
+    binds_ac: ["AC1"]
+  - id: "dod-retro-categories"
+    description: "The skill names the three categories, the deterministic-check rule and both write routes."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/skills/test_retro_skill.py -k categories -q --no-cov"
+    binds_ac: ["AC2"]
+  - id: "dod-retro-plugs-in"
+    description: "The skill names friction_triage, friction-record and record_friction and restates no row grammar or count threshold."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/skills/test_retro_skill.py -k plugs_in -q --no-cov"
+    binds_ac: ["AC3"]
+  - id: "dod-retro-worked-example"
+    description: "The worked example holds three findings, each with a kind from the three categories and a reason."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/skills/test_retro_skill.py -k worked_example -q --no-cov"
+    binds_ac: ["AC4"]
+  - id: "dod-retro-manifest"
+    description: "The skill has one manifest row and the retro tests and manifest tests pass."
+    source: "manual"
+    status: "verified"
+    checks:
+      - check_type: "test_passes"
+        check_value: "uv run pytest tests/skills -q --no-cov -k \"retro or manifest\""
+    binds_ac: ["AC5"]
