@@ -158,7 +158,7 @@ Retro writes every finding through the skill that owns the write, one call per i
    subject. Create it through the ticket node (`onex ticket create`) by way of the `create-ticket`
    skill, which owns the parent, the Gate line and the criteria rules. That skill also owns when a
    first occurrence is only a friction row; follow it. If your brief grants no authority to mint
-   a ticket, say so in the friction record and name who owns the filing.
+   a ticket, record that in the friction record and name who files it.
 3. **Navigation and standard findings** stay friction records. `friction_triage` turns a surface
    that keeps recurring into a ticket by its own threshold. A standard is then put to the reviewer's
    standards by the ticket that follows, not by an edit made during the retro.
@@ -175,7 +175,7 @@ and the write that follows (text only; this example writes no row and no ticket)
 ### Finding 1: parked bottom-layer lines
 
 **What happened**: Between 09:06Z and the afternoon the hourly prove-running pass wrote 112
-blocked rows for 20 distinct pull requests, most of them on the lowest layers of the platform.
+blocked rows covering 20 distinct pull requests, mostly on the lowest layers of the platform.
 Each row's owner cell read as parked under the layer rule, with "no step taken" and, in several,
 a note of the step the line would need (a dev roll that builds an image at or after the merge)
 that was cut off mid-word. The same blocked row came back every hour. Nothing in a row points to
