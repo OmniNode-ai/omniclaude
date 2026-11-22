@@ -595,7 +595,7 @@ import json, pathlib, sys
 settings_path = pathlib.Path(sys.argv[1])
 if not settings_path.exists():
     sys.exit(0)
-settings = json.loads(settings_path.read_text())
+settings = json.loads(settings_path.read_text(encoding="utf-8"))
 if "hooks" not in settings:
     sys.exit(0)
 
@@ -620,8 +620,13 @@ for event in list(existing):
         if not groups:
             existing.pop(event)
 
+# A whitespace-preserving JSON rewrite is not attempted: when an owned row is
+# removed only the formatting changes (two-space indent). Values, non-ASCII
+# included, are written as they were read, never escaped.
 if removed:
-    settings_path.write_text(json.dumps(settings, indent=2) + "\n")
+    settings_path.write_text(
+        json.dumps(settings, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
 PY
   log_ok "merged delegation hooks into ${CLAUDE_SETTINGS}"
 }

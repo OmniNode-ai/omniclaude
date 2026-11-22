@@ -290,6 +290,45 @@ def test_an_interrupted_install_restores_settings_and_removes_its_snapshot(
     assert not list((root / "backups").glob("*.run.*"))
 
 
+@pytest.mark.unit
+def test_removing_an_owned_row_keeps_non_ascii_values_as_written(
+    tmp_path: Path,
+) -> None:
+    """The merge cannot rewrite JSON and keep the user's whitespace, so when an
+    owned row is removed only the formatting changes (two-space indent); every
+    value, non-ASCII included, is kept as written, not escaped. A file holding
+    no owned row is never rewritten."""
+    home = tmp_path / "home"
+    (home / ".claude").mkdir(parents=True)
+    root = home / ".omninode/delegation"
+    owned = {
+        "hooks": [
+            {
+                "type": "command",
+                "command": f"{root}/plugin/plugins/onex/hooks/scripts/pre_tool_use_delegation.sh",
+            }
+        ]
+    }
+    settings = home / ".claude/settings.json"
+    settings.write_bytes(
+        json.dumps(
+            {"model": "kept-é→✓", "hooks": {"UserPromptSubmit": [GUARD, owned]}},
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode()
+    )
+    bin_dir = tmp_path / "bin"
+    _stub_claude(bin_dir, tmp_path / "calls.log")
+
+    result = _run_stub_install(home, bin_dir)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    expected = {"model": "kept-é→✓", "hooks": {"UserPromptSubmit": [GUARD]}}
+    assert settings.read_bytes() == (
+        json.dumps(expected, indent=2, ensure_ascii=False) + "\n"
+    ).encode()
+
+
 @pytest.mark.parametrize("legacy", [False, True])
 @pytest.mark.parametrize("already_removed", [False, True])
 def test_native_install_upgrade_repeat_and_off(
