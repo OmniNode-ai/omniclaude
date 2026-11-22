@@ -184,7 +184,8 @@ def test_reinstalling_updates_an_existing_hook_to_the_current_one(
     )
     assert first.returncode == 0, first.stdout + first.stderr
     settings_path = config / "settings.json"
-    settings = json.loads(settings_path.read_text())
+    # The installer writes no settings.json of its own (the stub CLI writes none).
+    settings = json.loads(settings_path.read_text()) if settings_path.exists() else {}
     install_root = home / ".omninode" / "delegation"
     settings.setdefault("hooks", {}).setdefault("UserPromptSubmit", []).append(
         {
