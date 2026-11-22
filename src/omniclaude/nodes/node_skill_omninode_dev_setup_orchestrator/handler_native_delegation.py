@@ -43,7 +43,7 @@ def _owned(root: Path, relative: str) -> Path:
 
 
 def _vendor(*args: str) -> None:
-    completed = subprocess.run(
+    completed = subprocess.run(  # canonical-inference-ok: claude plugin management, no prompt or model call
         ["claude", "--setting-sources", "", "plugin", *args],
         capture_output=True,
         text=True,
