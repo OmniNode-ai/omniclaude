@@ -75,6 +75,8 @@ RUN_BACKUP=""
 # The paths under INSTALL_ROOT a run replaces: the hook config (or native
 # marker), the plugin tree, the old flat copy and the marketplace metadata.
 RUN_OWNED_PATHS=(hooks-delegation.json plugin hook-scripts .claude-plugin)
+# A signal held while Claude's installer runs (hold_signals), as an exit status.
+PENDING_SIGNAL_STATUS=""
 
 # ---------------------------------------------------------------------------
 # Logging helpers
@@ -444,14 +446,21 @@ install_hook_config() {
 
 # Move this run's owned paths aside (same filesystem, so mv), so a run that
 # stops before Claude's installer succeeds can put the tree back as it was.
+# The folder is the whole run state on disk, so a run killed outright can be
+# put back by the next one (recover_stale_run_state): .claude-settings names
+# the profile this run edits, .complete says every owned path was moved,
+# .settings.saved or .settings.absent is settings.json before this run, and
+# .run-backup names the pre-install backup this run made.
 snapshot_install_tree() {
   TREE_SNAPSHOT="$(mktemp -d "${CLAUDE_SETTINGS_BACKUP_DIR}/install-tree.run.XXXXXX")"
+  printf '%s\n' "${CLAUDE_SETTINGS}" > "${TREE_SNAPSHOT}/.claude-settings"
   local name
   for name in "${RUN_OWNED_PATHS[@]}"; do
     if [[ -e "${INSTALL_ROOT}/${name}" || -L "${INSTALL_ROOT}/${name}" ]]; then
       mv "${INSTALL_ROOT}/${name}" "${TREE_SNAPSHOT}/${name}"
     fi
   done
+  : > "${TREE_SNAPSHOT}/.complete"
   TREE_SAVED=true
 }
 
@@ -460,6 +469,17 @@ snapshot_install_tree() {
 # Safe to call twice and from the EXIT trap at any point of the run.
 restore_run_state() {
   local name
+  # Settings first: the settings snapshot lives in the tree snapshot folder.
+  if [[ -n "${SETTINGS_SNAPSHOT}" ]]; then
+    if "${SETTINGS_SAVED}"; then
+      if "${SETTINGS_EXISTED}"; then
+        cp "${SETTINGS_SNAPSHOT}" "${CLAUDE_SETTINGS}"
+      else
+        rm -f "${CLAUDE_SETTINGS}"
+      fi
+    fi
+    rm -f "${SETTINGS_SNAPSHOT}"
+  fi
   if [[ -n "${TREE_SNAPSHOT}" ]]; then
     for name in "${RUN_OWNED_PATHS[@]}"; do
       if [[ -e "${TREE_SNAPSHOT}/${name}" || -L "${TREE_SNAPSHOT}/${name}" ]]; then
@@ -472,16 +492,6 @@ restore_run_state() {
       # Otherwise the snapshot stopped before this name: it was never moved.
     done
     rm -rf "${TREE_SNAPSHOT}"
-  fi
-  if [[ -n "${SETTINGS_SNAPSHOT}" ]]; then
-    if "${SETTINGS_SAVED}"; then
-      if "${SETTINGS_EXISTED}"; then
-        cp "${SETTINGS_SNAPSHOT}" "${CLAUDE_SETTINGS}"
-      else
-        rm -f "${CLAUDE_SETTINGS}"
-      fi
-    fi
-    rm -f "${SETTINGS_SNAPSHOT}"
   fi
   if [[ -n "${RUN_BACKUP}" ]]; then
     rm -f "${RUN_BACKUP}"
@@ -500,6 +510,69 @@ commit_run_state() {
   fi
   TREE_SNAPSHOT=""; TREE_SAVED=false
   SETTINGS_SNAPSHOT=""; SETTINGS_SAVED=false; RUN_BACKUP=""
+}
+
+# A run killed outright (SIGKILL, power loss) runs no trap and leaves its
+# install-tree.run.* folder in backups/ with the tree moved aside and the old
+# rows already gone. Put that before-state back before this run snapshots
+# anything, or this run would save the half-installed state as its own
+# before-state and orphan the old snapshot (OMN-23413 review).
+recover_stale_run_state() {
+  local run settings="${CLAUDE_SETTINGS}"
+  for run in "${CLAUDE_SETTINGS_BACKUP_DIR}"/install-tree.run.*; do
+    [[ -d "${run}" && ! -L "${run}" ]] || continue
+    if "${DRY_RUN}"; then
+      log_dry "would restore a stale run snapshot left by an interrupted run: ${run}"
+      continue
+    fi
+    TREE_SNAPSHOT="${run}"
+    TREE_SAVED=false
+    [[ -e "${run}/.complete" ]] && TREE_SAVED=true
+    SETTINGS_SNAPSHOT=""; SETTINGS_SAVED=false; SETTINGS_EXISTED=false
+    if [[ -f "${run}/.settings.saved" ]]; then
+      SETTINGS_SNAPSHOT="${run}/.settings.saved"; SETTINGS_SAVED=true; SETTINGS_EXISTED=true
+    elif [[ -e "${run}/.settings.absent" ]]; then
+      SETTINGS_SNAPSHOT="${run}/.settings.absent"; SETTINGS_SAVED=true
+    fi
+    # Write settings back to the profile that run edited, not this run's.
+    CLAUDE_SETTINGS="${settings}"
+    if [[ -f "${run}/.claude-settings" ]]; then
+      CLAUDE_SETTINGS="$(<"${run}/.claude-settings")"
+    fi
+    RUN_BACKUP=""
+    if [[ -f "${run}/.run-backup" ]]; then
+      RUN_BACKUP="$(<"${run}/.run-backup")"
+      # Only ever a backup this installer names; never a path from elsewhere.
+      [[ "${RUN_BACKUP%/*}" == "${CLAUDE_SETTINGS_BACKUP_DIR}" && "${RUN_BACKUP##*/}" == settings.json.*.bak ]] || RUN_BACKUP=""
+    fi
+    restore_run_state
+    log_warn "restored a stale run snapshot left by an interrupted run (${run}): ${CLAUDE_SETTINGS} and the delegation files in ${INSTALL_ROOT} are back to their state before that run."
+    CLAUDE_SETTINGS="${settings}"
+  done
+}
+
+# bash runs a trap only after the foreground command exits, so a signal sent
+# while Claude's installer runs lands after Claude has finished. If Claude
+# succeeded it has registered the plugin from the new tree: restoring the old
+# tree then would leave that registration pointing at deleted files with no
+# manifest. So while it runs a signal is only recorded; Claude's result decides
+# and the signal is acted on after (exit_on_signals) (OMN-23413 review).
+hold_signals() {
+  trap 'PENDING_SIGNAL_STATUS=129' HUP
+  trap 'PENDING_SIGNAL_STATUS=130' INT
+  trap 'PENDING_SIGNAL_STATUS=143' TERM
+}
+
+# A signal becomes an exit, so the EXIT trap (on_install_exit) runs. A signal
+# held by hold_signals is acted on now.
+exit_on_signals() {
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  if [[ -n "${PENDING_SIGNAL_STATUS}" ]]; then
+    log_err "stopped by a signal after Claude's plugin installer finished; the install and its rollback manifest are kept."
+    exit "${PENDING_SIGNAL_STATUS}"
+  fi
 }
 
 # Any exit before commit_run_state (an error under set -e, a signal) restores.
@@ -521,6 +594,7 @@ install_native_plugin() {
   # Claude otherwise migrates unrelated model aliases (opus -> opus[1m]). Its
   # scoped plugin writer still preserves and updates the selected user profile.
   local status=0
+  hold_signals
   claude --setting-sources "" plugin install onex-delegation --marketplace "${INSTALL_ROOT}" --scope user --json || status=$?
   if (( status != 0 )); then
     # merge_user_settings already removed the old owned rows and
@@ -529,7 +603,7 @@ install_native_plugin() {
     # instead of none, and write no rollback manifest (OMN-23413 review).
     restore_run_state
     log_err "Claude's plugin installer failed (exit ${status}); ${CLAUDE_SETTINGS} and the delegation files in ${INSTALL_ROOT} (hooks-delegation.json, plugin/, .claude-plugin/) are restored to their state before this run, so the delegation installed before it is unchanged. Fix the error above and re-run."
-    exit 1
+    exit "${PENDING_SIGNAL_STATUS:-1}"
   fi
   commit_run_state
 }
@@ -574,6 +648,7 @@ PY
 
   mkdir -p "$(dirname "${CLAUDE_SETTINGS}")"
   if [[ -n "${backup_path}" && -z "${PRE_INSTALL_BACKUP}" && -f "${CLAUDE_SETTINGS}" ]]; then
+    printf '%s\n' "${backup_path}" > "${TREE_SNAPSHOT}/.run-backup"
     cp "${CLAUDE_SETTINGS}" "${backup_path}"
     RUN_BACKUP="${backup_path}"
     log_info "backed up existing settings → ${backup_path}"
@@ -581,11 +656,17 @@ PY
   fi
   # This run's own before-state (the backup above is the first install's), so
   # install_native_plugin can restore it exactly if Claude's installer fails.
-  SETTINGS_SNAPSHOT="$(mktemp "${CLAUDE_SETTINGS_BACKUP_DIR}/settings.json.run.XXXXXX")"
+  # Kept in the run's snapshot folder under a name that appears only once it
+  # is whole, so a later run never restores a half-written copy.
   SETTINGS_EXISTED=false
   if [[ -f "${CLAUDE_SETTINGS}" ]]; then
-    cp "${CLAUDE_SETTINGS}" "${SETTINGS_SNAPSHOT}"
+    cp "${CLAUDE_SETTINGS}" "${TREE_SNAPSHOT}/.settings.part"
+    mv "${TREE_SNAPSHOT}/.settings.part" "${TREE_SNAPSHOT}/.settings.saved"
+    SETTINGS_SNAPSHOT="${TREE_SNAPSHOT}/.settings.saved"
     SETTINGS_EXISTED=true
+  else
+    : > "${TREE_SNAPSHOT}/.settings.absent"
+    SETTINGS_SNAPSHOT="${TREE_SNAPSHOT}/.settings.absent"
   fi
   # Only now does the snapshot hold the before-state a restore may write back.
   SETTINGS_SAVED=true
@@ -712,10 +793,13 @@ uninstall() {
   resolve_python
   local native
   native="$(native_plugin remove)"
+  # The verdict is the last line the module prints, read as text: running it
+  # as a command would run whatever else reached stdout (OMN-23413 review).
+  native="${native##*$'\n'}"
   # Native removal is owned by the package handler. Only older command-hook
   # installs need the legacy consumer's exact-command rollback API, and they
   # still roll back where omnimarket is not installed (OMN-23413 review).
-  if ! "${native}"; then
+  if [[ "${native}" != true ]]; then
     "${PYTHON_BIN}" - "${ROLLBACK_MANIFEST}" "${PAUSE}" <<'PY'
 import json
 import sys
@@ -789,13 +873,17 @@ else:
     print(HandlerSetupClaude.rollback_hook_registration(manifest_path, pause))
 PY
   fi
-  if "${PAUSE}" && ! "${native}"; then
+  if "${PAUSE}" && [[ "${native}" != true ]]; then
     log_ok "delegation paused; pending-history hook retained"
     return 0
   fi
-  rm -f "${INSTALL_HOOKS_JSON}"
-  rm -rf "${INSTALL_ROOT}/plugin" "${INSTALL_ROOT}/hook-scripts"
-  log_ok "removed installed hook config + scripts"
+  # Every owned path, .claude-plugin/ included: its marketplace.json names
+  # ./plugin/plugins/onex, which is gone after this.
+  local name
+  for name in "${RUN_OWNED_PATHS[@]}"; do
+    rm -rf "${INSTALL_ROOT:?}/${name}"
+  done
+  log_ok "removed installed hook config, scripts and marketplace metadata"
   log_info "preserved: ${INSTALL_DB} (delete manually to discard telemetry)"
   log_info "uninstall complete"
 }
@@ -840,6 +928,7 @@ EOF
 
 main() {
   print_banner
+  recover_stale_run_state
 
   if "${UNINSTALL}" || "${PAUSE}"; then
     uninstall
@@ -862,9 +951,7 @@ PY
   # From here until Claude's installer succeeds, any exit restores this run's
   # changes; the signal traps turn a signal into an exit so the EXIT trap runs.
   trap on_install_exit EXIT
-  trap 'exit 129' HUP
-  trap 'exit 130' INT
-  trap 'exit 143' TERM
+  exit_on_signals
   ensure_install_dir
   install_python_package
   deploy_bifrost_contract
@@ -872,6 +959,9 @@ PY
   merge_user_settings
   install_native_plugin
   write_rollback_manifest
+  # Claude's installer has finished and the manifest is written: a signal held
+  # while it ran is acted on now, with the install kept.
+  exit_on_signals
   run_smoke_test
 
   if "${DRY_RUN}"; then

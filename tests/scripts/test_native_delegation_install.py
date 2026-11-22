@@ -14,8 +14,10 @@ at) is checked with a stub CLI, so it runs everywhere.
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -262,8 +264,9 @@ def test_an_interrupted_install_restores_settings_and_removes_its_snapshot(
     tmp_path: Path, step: str
 ) -> None:
     """A run that stops between the settings snapshot and a successful Claude
-    install, by an error under set -e or by a signal, must leave settings.json,
-    the install tree and the backups folder as they were before the run."""
+    install, by an error under set -e or by a signal during a Claude install
+    that then fails, must leave settings.json, the install tree and the backups
+    folder as they were before the run."""
     home = tmp_path / "home"
     # A non-group entry makes the settings merge raise after the snapshot.
     root = _classic_install(
@@ -276,7 +279,7 @@ def test_an_interrupted_install_restores_settings_and_removes_its_snapshot(
         # Strip the profile as a vendor writer would, then stop the installer.
         on_install = "echo '{}' > \"$HOME/.claude/settings.json\"; kill -TERM $PPID"
     bin_dir = tmp_path / "bin"
-    _stub_claude(bin_dir, tmp_path / "calls.log", on_install=on_install)
+    _stub_claude(bin_dir, tmp_path / "calls.log", install_exit=1, on_install=on_install)
 
     result = _run_stub_install(home, bin_dir)
 
@@ -698,6 +701,257 @@ def test_installer_binds_an_absolute_interpreter(tmp_path: Path, spelling: str) 
         ).read_text()
     )
     assert runtime == {"python": str(wrapper)}
+
+
+def _spawn_stub_install(
+    home: Path, bin_dir: Path, python: str = sys.executable
+) -> subprocess.Popen[str]:
+    """Start the installer without waiting, in its own session, so a test can
+    signal the installer alone (os.kill) or its whole group (os.killpg)."""
+    return subprocess.Popen(
+        [
+            "/bin/bash",
+            str(ROOT / "scripts/install-delegation.sh"),
+            "--apply",
+            "--skip-pip",
+            "--skip-smoke",
+            "--python",
+            python,
+        ],
+        env={"HOME": str(home), "PATH": f"{bin_dir}{os.pathsep}/usr/bin:/bin"},
+        cwd=home,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+
+
+def _wait_until_started(marker: Path, proc: subprocess.Popen[str]) -> None:
+    """Block until a stub has written ``marker``; fail if the installer exits first."""
+    deadline = time.monotonic() + 60
+    while not marker.exists():
+        if proc.poll() is not None:
+            out, err = proc.communicate()
+            raise AssertionError(
+                f"installer exited {proc.returncode} first: {out}{err}"
+            )
+        if time.monotonic() > deadline:
+            os.killpg(proc.pid, signal.SIGKILL)
+            raise AssertionError(f"{marker.name} never appeared")
+        time.sleep(0.05)
+
+
+def _run_files(root: Path) -> list[str]:
+    return sorted(p.name for p in (root / "backups").glob("*.run.*"))
+
+
+def _uninstall(
+    home: Path, bin_dir: Path, python: str = sys.executable
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            "/bin/bash",
+            str(ROOT / "scripts/install-delegation.sh"),
+            "--uninstall",
+            "--python",
+            python,
+        ],
+        env={"HOME": str(home), "PATH": f"{bin_dir}{os.pathsep}/usr/bin:/bin"},
+        cwd=home,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+
+
+def _registered_commands(settings: Path) -> list[str]:
+    return [
+        h["command"]
+        for groups in json.loads(settings.read_text()).get("hooks", {}).values()
+        for g in groups
+        for h in g["hooks"]
+    ]
+
+
+@pytest.mark.unit
+def test_a_signal_while_claude_installs_keeps_an_install_claude_finished(
+    tmp_path: Path,
+) -> None:
+    """bash runs a trap only after the foreground command exits. A TERM that
+    arrives while Claude's installer runs must not undo an install Claude then
+    finished: Claude has registered the plugin from the new tree, so restoring
+    the old tree would leave it pointing at deleted files with no manifest. The
+    run keeps its changes, writes its manifest and then exits 143."""
+    home = tmp_path / "home"
+    root = _classic_install(home)
+    settings = home / ".claude/settings.json"
+    bin_dir = tmp_path / "bin"
+    started = tmp_path / "claude-started"
+    _stub_claude(
+        bin_dir, tmp_path / "calls.log", on_install=f'touch "{started}"; sleep 3'
+    )
+
+    proc = _spawn_stub_install(home, bin_dir)
+    _wait_until_started(started, proc)
+    os.kill(proc.pid, signal.SIGTERM)  # the installer alone, not the stub
+    out, err = proc.communicate(timeout=120)
+
+    assert proc.returncode == 143, out + err
+    market = json.loads((root / ".claude-plugin/marketplace.json").read_text())
+    assert market["plugins"] == [
+        {"name": "onex-delegation", "source": "./plugin/plugins/onex"}
+    ]
+    assert (root / "plugin/plugins/onex/hooks/hooks.json").is_file()
+    assert json.loads((root / "hooks-delegation.json").read_text())["entrypoint"] == (
+        "native"
+    )
+    assert json.loads((root / "rollback-manifest.json").read_text())["entrypoint"] == (
+        "native"
+    )
+    assert _registered_commands(settings) == ["/unrelated/guard.sh"]
+    assert _run_files(root) == []
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("next_run", ["claude-succeeds", "claude-fails"])
+def test_a_run_after_sigkill_restores_the_stale_snapshot_first(
+    tmp_path: Path, next_run: str
+) -> None:
+    """A run killed outright (SIGKILL: no trap runs) leaves the tree stripped
+    and its snapshots in backups/. The next run must put that before-state back
+    before it snapshots anything: otherwise it saves the half-installed state
+    as its own before-state, a failure 'restores' to it, and the old snapshot is
+    orphaned. A failing next run therefore ends exactly where the killed run
+    started; a succeeding one installs cleanly. Neither leaves a *.run.* behind."""
+    home = tmp_path / "home"
+    root = _classic_install(home)
+    settings = home / ".claude/settings.json"
+    before_tree, before_settings = _tree(root), settings.read_bytes()
+    bin_dir = tmp_path / "bin"
+    started = tmp_path / "claude-started"
+    _stub_claude(
+        bin_dir, tmp_path / "calls.log", on_install=f'touch "{started}"; sleep 60'
+    )
+    proc = _spawn_stub_install(home, bin_dir)
+    _wait_until_started(started, proc)
+    os.killpg(proc.pid, signal.SIGKILL)
+    proc.communicate(timeout=60)
+    # The state kill -9 leaves: the old rows gone, the old tree moved aside.
+    assert _run_files(root), "the killed run left no snapshot; nothing to test"
+    assert settings.read_bytes() != before_settings
+
+    _stub_claude(
+        bin_dir,
+        tmp_path / "calls.log",
+        install_exit=1 if next_run == "claude-fails" else 0,
+    )
+    result = _run_stub_install(home, bin_dir)
+
+    if next_run == "claude-fails":
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert settings.read_bytes() == before_settings
+        assert _tree(root) == before_tree
+    else:
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert _registered_commands(settings) == ["/unrelated/guard.sh"]
+        assert (root / ".claude-plugin/marketplace.json").is_file()
+        owned = json.loads((root / "hooks-delegation.json").read_text())
+        assert owned["entrypoint"] == "native"
+    assert _run_files(root) == []
+    assert "stale run snapshot" in result.stderr, result.stdout + result.stderr
+
+
+@pytest.mark.unit
+def test_uninstall_removes_the_marketplace_metadata_with_the_plugin(
+    tmp_path: Path,
+) -> None:
+    """.claude-plugin/marketplace.json names ./plugin/plugins/onex as its
+    source; an uninstall that deletes plugin/ must not leave it behind."""
+    home = tmp_path / "home"
+    (home / ".claude").mkdir(parents=True)
+    root = home / ".omninode/delegation"
+    bin_dir = tmp_path / "bin"
+    _stub_claude(bin_dir, tmp_path / "calls.log")
+    installed = _run_stub_install(home, bin_dir)
+    assert installed.returncode == 0, installed.stdout + installed.stderr
+    assert (root / ".claude-plugin/marketplace.json").is_file()
+
+    removed = _uninstall(home, bin_dir)
+
+    assert removed.returncode == 0, removed.stdout + removed.stderr
+    for name in ("hooks-delegation.json", "plugin", "hook-scripts", ".claude-plugin"):
+        assert not (root / name).exists(), name
+
+
+@pytest.mark.unit
+def test_term_outside_claudes_installer_exits_143_and_restores(
+    tmp_path: Path,
+) -> None:
+    """The HUP/INT/TERM traps turn a signal into an exit, so the EXIT trap puts
+    the tree back. Without the mapping bash dies of the signal (-15) and no trap
+    runs, leaving the old tree moved aside. The TERM lands while the --python
+    interpreter is in the native prepare step, after the tree snapshot."""
+    home = tmp_path / "home"
+    root = _classic_install(home)
+    settings = home / ".claude/settings.json"
+    before_tree, before_settings = _tree(root), settings.read_bytes()
+    bin_dir = tmp_path / "bin"
+    _stub_claude(bin_dir, tmp_path / "calls.log")
+    started = tmp_path / "prepare-started"
+    wrapper = tmp_path / "python-fixture"
+    wrapper.write_text(
+        "#!/bin/bash\n"
+        'case "$*" in *container_onboarding_assets\\ prepare*)\n'
+        f'  touch "{started}"; sleep 3;;\n'
+        "esac\n"
+        f'exec "{sys.executable}" "$@"\n'
+    )
+    wrapper.chmod(0o755)
+
+    proc = _spawn_stub_install(home, bin_dir, str(wrapper))
+    _wait_until_started(started, proc)
+    os.kill(proc.pid, signal.SIGTERM)
+    out, err = proc.communicate(timeout=120)
+
+    assert proc.returncode == 143, out + err
+    assert settings.read_bytes() == before_settings
+    assert _tree(root) == before_tree
+    assert _run_files(root) == []
+
+
+@pytest.mark.unit
+def test_uninstall_reads_the_native_verdict_as_a_string(tmp_path: Path) -> None:
+    """The remove step prints its verdict on stdout. The installer must compare
+    it as text, not run it as a command: with a stray line ahead of the verdict
+    (an interpreter wrapper, a sitecustomize) running it fails, and the native
+    uninstall falls into the classic rollback, which rewrites settings.json."""
+    home = tmp_path / "home"
+    (home / ".claude").mkdir(parents=True)
+    settings = home / ".claude/settings.json"
+    settings.write_text(json.dumps({"model": "keep", "hooks": {"Stop": [GUARD]}}))
+    before = settings.read_bytes()
+    root = home / ".omninode/delegation"
+    bin_dir = tmp_path / "bin"
+    _stub_claude(bin_dir, tmp_path / "calls.log")
+    installed = _run_stub_install(home, bin_dir)
+    assert installed.returncode == 0, installed.stdout + installed.stderr
+    assert settings.read_bytes() == before
+    wrapper = tmp_path / "python-fixture"
+    wrapper.write_text(
+        "#!/bin/bash\n"
+        'case "$*" in *container_onboarding_assets\\ remove*) echo "stray output";; esac\n'
+        f'exec "{sys.executable}" "$@"\n'
+    )
+    wrapper.chmod(0o755)
+
+    removed = _uninstall(home, bin_dir, str(wrapper))
+
+    assert removed.returncode == 0, removed.stdout + removed.stderr
+    assert "command not found" not in removed.stderr, removed.stderr
+    assert settings.read_bytes() == before
+    assert not (root / "hooks-delegation.json").exists()
 
 
 @pytest.mark.unit
