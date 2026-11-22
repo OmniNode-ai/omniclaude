@@ -330,11 +330,14 @@ def test_delegation_switch_onex_hooks_cli_round_trip(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 @pytest.mark.parametrize("history", ["accepted", "empty", "malformed"])
-def test_paused_installed_hook_preserves_context_without_delegation(tmp_path, history):
-    """Native OFF removes every entry point and preserves legacy pending history.
+def test_paused_installed_hook_clears_pending_history_without_delegation(
+    tmp_path, history
+):
+    """Native OFF removes every entry point and clears pending history.
 
-    Native answers already live in Claude's transcript (real CLI history proof).
-    Pending classic exchanges are kept on disk for a later native re-enable.
+    Native answers already live in Claude's transcript (real CLI history proof),
+    so nothing pending is kept to be handed to Claude again after a re-enable
+    (OMN-23413 Amendment 17, superseding the earlier keep-on-disk rule).
     """
     home = _install(tmp_path)
     env, project = _customer_env(tmp_path, home)
@@ -358,7 +361,6 @@ def test_paused_installed_hook_preserves_context_without_delegation(tmp_path, hi
         saved.write_text("[]")
     elif history == "malformed":
         saved.write_text("not JSON")
-    before = saved.read_bytes()
     env["PATH"] = str(tmp_path / "bin") + os.pathsep + env["PATH"]
     paused = subprocess.run(
         ["/bin/bash", str(_INSTALLER), "--pause", "--python", sys.executable],
@@ -380,7 +382,7 @@ def test_paused_installed_hook_preserves_context_without_delegation(tmp_path, hi
         current.get("enabledPlugins", {}).get("onex-delegation@onex-delegation-local")
         is not True
     )
-    assert saved.read_bytes() == before
+    assert not saved.exists()
     removed = subprocess.run(
         ["/bin/bash", str(_INSTALLER), "--uninstall", "--python", sys.executable],
         env=env,
@@ -395,7 +397,7 @@ def test_paused_installed_hook_preserves_context_without_delegation(tmp_path, hi
             {
                 "status": "passed",
                 "history": history,
-                "pending_history_preserved": True,
+                "pending_history_cleared": True,
                 "full_uninstall": True,
             }
         )
