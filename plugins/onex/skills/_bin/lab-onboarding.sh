@@ -1347,9 +1347,7 @@ stamp_proven_floor() {
 dispatch_venv_current() {
   # omnibase-core no longer declares the onex console script, so the
   # dispatch venv is current when its interpreter can reach the core CLI module.
-  { [ -x "$WORKSPACE/.onex-dispatch-venv/bin/python" ] &&
-    compgen -G "$WORKSPACE/.onex-dispatch-venv/lib/python3*/site-packages/omnibase_core/cli/cli_commands.py" >/dev/null; } ||
-    return 1
+  { [ -x "$WORKSPACE/.onex-dispatch-venv/bin/python" ] && compgen -G "$WORKSPACE/.onex-dispatch-venv/lib/python3*/site-packages/omnibase_core/cli/cli_commands.py" >/dev/null; } || return 1
   env -u PYTHONPATH bash "$WORKSPACE/omnibase_infra/scripts/reconcile-workspace-venvs.sh" --omni-home "$WORKSPACE" --check
 }
 

@@ -75,3 +75,11 @@ dod_evidence:
       - check_type: test_passes
         check_value: uv run --frozen pytest -q tests/unit/nodes/test_comment_sweep_delegation.py tests/skills/test_onboarding_ladder_omn23168.py "tests/skills/test_lab_onboarding_script_omn20150.py::test_the_scripts_own_delegation_uses_the_developers_command"
         cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn25070-comment-sweep-deploy-probe
+    description: The comment sweep handler at the commit that moves it, read from GitHub, requires omnibase-core's CLI module in the dispatch venv. There is no live deploy of this handler to probe, so the check reads the file as published; it fails on dev, where the handler checks only for bin/onex.
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: command
+        check_value: "gh api repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_skill_comment_sweep_orchestrator/handler_comment_sweep_skill.py?ref=131696d2684dcb46c6b7bd5df262356d12bbd590 --jq .content | base64 -d | grep -c 'omnibase_core/cli/cli_commands.py'"
+        cwd: ${OMNI_HOME}/omniclaude
