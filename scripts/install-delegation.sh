@@ -70,7 +70,6 @@ SETTINGS_SNAPSHOT=""
 SETTINGS_EXISTED=false
 SETTINGS_SAVED=false
 TREE_SNAPSHOT=""
-TREE_SAVED=false
 RUN_BACKUP=""
 # The paths under INSTALL_ROOT a run replaces: the hook config (or native
 # marker), the plugin tree, the old flat copy and the marketplace metadata.
@@ -446,9 +445,10 @@ install_hook_config() {
 
 # Move this run's owned paths aside (same filesystem, so mv), so a run that
 # stops before Claude's installer succeeds can put the tree back as it was.
-# The folder is the whole run state on disk, so a run killed outright can be
-# put back by the next one (recover_stale_run_state): .claude-settings names
-# the profile this run edits, .complete says every owned path was moved,
+# The folder is the whole run state on disk, so a run killed outright, even
+# part way through a restore, can be put back by the next one
+# (recover_stale_run_state): .claude-settings names the profile this run
+# edits, each owned path is either moved in or marked .absent.<name>,
 # .settings.saved or .settings.absent is settings.json before this run, and
 # .run-backup names the pre-install backup this run made.
 snapshot_install_tree() {
@@ -458,10 +458,10 @@ snapshot_install_tree() {
   for name in "${RUN_OWNED_PATHS[@]}"; do
     if [[ -e "${INSTALL_ROOT}/${name}" || -L "${INSTALL_ROOT}/${name}" ]]; then
       mv "${INSTALL_ROOT}/${name}" "${TREE_SNAPSHOT}/${name}"
+    else
+      : > "${TREE_SNAPSHOT}/.absent.${name}"
     fi
   done
-  : > "${TREE_SNAPSHOT}/.complete"
-  TREE_SAVED=true
 }
 
 # Put back what this run replaced: the owned install paths, settings.json and,
@@ -485,30 +485,33 @@ restore_run_state() {
       if [[ -e "${TREE_SNAPSHOT}/${name}" || -L "${TREE_SNAPSHOT}/${name}" ]]; then
         rm -rf "${INSTALL_ROOT:?}/${name}"
         mv "${TREE_SNAPSHOT}/${name}" "${INSTALL_ROOT}/${name}"
-      elif "${TREE_SAVED}"; then
+      elif [[ -e "${TREE_SNAPSHOT}/.absent.${name}" ]]; then
         # Absent before this run: whatever is there now is this run's.
         rm -rf "${INSTALL_ROOT:?}/${name}"
+        rm -f "${TREE_SNAPSHOT}/.absent.${name}"
       fi
-      # Otherwise the snapshot stopped before this name: it was never moved.
+      # Otherwise it is already back, or the snapshot never reached it.
     done
     rm -rf "${TREE_SNAPSHOT}"
   fi
   if [[ -n "${RUN_BACKUP}" ]]; then
     rm -f "${RUN_BACKUP}"
   fi
-  TREE_SNAPSHOT=""; TREE_SAVED=false
+  TREE_SNAPSHOT=""
   SETTINGS_SNAPSHOT=""; SETTINGS_SAVED=false; RUN_BACKUP=""
 }
 
-# Claude's installer succeeded: this run's changes stand.
+# Claude's installer succeeded: this run's changes stand. The snapshot folder
+# is renamed out of the install-tree.run.* pattern in one step before it is
+# deleted, so a run killed while deleting it is never taken for a stale run
+# (recover_stale_run_state only clears the leftover).
 commit_run_state() {
   if [[ -n "${TREE_SNAPSHOT}" ]]; then
-    rm -rf "${TREE_SNAPSHOT}"
+    local committed="${TREE_SNAPSHOT%/*}/install-tree.done.${TREE_SNAPSHOT##*/install-tree.run.}"
+    mv "${TREE_SNAPSHOT}" "${committed}"
+    rm -rf "${committed}"
   fi
-  if [[ -n "${SETTINGS_SNAPSHOT}" ]]; then
-    rm -f "${SETTINGS_SNAPSHOT}"
-  fi
-  TREE_SNAPSHOT=""; TREE_SAVED=false
+  TREE_SNAPSHOT=""
   SETTINGS_SNAPSHOT=""; SETTINGS_SAVED=false; RUN_BACKUP=""
 }
 
@@ -519,6 +522,13 @@ commit_run_state() {
 # before-state and orphan the old snapshot (OMN-23413 review).
 recover_stale_run_state() {
   local run settings="${CLAUDE_SETTINGS}"
+  if ! "${DRY_RUN}"; then
+    for run in "${CLAUDE_SETTINGS_BACKUP_DIR}"/install-tree.done.*; do
+      if [[ -d "${run}" && ! -L "${run}" ]]; then
+        rm -rf "${run}"
+      fi
+    done
+  fi
   for run in "${CLAUDE_SETTINGS_BACKUP_DIR}"/install-tree.run.*; do
     [[ -d "${run}" && ! -L "${run}" ]] || continue
     if "${DRY_RUN}"; then
@@ -526,8 +536,6 @@ recover_stale_run_state() {
       continue
     fi
     TREE_SNAPSHOT="${run}"
-    TREE_SAVED=false
-    [[ -e "${run}/.complete" ]] && TREE_SAVED=true
     SETTINGS_SNAPSHOT=""; SETTINGS_SAVED=false; SETTINGS_EXISTED=false
     if [[ -f "${run}/.settings.saved" ]]; then
       SETTINGS_SNAPSHOT="${run}/.settings.saved"; SETTINGS_SAVED=true; SETTINGS_EXISTED=true

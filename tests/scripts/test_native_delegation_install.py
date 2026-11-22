@@ -815,7 +815,9 @@ def test_a_signal_while_claude_installs_keeps_an_install_claude_finished(
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("next_run", ["claude-succeeds", "claude-fails"])
+@pytest.mark.parametrize(
+    "next_run", ["claude-succeeds", "claude-fails", "killed-mid-restore-then-fails"]
+)
 def test_a_run_after_sigkill_restores_the_stale_snapshot_first(
     tmp_path: Path, next_run: str
 ) -> None:
@@ -824,7 +826,9 @@ def test_a_run_after_sigkill_restores_the_stale_snapshot_first(
     before it snapshots anything: otherwise it saves the half-installed state
     as its own before-state, a failure 'restores' to it, and the old snapshot is
     orphaned. A failing next run therefore ends exactly where the killed run
-    started; a succeeding one installs cleanly. Neither leaves a *.run.* behind."""
+    started; a succeeding one installs cleanly. Neither leaves a *.run.* behind.
+    A restore can itself be killed after putting some paths back: those must
+    not then be taken for paths the killed run created and deleted."""
     home = tmp_path / "home"
     root = _classic_install(home)
     settings = home / ".claude/settings.json"
@@ -841,15 +845,20 @@ def test_a_run_after_sigkill_restores_the_stale_snapshot_first(
     # The state kill -9 leaves: the old rows gone, the old tree moved aside.
     assert _run_files(root), "the killed run left no snapshot; nothing to test"
     assert settings.read_bytes() != before_settings
+    if next_run == "killed-mid-restore-then-fails":
+        # What a restore killed after moving plugin/ back leaves behind.
+        (snapshot,) = (root / "backups").glob("install-tree.run.*")
+        shutil.rmtree(root / "plugin")
+        (snapshot / "plugin").rename(root / "plugin")
 
     _stub_claude(
         bin_dir,
         tmp_path / "calls.log",
-        install_exit=1 if next_run == "claude-fails" else 0,
+        install_exit=0 if next_run == "claude-succeeds" else 1,
     )
     result = _run_stub_install(home, bin_dir)
 
-    if next_run == "claude-fails":
+    if next_run != "claude-succeeds":
         assert result.returncode != 0, result.stdout + result.stderr
         assert settings.read_bytes() == before_settings
         assert _tree(root) == before_tree
