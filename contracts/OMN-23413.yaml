@@ -20,6 +20,15 @@ requirements:
       the delegation installer keeps the selected Claude profile and other tools'' hook rows -- falsifier:
       uv run pytest tests/skills/test_customer_asset_resolution.py tests/skills/test_customer_plugin_wheel.py
       tests/scripts/test_delegation_profile_ownership.py tests/scripts/test_delegation_hook_install_omn22498.py'
+- id: req-omn23413-ac45-native-entry
+  statement: The CLI and TUI control exactly one active delegation entry point, the native plugin, with owned
+    rows removed on OFF and upgrade.
+  acceptance:
+  - id: AC45
+    statement: 'AC45: the existing CLI and TUI control exactly one active delegation entry point. Evidence:
+      real installer and TUI tests cover ON, repeated ON, OFF, upgrade from the classic prompt hook, and
+      rollback; OFF removes owned delegation registrations including the history helper. Unrelated settings
+      stay unchanged. Do not run the classic answer-producing hook and mod together.'
 evidence_requirements:
 - kind: tests
   description: The customer-asset and installer tests pass
@@ -41,6 +50,19 @@ dod_evidence:
     check_value: uv run pytest tests/skills/test_customer_asset_resolution.py tests/skills/test_customer_plugin_wheel.py
       tests/scripts/test_delegation_profile_ownership.py tests/scripts/test_delegation_hook_install_omn22498.py
       -q --no-cov
+    cwd: ${OMNI_HOME}/omniclaude
+- id: dod-omn23413-ac45-native-entry
+  description: Native plugin install, repeated install, upgrade from the classic prompt hook, OFF and rollback,
+    over the real installer in an isolated HOME. These test files do not exist at the merge base. The four
+    real-CLI cases of test_native_install_upgrade_repeat_and_off skip where no Claude Code CLI is on PATH;
+    registration is covered without one by a stubbed CLI.
+  source: manual
+  binds_ac:
+  - AC45
+  checks:
+  - check_type: test_passes
+    check_value: uv run pytest tests/scripts/test_native_delegation_install.py tests/scripts/test_one_delegation_hook_omn23413.py
+      tests/unit/hooks/scripts/test_native_delegation_mod.py -q --no-cov
     cwd: ${OMNI_HOME}/omniclaude
 - id: dod-omn23413-omniclaude-lab-proof
   description: Runs the customer-asset, installer and delegation hook runner tests on a lab host at the
