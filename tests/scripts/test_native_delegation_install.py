@@ -53,11 +53,14 @@ def test_contracted_prepare_retry_keeps_the_same_plugin_identity(
 GUARD = {"hooks": [{"type": "command", "command": "/unrelated/guard.sh"}]}
 
 
-def _stub_claude(bin_dir: Path, calls: Path, install_exit: int = 0) -> None:
+def _stub_claude(
+    bin_dir: Path, calls: Path, install_exit: int = 0, on_install: str = ""
+) -> None:
     """A claude CLI stand-in: logs each call's arguments; plugin install exits as told.
 
     A failing install first writes to the profile, as a vendor writer that dies
     part way would, so a test can tell a restore from an untouched file.
+    ``on_install`` is a bash snippet run in the plugin install branch before it exits.
     """
     bin_dir.mkdir(parents=True, exist_ok=True)
     claude = bin_dir / "claude"
@@ -70,6 +73,7 @@ def _stub_claude(bin_dir: Path, calls: Path, install_exit: int = 0) -> None:
         '    echo "{\\"partial\\": true}" > "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"\n'
         '    echo "stub: plugin install failed" >&2\n'
         "  fi\n"
+        f"  {on_install}\n"
         f"  exit {install_exit}\n"
         "fi\n"
         "exit 0\n"
@@ -146,6 +150,144 @@ def test_failed_plugin_install_leaves_settings_exactly_as_they_were(
     assert "Claude's plugin installer failed" in result.stderr, result.stderr
     assert "restored" in result.stderr, result.stderr
     assert not (install_root / "rollback-manifest.json").exists()
+
+
+def _classic_install(home: Path, extra_hooks: dict | None = None) -> Path:
+    """A command-hook install made before the native port, with its script on disk."""
+    profile = home / ".claude"
+    profile.mkdir(parents=True)
+    root = home / ".omninode/delegation"
+    script = root / "plugin/plugins/onex/hooks/scripts/pre_tool_use_delegation.sh"
+    script.parent.mkdir(parents=True)
+    script.write_text("#!/bin/bash\n# classic delegation hook\nexit 0\n")
+    script.chmod(0o755)
+    row = {
+        "hooks": [
+            {"type": "command", "command": f"ONEX_DELEGATION_HOOK=prompts {script}"}
+        ]
+    }
+    (root / "hooks-delegation.json").write_text(
+        json.dumps({"hooks": {"UserPromptSubmit": [row]}})
+    )
+    settings = profile / "settings.json"
+    settings.write_text(
+        json.dumps(
+            {
+                "model": "keep",
+                "hooks": {"UserPromptSubmit": [GUARD, row], **(extra_hooks or {})},
+            }
+        )
+    )
+    (root / "rollback-manifest.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "install_root": str(root),
+                "claude_settings": str(settings),
+                "settings_backup": None,
+                "installed_hook_config": str(root / "hooks-delegation.json"),
+                "package": "omninode-claude",
+            }
+        )
+    )
+    return root
+
+
+def _tree(root: Path) -> dict[str, bytes | None]:
+    """Every path under the install root, file bytes or None for a folder.
+
+    bifrost_overrides.yaml is the endpoint overlay, written before registration
+    and kept on every run, and backups/ is the installer's own folder; neither
+    is part of what a failed registration undoes. Files left in backups/ count.
+    """
+    return {
+        str(p.relative_to(root)): p.read_bytes() if p.is_file() else None
+        for p in sorted(root.rglob("*"))
+        if p.name != "bifrost_overrides.yaml" and p != root / "backups"
+    }
+
+
+@pytest.mark.unit
+def test_failed_plugin_install_leaves_the_install_tree_and_a_working_uninstall(
+    tmp_path: Path,
+) -> None:
+    """A classic install whose upgrade fails in Claude's installer must stay a
+    classic install: hooks-delegation.json, plugin/ and the marketplace files
+    as they were, so a later --uninstall takes the classic path and removes
+    the classic rows instead of deleting plugin/ under a row that still runs."""
+    home = tmp_path / "home"
+    root = _classic_install(home)
+    settings = home / ".claude/settings.json"
+    before_tree, before_settings = _tree(root), settings.read_bytes()
+    bin_dir = tmp_path / "bin"
+    _stub_claude(bin_dir, tmp_path / "calls.log", install_exit=1)
+
+    failed = _run_stub_install(home, bin_dir)
+
+    assert failed.returncode != 0, failed.stdout + failed.stderr
+    assert "restored" in failed.stderr, failed.stderr
+    assert settings.read_bytes() == before_settings
+    assert _tree(root) == before_tree
+
+    _stub_claude(bin_dir, tmp_path / "calls.log")
+    removed = subprocess.run(
+        [
+            "/bin/bash",
+            str(ROOT / "scripts/install-delegation.sh"),
+            "--uninstall",
+            "--python",
+            sys.executable,
+        ],
+        env={"HOME": str(home), "PATH": f"{bin_dir}{os.pathsep}/usr/bin:/bin"},
+        cwd=home,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+
+    assert removed.returncode == 0, removed.stdout + removed.stderr
+    commands = [
+        h["command"]
+        for groups in json.loads(settings.read_text())["hooks"].values()
+        for g in groups
+        for h in g["hooks"]
+    ]
+    assert commands == ["/unrelated/guard.sh"], commands
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("step", ["merge-fails", "terminated-during-claude"])
+def test_an_interrupted_install_restores_settings_and_removes_its_snapshot(
+    tmp_path: Path, step: str
+) -> None:
+    """A run that stops between the settings snapshot and a successful Claude
+    install, by an error under set -e or by a signal, must leave settings.json,
+    the install tree and the backups folder as they were before the run."""
+    home = tmp_path / "home"
+    # A non-group entry makes the settings merge raise after the snapshot.
+    root = _classic_install(
+        home, {"Stop": ["not-a-group"]} if step == "merge-fails" else None
+    )
+    settings = home / ".claude/settings.json"
+    before_tree, before_settings = _tree(root), settings.read_bytes()
+    on_install = ""
+    if step == "terminated-during-claude":
+        # Strip the profile as a vendor writer would, then stop the installer.
+        on_install = (
+            "echo '{}' > \"$HOME/.claude/settings.json\"; kill -TERM $PPID"
+        )
+    bin_dir = tmp_path / "bin"
+    _stub_claude(bin_dir, tmp_path / "calls.log", on_install=on_install)
+
+    result = _run_stub_install(home, bin_dir)
+
+    assert result.returncode != 0, result.stdout + result.stderr
+    if step == "terminated-during-claude":
+        assert "[plugin][install]" in (tmp_path / "calls.log").read_text()
+    assert settings.read_bytes() == before_settings
+    assert _tree(root) == before_tree
+    assert not list((root / "backups").glob("*.run.*"))
 
 
 @pytest.mark.parametrize("legacy", [False, True])

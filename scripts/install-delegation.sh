@@ -64,8 +64,17 @@ PYTHON_BIN=""
 ENDPOINT_URL=""
 SKIP_PIP=false
 SKIP_SMOKE=false
+# Run state: what this run moved or copied aside so a run that stops before
+# Claude's installer succeeds can put it back (restore_run_state).
 SETTINGS_SNAPSHOT=""
 SETTINGS_EXISTED=false
+SETTINGS_SAVED=false
+TREE_SNAPSHOT=""
+TREE_SAVED=false
+RUN_BACKUP=""
+# The paths under INSTALL_ROOT a run replaces: the hook config (or native
+# marker), the plugin tree, the old flat copy and the marketplace metadata.
+RUN_OWNED_PATHS=(hooks-delegation.json plugin hook-scripts .claude-plugin)
 
 # ---------------------------------------------------------------------------
 # Logging helpers
@@ -234,7 +243,8 @@ check_source_files() {
 
 ensure_install_dir() {
   log_step "ensure install dirs (${INSTALL_ROOT})"
-  run_or_dry mkdir -p "${INSTALL_SCRIPTS_DIR}" "${CLAUDE_SETTINGS_BACKUP_DIR}"
+  # plugin/ is left to install_hook_config, so it moves aside the tree as it was.
+  run_or_dry mkdir -p "${INSTALL_ROOT}" "${CLAUDE_SETTINGS_BACKUP_DIR}"
 }
 
 install_python_package() {
@@ -424,11 +434,82 @@ install_hook_config() {
   # mode.sh and repo_guard.sh by relative path, and run the routing runner and
   # cost_accounting from hooks/lib (OMN-22498). A fresh copy each run keeps a
   # re-install from mixing two versions.
-  rm -rf "${INSTALL_ROOT}/plugin" "${INSTALL_ROOT}/hook-scripts" && mkdir -p "${INSTALL_PLUGIN_ROOT}"
+  snapshot_install_tree
+  mkdir -p "${INSTALL_PLUGIN_ROOT}"
   cp -R "${SOURCE_HOOK_SCRIPTS%/hooks/scripts}/hooks" "${SOURCE_HOOK_SCRIPTS%/hooks/scripts}/lib" "${INSTALL_PLUGIN_ROOT}/"
   rm -rf "${INSTALL_PLUGIN_ROOT}/hooks/tests" && find "${INSTALL_PLUGIN_ROOT}" -type d -name __pycache__ -prune -exec rm -rf {} +
   native_plugin prepare
   log_ok "wrote ${INSTALL_HOOKS_JSON}"
+}
+
+# Move this run's owned paths aside (same filesystem, so mv), so a run that
+# stops before Claude's installer succeeds can put the tree back as it was.
+snapshot_install_tree() {
+  TREE_SNAPSHOT="$(mktemp -d "${CLAUDE_SETTINGS_BACKUP_DIR}/install-tree.run.XXXXXX")"
+  local name
+  for name in "${RUN_OWNED_PATHS[@]}"; do
+    if [[ -e "${INSTALL_ROOT}/${name}" || -L "${INSTALL_ROOT}/${name}" ]]; then
+      mv "${INSTALL_ROOT}/${name}" "${TREE_SNAPSHOT}/${name}"
+    fi
+  done
+  TREE_SAVED=true
+}
+
+# Put back what this run replaced: the owned install paths, settings.json and,
+# when this run made it, the pre-install settings backup no manifest will name.
+# Safe to call twice and from the EXIT trap at any point of the run.
+restore_run_state() {
+  local name
+  if [[ -n "${TREE_SNAPSHOT}" ]]; then
+    for name in "${RUN_OWNED_PATHS[@]}"; do
+      if [[ -e "${TREE_SNAPSHOT}/${name}" || -L "${TREE_SNAPSHOT}/${name}" ]]; then
+        rm -rf "${INSTALL_ROOT:?}/${name}"
+        mv "${TREE_SNAPSHOT}/${name}" "${INSTALL_ROOT}/${name}"
+      elif "${TREE_SAVED}"; then
+        # Absent before this run: whatever is there now is this run's.
+        rm -rf "${INSTALL_ROOT:?}/${name}"
+      fi
+      # Otherwise the snapshot stopped before this name: it was never moved.
+    done
+    rm -rf "${TREE_SNAPSHOT}"
+  fi
+  if [[ -n "${SETTINGS_SNAPSHOT}" ]]; then
+    if "${SETTINGS_SAVED}"; then
+      if "${SETTINGS_EXISTED}"; then
+        cp "${SETTINGS_SNAPSHOT}" "${CLAUDE_SETTINGS}"
+      else
+        rm -f "${CLAUDE_SETTINGS}"
+      fi
+    fi
+    rm -f "${SETTINGS_SNAPSHOT}"
+  fi
+  if [[ -n "${RUN_BACKUP}" ]]; then
+    rm -f "${RUN_BACKUP}"
+  fi
+  TREE_SNAPSHOT=""; TREE_SAVED=false
+  SETTINGS_SNAPSHOT=""; SETTINGS_SAVED=false; RUN_BACKUP=""
+}
+
+# Claude's installer succeeded: this run's changes stand.
+commit_run_state() {
+  if [[ -n "${TREE_SNAPSHOT}" ]]; then
+    rm -rf "${TREE_SNAPSHOT}"
+  fi
+  if [[ -n "${SETTINGS_SNAPSHOT}" ]]; then
+    rm -f "${SETTINGS_SNAPSHOT}"
+  fi
+  TREE_SNAPSHOT=""; TREE_SAVED=false
+  SETTINGS_SNAPSHOT=""; SETTINGS_SAVED=false; RUN_BACKUP=""
+}
+
+# Any exit before commit_run_state (an error under set -e, a signal) restores.
+on_install_exit() {
+  local status=$?
+  if [[ -n "${TREE_SNAPSHOT}${SETTINGS_SNAPSHOT}" ]]; then
+    restore_run_state
+    log_err "install stopped (exit ${status}) before Claude's plugin installer finished; ${CLAUDE_SETTINGS} and the delegation files in ${INSTALL_ROOT} (hooks-delegation.json, plugin/, .claude-plugin/) are restored to their state before this run."
+  fi
+  return "${status}"
 }
 
 install_native_plugin() {
@@ -442,19 +523,15 @@ install_native_plugin() {
   local status=0
   claude --setting-sources "" plugin install onex-delegation --marketplace "${INSTALL_ROOT}" --scope user --json || status=$?
   if (( status != 0 )); then
-    # merge_user_settings already removed the old owned rows. Put settings.json
-    # back byte for byte, so a failed upgrade leaves the previous delegation in
-    # place instead of none, and write no rollback manifest (OMN-23413 review).
-    if "${SETTINGS_EXISTED}"; then
-      cp "${SETTINGS_SNAPSHOT}" "${CLAUDE_SETTINGS}"
-    else
-      rm -f "${CLAUDE_SETTINGS}"
-    fi
-    rm -f "${SETTINGS_SNAPSHOT}"
-    log_err "Claude's plugin installer failed (exit ${status}); ${CLAUDE_SETTINGS} restored to its state before this run. Delegation is unchanged; fix the error above and re-run."
+    # merge_user_settings already removed the old owned rows and
+    # install_hook_config replaced the tree they run from. Put both back byte
+    # for byte, so a failed upgrade leaves the previous delegation in place
+    # instead of none, and write no rollback manifest (OMN-23413 review).
+    restore_run_state
+    log_err "Claude's plugin installer failed (exit ${status}); ${CLAUDE_SETTINGS} and the delegation files in ${INSTALL_ROOT} (hooks-delegation.json, plugin/, .claude-plugin/) are restored to their state before this run, so the delegation installed before it is unchanged. Fix the error above and re-run."
     exit 1
   fi
-  rm -f "${SETTINGS_SNAPSHOT}"
+  commit_run_state
 }
 
 merge_user_settings() {
@@ -498,6 +575,7 @@ PY
   mkdir -p "$(dirname "${CLAUDE_SETTINGS}")"
   if [[ -n "${backup_path}" && -z "${PRE_INSTALL_BACKUP}" && -f "${CLAUDE_SETTINGS}" ]]; then
     cp "${CLAUDE_SETTINGS}" "${backup_path}"
+    RUN_BACKUP="${backup_path}"
     log_info "backed up existing settings → ${backup_path}"
     PRE_INSTALL_BACKUP="${backup_path}"
   fi
@@ -509,6 +587,8 @@ PY
     cp "${CLAUDE_SETTINGS}" "${SETTINGS_SNAPSHOT}"
     SETTINGS_EXISTED=true
   fi
+  # Only now does the snapshot hold the before-state a restore may write back.
+  SETTINGS_SAVED=true
 
   "${PYTHON_BIN}" - "${CLAUDE_SETTINGS}" "${INSTALL_HOOKS_JSON}" "${INSTALL_ROOT}" <<'PY'
 import json, pathlib, sys
@@ -774,6 +854,12 @@ if manifest.exists():
         raise SystemExit("Delegation belongs to another Claude profile; uninstall that profile before changing it.")
 PY
 
+  # From here until Claude's installer succeeds, any exit restores this run's
+  # changes; the signal traps turn a signal into an exit so the EXIT trap runs.
+  trap on_install_exit EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
   ensure_install_dir
   install_python_package
   deploy_bifrost_contract
