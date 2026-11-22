@@ -80,12 +80,16 @@ class HandlerNativeDelegation:
         }
         # A source checkout keeps the module as a file directly in src/: a
         # second directory there renames the repo in the contract scanner.
-        asset = Path(__file__).parents[3] / "index.ts"
-        if not asset.is_file():
-            asset = (
-                Path(__file__).parents[2]
-                / "resources/customer/plugins/onex/hooks/lib/native_delegation_mod.js"
-            )
+        # Only a checkout (src/ beside the repo's pyproject.toml) reads it; in
+        # an installed wheel parents[3] is site-packages, where an index.ts is
+        # not ours, so the packaged module is used (OMN-23413 review).
+        here = Path(__file__).parents
+        asset = (
+            here[2]
+            / "resources/customer/plugins/onex/hooks/lib/native_delegation_mod.js"
+        )
+        if here[3].name == "src" and (here[4] / "pyproject.toml").is_file():
+            asset = here[3] / "index.ts"
         shutil.copyfile(
             asset,
             owned["plugin/plugins/onex/hooks/lib/native_delegation_mod.js"],

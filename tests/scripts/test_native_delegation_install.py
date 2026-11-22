@@ -698,3 +698,58 @@ def test_installer_binds_an_absolute_interpreter(tmp_path: Path, spelling: str) 
         ).read_text()
     )
     assert runtime == {"python": str(wrapper)}
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("layout", ["installed-wheel", "source-checkout"])
+def test_prepare_reads_src_index_ts_only_in_a_source_checkout(
+    tmp_path: Path, layout: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """In an installed wheel the handler sits at
+    site-packages/omniclaude/nodes/<node>/, so parents[3] is site-packages and
+    a stray site-packages/index.ts must not become the plugin module: only a
+    source checkout (src/ beside the repo's pyproject.toml) uses src/index.ts."""
+    from omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator import (
+        handler_native_delegation as module,
+    )
+    from omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.models.model_native_delegation import (
+        ModelNativeDelegationRequest,
+    )
+
+    if layout == "installed-wheel":
+        top = tmp_path / "venv/lib/python3.12/site-packages"
+    else:
+        top = tmp_path / "repo/src"
+    node = top / "omniclaude/nodes/node_skill_omninode_dev_setup_orchestrator"
+    node.mkdir(parents=True)
+    if layout == "source-checkout":
+        (top.parent / "pyproject.toml").write_text('[project]\nname = "x"\n')
+    (top / "index.ts").write_text("// top-level index.ts\n")
+    packaged = (
+        top
+        / "omniclaude/resources/customer/plugins/onex/hooks/lib/native_delegation_mod.js"
+    )
+    packaged.parent.mkdir(parents=True)
+    packaged.write_text("// packaged module\n")
+    monkeypatch.setattr(module, "__file__", str(node / "handler_native_delegation.py"))
+    root = tmp_path / "root"
+    (root / "plugin/plugins/onex/hooks/lib").mkdir(parents=True)
+
+    module.HandlerNativeDelegation().handle(
+        ModelNativeDelegationRequest(
+            operation="prepare",
+            install_root=root,
+            claude_settings=tmp_path / "profile/settings.json",
+            python_bin=sys.executable,
+        )
+    )
+
+    copied = (
+        root / "plugin/plugins/onex/hooks/lib/native_delegation_mod.js"
+    ).read_text()
+    expected = (
+        "// packaged module\n"
+        if layout == "installed-wheel"
+        else "// top-level index.ts\n"
+    )
+    assert copied == expected
