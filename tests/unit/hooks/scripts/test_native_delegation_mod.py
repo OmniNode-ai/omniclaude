@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-MODULE = Path(__file__).resolve().parents[4] / "src/handlers/native_delegation.ts"
+MODULE = Path(__file__).resolve().parents[4] / "src/index.ts"
 
 
 def run_adapter(case: dict) -> dict:

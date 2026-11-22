@@ -4,7 +4,7 @@
 
 ``scripts/install-delegation.sh --apply`` copies the hook tree under
 ``~/.omninode/delegation`` and registers the native plugin; nothing is written
-into ``~/.claude/settings.json``. The native mod (``native_delegation.ts``) runs
+into ``~/.claude/settings.json``. The native mod (``native_delegation_mod.js``) runs
 ``hooks/scripts/pre_tool_use_delegation.sh`` with ``PLUGIN_PYTHON_BIN`` taken
 from the plugin's ``hooks/delegation-runtime.json``, with no
 ``CLAUDE_PLUGIN_ROOT``, from the customer's own project. These tests install

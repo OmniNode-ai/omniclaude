@@ -78,7 +78,9 @@ class HandlerNativeDelegation:
                 "hooks-delegation.json",
             )
         }
-        asset = Path(__file__).parents[3] / "handlers/native_delegation.ts"
+        # A source checkout keeps the module as a file directly in src/: a
+        # second directory there renames the repo in the contract scanner.
+        asset = Path(__file__).parents[3] / "index.ts"
         if not asset.is_file():
             asset = (
                 Path(__file__).parents[2]

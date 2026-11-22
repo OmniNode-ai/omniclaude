@@ -233,7 +233,7 @@ def test_native_install_upgrade_repeat_and_off(
         "modules": ["./lib/native_delegation_mod.js"]
     }
     assert (loaded / "hooks/lib/native_delegation_mod.js").read_bytes() == (
-        ROOT / "src/handlers/native_delegation.ts"
+        ROOT / "src/index.ts"
     ).read_bytes()
     runtime = json.loads((loaded / "hooks/delegation-runtime.json").read_text())
     assert runtime["python"] == sys.executable
@@ -426,7 +426,7 @@ def test_installer_registers_the_native_plugin_through_claude_cli(
         "modules": ["./lib/native_delegation_mod.js"]
     }
     assert (plugin / "hooks/lib/native_delegation_mod.js").read_bytes() == (
-        ROOT / "src/handlers/native_delegation.ts"
+        ROOT / "src/index.ts"
     ).read_bytes()
     runtime = json.loads((plugin / "hooks/delegation-runtime.json").read_text())
     assert runtime == {"python": sys.executable}
@@ -494,7 +494,7 @@ def test_prepare_refuses_a_symlink_planted_at_an_owned_path(
 @pytest.mark.unit
 @pytest.mark.parametrize("spelling", ["bare", "relative"])
 def test_installer_binds_an_absolute_interpreter(tmp_path: Path, spelling: str) -> None:
-    """native_delegation.ts refuses a non-absolute python binding, so --python
+    """native_delegation_mod.js refuses a non-absolute python binding, so --python
     given as a bare name or a relative path must be bound as an absolute path,
     or every delegated prompt silently stays with Claude."""
     home = tmp_path / "home"
