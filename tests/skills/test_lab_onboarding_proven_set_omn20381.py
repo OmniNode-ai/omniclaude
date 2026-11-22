@@ -291,12 +291,30 @@ def test_missing_pins_fails_instead_of_accepting_dev_head(harness: Harness) -> N
     assert not (harness.workspace / ".onex-workspace-floor.json").exists()
 
 
+def _route_dispatch_python(venv: Path, fake_cli: Path) -> None:
+    """OMN-25070: the onboarding script runs the dispatch venv's python with
+    omnibase-core's CLI module. Route that one invocation to the fake CLI and
+    hand every other call (the floor stamp's script) to the real interpreter."""
+    python = venv / "bin" / "python"
+    if python.is_symlink() or python.exists():
+        python.unlink()
+    python.write_text(
+        "#!/bin/bash\n"
+        'if [ "${1:-}" = "-m" ] && [ "${2:-}" = "omnibase_core.cli.cli_commands" ]; then\n'
+        f'  shift 2; exec "{fake_cli}" "$@"\n'
+        "fi\n"
+        f'exec "{sys.executable}" "$@"\n'
+    )
+    python.chmod(0o755)
+
+
 def test_delegate_hello_uses_dispatch_entrypoint_and_receipt(harness: Harness) -> None:
     harness.dispatch_python()
     record = harness.run_dir / "delegate.json"
     receipt = harness.run_dir / "receipt.json"
     receipt.write_text('{"endpoint": "provider", "model": "proven-model"}\n')
-    onex = harness.workspace / ".onex-dispatch-venv" / "bin" / "onex"
+    venv = harness.workspace / ".onex-dispatch-venv"
+    onex = venv / "fake-core-cli"
     onex.write_text(
         f"#!{sys.executable}\n"
         "import json, os, sys\n"
@@ -308,6 +326,7 @@ def test_delegate_hello_uses_dispatch_entrypoint_and_receipt(harness: Harness) -
         f"print('delegate artifacts: {receipt}', file=sys.stderr)\n"
     )
     onex.chmod(0o755)
+    _route_dispatch_python(venv, onex)
     harness.env["PYTHONPATH"] = "/ambient/must/be/removed"
     result = harness.run(
         'onex_run() { echo "WRAPPER CALLED" >&2; return 91; }; delegate_hello'
