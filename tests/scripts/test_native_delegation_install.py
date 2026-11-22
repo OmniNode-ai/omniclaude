@@ -489,3 +489,32 @@ def test_prepare_refuses_a_symlink_planted_at_an_owned_path(
         p for p in root.rglob("*") if p.is_file() and not p.is_symlink() and p != link
     ]
     assert written == [], written
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("spelling", ["bare", "relative"])
+def test_installer_binds_an_absolute_interpreter(tmp_path: Path, spelling: str) -> None:
+    """native_delegation.ts refuses a non-absolute python binding, so --python
+    given as a bare name or a relative path must be bound as an absolute path,
+    or every delegated prompt silently stays with Claude."""
+    home = tmp_path / "home"
+    (home / ".claude").mkdir(parents=True)
+    bin_dir = tmp_path / "bin"
+    _stub_claude(bin_dir, tmp_path / "calls.log")
+    folder = bin_dir if spelling == "bare" else home / "tools"
+    folder.mkdir(parents=True, exist_ok=True)
+    wrapper = folder / "python-fixture"
+    wrapper.write_text(f'#!/bin/sh\nexec "{sys.executable}" "$@"\n')
+    wrapper.chmod(0o755)
+    given = "python-fixture" if spelling == "bare" else "./tools/python-fixture"
+
+    result = _run_stub_install(home, bin_dir, given)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    runtime = json.loads(
+        (
+            home
+            / ".omninode/delegation/plugin/plugins/onex/hooks/delegation-runtime.json"
+        ).read_text()
+    )
+    assert runtime == {"python": str(wrapper)}

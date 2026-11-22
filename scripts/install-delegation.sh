@@ -193,6 +193,15 @@ resolve_python() {
       return 1
     fi
   fi
+  # The native mod refuses a non-absolute interpreter binding, so a bare name
+  # or relative path becomes absolute here. Symlinks are kept as given: a venv's
+  # python must keep its venv path.
+  if [[ "${PYTHON_BIN}" != */* ]]; then
+    PYTHON_BIN="$(command -v "${PYTHON_BIN}")"
+  fi
+  if [[ "${PYTHON_BIN}" != /* ]]; then
+    PYTHON_BIN="$(cd "$(dirname "${PYTHON_BIN}")" && pwd)/$(basename "${PYTHON_BIN}")"
+  fi
   if ! "${PYTHON_BIN}" -c 'import sys; sys.exit(0 if sys.version_info >= (3,12) else 1)' 2>/dev/null; then
     local pyver
     pyver="$("${PYTHON_BIN}" -c 'import sys; print(sys.version.split()[0])' 2>/dev/null || echo unknown)"
