@@ -274,9 +274,7 @@ def test_an_interrupted_install_restores_settings_and_removes_its_snapshot(
     on_install = ""
     if step == "terminated-during-claude":
         # Strip the profile as a vendor writer would, then stop the installer.
-        on_install = (
-            "echo '{}' > \"$HOME/.claude/settings.json\"; kill -TERM $PPID"
-        )
+        on_install = "echo '{}' > \"$HOME/.claude/settings.json\"; kill -TERM $PPID"
     bin_dir = tmp_path / "bin"
     _stub_claude(bin_dir, tmp_path / "calls.log", on_install=on_install)
 
@@ -324,9 +322,10 @@ def test_removing_an_owned_row_keeps_non_ascii_values_as_written(
 
     assert result.returncode == 0, result.stdout + result.stderr
     expected = {"model": "kept-é→✓", "hooks": {"UserPromptSubmit": [GUARD]}}
-    assert settings.read_bytes() == (
-        json.dumps(expected, indent=2, ensure_ascii=False) + "\n"
-    ).encode()
+    assert (
+        settings.read_bytes()
+        == (json.dumps(expected, indent=2, ensure_ascii=False) + "\n").encode()
+    )
 
 
 @pytest.mark.parametrize("legacy", [False, True])
