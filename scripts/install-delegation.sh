@@ -64,6 +64,8 @@ PYTHON_BIN=""
 ENDPOINT_URL=""
 SKIP_PIP=false
 SKIP_SMOKE=false
+SETTINGS_SNAPSHOT=""
+SETTINGS_EXISTED=false
 
 # ---------------------------------------------------------------------------
 # Logging helpers
@@ -428,7 +430,22 @@ install_native_plugin() {
   # Do not load runtime user/project preferences for a plugin ownership change:
   # Claude otherwise migrates unrelated model aliases (opus -> opus[1m]). Its
   # scoped plugin writer still preserves and updates the selected user profile.
-  claude --setting-sources "" plugin install onex-delegation --marketplace "${INSTALL_ROOT}" --scope user --json
+  local status=0
+  claude --setting-sources "" plugin install onex-delegation --marketplace "${INSTALL_ROOT}" --scope user --json || status=$?
+  if (( status != 0 )); then
+    # merge_user_settings already removed the old owned rows. Put settings.json
+    # back byte for byte, so a failed upgrade leaves the previous delegation in
+    # place instead of none, and write no rollback manifest (OMN-23413 review).
+    if "${SETTINGS_EXISTED}"; then
+      cp "${SETTINGS_SNAPSHOT}" "${CLAUDE_SETTINGS}"
+    else
+      rm -f "${CLAUDE_SETTINGS}"
+    fi
+    rm -f "${SETTINGS_SNAPSHOT}"
+    log_err "Claude's plugin installer failed (exit ${status}); ${CLAUDE_SETTINGS} restored to its state before this run. Delegation is unchanged; fix the error above and re-run."
+    exit 1
+  fi
+  rm -f "${SETTINGS_SNAPSHOT}"
 }
 
 merge_user_settings() {
@@ -474,6 +491,14 @@ PY
     cp "${CLAUDE_SETTINGS}" "${backup_path}"
     log_info "backed up existing settings → ${backup_path}"
     PRE_INSTALL_BACKUP="${backup_path}"
+  fi
+  # This run's own before-state (the backup above is the first install's), so
+  # install_native_plugin can restore it exactly if Claude's installer fails.
+  SETTINGS_SNAPSHOT="$(mktemp "${CLAUDE_SETTINGS_BACKUP_DIR}/settings.json.run.XXXXXX")"
+  SETTINGS_EXISTED=false
+  if [[ -f "${CLAUDE_SETTINGS}" ]]; then
+    cp "${CLAUDE_SETTINGS}" "${SETTINGS_SNAPSHOT}"
+    SETTINGS_EXISTED=true
   fi
 
   "${PYTHON_BIN}" - "${CLAUDE_SETTINGS}" "${INSTALL_HOOKS_JSON}" "${INSTALL_ROOT}" <<'PY'

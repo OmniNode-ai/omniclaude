@@ -48,6 +48,101 @@ def test_contracted_prepare_retry_keeps_the_same_plugin_identity(
 GUARD = {"hooks": [{"type": "command", "command": "/unrelated/guard.sh"}]}
 
 
+def _stub_claude(bin_dir: Path, calls: Path, install_exit: int = 0) -> None:
+    """A claude CLI stand-in: logs each call's arguments; plugin install exits as told.
+
+    A failing install first writes to the profile, as a vendor writer that dies
+    part way would, so a test can tell a restore from an untouched file.
+    """
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    claude = bin_dir / "claude"
+    claude.write_text(
+        "#!/bin/bash\n"
+        'case "$*" in *--version*) echo "claude 2.1.326-stub"; exit 0;; esac\n'
+        f'for a in "$@"; do printf "[%s]" "$a"; done >> "{calls}"; echo >> "{calls}"\n'
+        'if [[ "$*" == *"plugin install"* ]]; then\n'
+        f"  if [ {install_exit} -ne 0 ]; then\n"
+        '    echo "{\\"partial\\": true}" > "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"\n'
+        '    echo "stub: plugin install failed" >&2\n'
+        "  fi\n"
+        f"  exit {install_exit}\n"
+        "fi\n"
+        "exit 0\n"
+    )
+    claude.chmod(0o755)
+
+
+def _run_stub_install(
+    home: Path, bin_dir: Path, python: str = sys.executable, *extra: str
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            "/bin/bash",
+            str(ROOT / "scripts/install-delegation.sh"),
+            "--apply",
+            "--skip-pip",
+            "--skip-smoke",
+            "--python",
+            python,
+            *extra,
+        ],
+        env={"HOME": str(home), "PATH": f"{bin_dir}{os.pathsep}/usr/bin:/bin"},
+        cwd=home,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("had_settings", [True, False])
+def test_failed_plugin_install_leaves_settings_exactly_as_they_were(
+    tmp_path: Path, had_settings: bool
+) -> None:
+    """A vendor install failure must not strand the user without delegation.
+
+    The old owned rows are removed before Claude's installer runs; when that
+    installer fails, settings.json is put back byte for byte (or removed again
+    if it did not exist), the installer exits non-zero naming the failure, and
+    no rollback manifest claims an install that did not happen.
+    """
+    home = tmp_path / "home"
+    profile = home / ".claude"
+    profile.mkdir(parents=True)
+    install_root = home / ".omninode/delegation"
+    settings = profile / "settings.json"
+    if had_settings:
+        legacy = f"{install_root}/plugin/plugins/onex/hooks/scripts/pre_tool_use_delegation.sh"
+        # Compact on purpose: any rewrite by the installer changes these bytes.
+        settings.write_text(
+            json.dumps(
+                {
+                    "model": "keep",
+                    "hooks": {
+                        "UserPromptSubmit": [
+                            GUARD,
+                            {"hooks": [{"type": "command", "command": legacy}]},
+                        ]
+                    },
+                },
+                separators=(",", ":"),
+            )
+        )
+    before = settings.read_bytes() if had_settings else None
+    calls = tmp_path / "calls.log"
+    _stub_claude(tmp_path / "bin", calls, install_exit=1)
+
+    result = _run_stub_install(home, tmp_path / "bin")
+
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert "[plugin][install]" in calls.read_text(), "the vendor installer never ran"
+    assert (settings.read_bytes() if settings.exists() else None) == before
+    assert "Claude's plugin installer failed" in result.stderr, result.stderr
+    assert "restored" in result.stderr, result.stderr
+    assert not (install_root / "rollback-manifest.json").exists()
+
+
 @pytest.mark.parametrize("legacy", [False, True])
 @pytest.mark.parametrize("already_removed", [False, True])
 def test_native_install_upgrade_repeat_and_off(
