@@ -15,7 +15,7 @@ modes, each caught below:
   node looks first (an install's own onex, not Claude Code's PATH: seen
   2026-11-13, a launcher's older onex knew no Reflection AI).
   H5  Claude Code's hook timeout is shorter than the time a delegation needs.
-  H6  a re-install keeps an older entry, so a new timeout never reaches Claude Code.
+  H6  a re-install keeps an older delegation entry next to the current one.
   H7  the classified task type is not passed on, so `onex delegate` guesses one:
       a prose question was judged as code_generation and vetoed for not
       compiling as Python (run e45088c5, 2026-11-13).
@@ -141,15 +141,23 @@ def test_claude_code_waits_long_enough_for_a_delegation() -> None:
 def test_reinstalling_updates_an_existing_hook_to_the_current_one(
     tmp_path: Path,
 ) -> None:
-    """H6: a re-install left an older entry for the same command in place, so the
-    new timeout never reached Claude Code (seen in a real install, 2026-11-13)."""
+    """H6: a re-install left an older entry in place (seen in a real install,
+    2026-11-13). The native install registers a plugin, not command rows, so a
+    re-install must remove any command row an earlier install left."""
     home = tmp_path / "home"
     config = tmp_path / "claude"
     home.mkdir()
     config.mkdir()
     tools = tmp_path / "tools"  # the installer checks that Claude Code is installed
     tools.mkdir()
-    (tools / "claude").write_text("#!/bin/sh\necho '2.1.300 (Claude Code)'\n")
+    (tools / "claude").write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = "--version" ]; then\n'
+        "  echo '2.1.300 (Claude Code)'\n"
+        "else\n"
+        '  echo "$*" >> "$(dirname "$0")/claude.log"\n'
+        "fi\n"
+    )
     (tools / "claude").chmod(0o755)
     import shutil as _shutil
 
@@ -177,23 +185,39 @@ def test_reinstalling_updates_an_existing_hook_to_the_current_one(
     assert first.returncode == 0, first.stdout + first.stderr
     settings_path = config / "settings.json"
     settings = json.loads(settings_path.read_text())
-    for group in settings["hooks"]["UserPromptSubmit"]:
-        for hook in group["hooks"]:
-            hook.pop("timeout", None)  # as an install from before the timeout
+    install_root = home / ".omninode" / "delegation"
+    settings.setdefault("hooks", {}).setdefault("UserPromptSubmit", []).append(
+        {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        f"{install_root}/plugin/plugins/onex/hooks/scripts/"
+                        "pre_tool_use_delegation.sh"
+                    ),
+                }
+            ]
+        }
+    )
     settings_path.write_text(json.dumps(settings))
     again = subprocess.run(
         install, env=env, capture_output=True, text=True, check=False
     )
     assert again.returncode == 0, again.stdout + again.stderr
-    groups = json.loads(settings_path.read_text())["hooks"]["UserPromptSubmit"]
-    delegation = [
-        hook
-        for group in groups
+    re_read = json.loads(settings_path.read_text())
+    commands = [
+        hook["command"]
+        for event in re_read.get("hooks", {}).values()
+        for group in event
         for hook in group["hooks"]
-        if "pre_tool_use_delegation.sh" in hook["command"]
     ]
-    assert len(delegation) == 1
-    assert delegation[0].get("timeout") == 300
+    assert [c for c in commands if str(install_root) in c] == []
+    plugin_hooks = install_root / "plugin" / "plugins" / "onex" / "hooks" / "hooks.json"
+    assert json.loads(plugin_hooks.read_text()) == {
+        "modules": ["./lib/native_delegation_mod.js"]
+    }
+    log_lines = (tools / "claude.log").read_text().splitlines()
+    assert sum(1 for line in log_lines if "plugin install onex-delegation" in line) == 2
 
 
 def test_the_classified_task_type_is_passed_to_onex_delegate(tmp_path: Path) -> None:
