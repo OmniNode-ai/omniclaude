@@ -62,3 +62,18 @@ def test_walk_2026_11_02_fixture_rule_is_the_guides_rule() -> None:
     assert (
         "detached anywhere else is refused with the repair command" in recorded["rule"]
     )
+
+
+def test_walk_2026_11_02_guide_accepts_the_anchor_and_refuses_elsewhere() -> None:
+    """Catch a guide whose floor-marker sentence refuses the anchor while the guard
+    accepts it (OMN-22183 AC3, the reverse direction)."""
+    guide = _guide()
+    start = guide.index(".onex-workspace-floor.json")
+    end = guide.index("as the repair", start)
+    sentence = guide[start:end]
+    assert "accepts a clone detached at that commit" in sentence, (
+        "guide drifted: floor-marker sentence missing the acceptance of the anchor commit"
+    )
+    assert "refuses a clone detached anywhere else" in sentence, (
+        "guide drifted: floor-marker sentence missing the refusal of any other detached clone"
+    )
