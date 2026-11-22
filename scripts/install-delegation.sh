@@ -951,7 +951,7 @@ acquire_run_lock() {
     return 0
   fi
   mkdir -p "${INSTALL_ROOT}"
-  exec 9>"${INSTALL_ROOT}/.install.lock"
+  exec 9>>"${INSTALL_ROOT}/.install.lock"
   if ! flock -n 9; then
     log_err "another install-delegation run is in progress on ${INSTALL_ROOT}; wait for it to finish and re-run."
     exit 1
