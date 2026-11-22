@@ -69,7 +69,9 @@ def test_installer_only_changes_selected_profile(tmp_path: Path) -> None:
     ['{"model":"keep","env":{"A":"1"}}', '{\n  "model": "keep",\n  "hooks": {}\n}\n'],
     ids=["no-hooks-key", "empty-hooks"],
 )
-def test_install_leaves_unowned_settings_byte_for_byte(tmp_path: Path, text: str) -> None:
+def test_install_leaves_unowned_settings_byte_for_byte(
+    tmp_path: Path, text: str
+) -> None:
     """Settings with nothing the installer owns stay exactly as they were: no
     "hooks": {} is added and nothing is reformatted."""
     profile = tmp_path / ".claude"

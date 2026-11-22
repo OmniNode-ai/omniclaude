@@ -293,14 +293,42 @@ def test_classic_install_rolls_back_without_omnimarket(
     scripts = f"{root}/plugin/plugins/onex/hooks"
     owned = {
         "UserPromptSubmit": [
-            {"hooks": [{"type": "command", "command": f"ONEX_DELEGATION_HOOK=prompts {scripts}/scripts/pre_tool_use_delegation.sh", "timeout": 300}]},
-            {"hooks": [{"type": "command", "command": f"{sys.executable} {scripts}/lib/delegation_hook_runner.py --history-only 2>/dev/null || true", "timeout": 10}]},
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": f"ONEX_DELEGATION_HOOK=prompts {scripts}/scripts/pre_tool_use_delegation.sh",
+                        "timeout": 300,
+                    }
+                ]
+            },
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": f"{sys.executable} {scripts}/lib/delegation_hook_runner.py --history-only 2>/dev/null || true",
+                        "timeout": 10,
+                    }
+                ]
+            },
         ],
-        "SessionStart": [{"hooks": [{"type": "command", "command": f"{scripts}/scripts/session-start.sh"}]}],
+        "SessionStart": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": f"{scripts}/scripts/session-start.sh",
+                    }
+                ]
+            }
+        ],
     }
     (root / "hooks-delegation.json").write_text(json.dumps({"hooks": owned}))
     settings = profile / "settings.json"
-    hooks = {"UserPromptSubmit": [GUARD, *owned["UserPromptSubmit"]], "SessionStart": owned["SessionStart"]}
+    hooks = {
+        "UserPromptSubmit": [GUARD, *owned["UserPromptSubmit"]],
+        "SessionStart": owned["SessionStart"],
+    }
     settings.write_text(json.dumps({"model": "keep", "hooks": hooks}))
     (root / "rollback-manifest.json").write_text(
         json.dumps(
@@ -319,12 +347,21 @@ def test_classic_install_rolls_back_without_omnimarket(
     (blocker / "sitecustomize.py").write_text(_NO_OMNIMARKET)
     env = {"HOME": str(home), "PATH": "/usr/bin:/bin", "PYTHONPATH": str(blocker)}
     probe = subprocess.run(
-        [sys.executable, "-c", "import omnimarket"], env=env, capture_output=True, check=False
+        [sys.executable, "-c", "import omnimarket"],
+        env=env,
+        capture_output=True,
+        check=False,
     )
     assert probe.returncode != 0, "the scenario needs omnimarket not importable"
 
     result = subprocess.run(
-        ["/bin/bash", str(ROOT / "scripts/install-delegation.sh"), action, "--python", sys.executable],
+        [
+            "/bin/bash",
+            str(ROOT / "scripts/install-delegation.sh"),
+            action,
+            "--python",
+            sys.executable,
+        ],
         env=env,
         cwd=home,
         capture_output=True,
@@ -336,10 +373,17 @@ def test_classic_install_rolls_back_without_omnimarket(
     assert result.returncode == 0, result.stdout + result.stderr
     after = json.loads(settings.read_text())
     assert after["model"] == "keep"
-    commands = [h["command"] for groups in after["hooks"].values() for g in groups for h in g["hooks"]]
+    commands = [
+        h["command"]
+        for groups in after["hooks"].values()
+        for g in groups
+        for h in g["hooks"]
+    ]
     kept = [c for c in commands if str(root) in c]
     if action == "--pause":
-        assert len(kept) == 1 and "delegation_hook_runner.py --history-only" in kept[0], kept
+        assert (
+            len(kept) == 1 and "delegation_hook_runner.py --history-only" in kept[0]
+        ), kept
     else:
         assert kept == [], kept
         assert not (root / "hooks-delegation.json").exists()
@@ -374,9 +418,10 @@ def test_installer_registers_the_native_plugin_through_claude_cli(
         {"name": "onex-delegation", "source": "./plugin/plugins/onex"}
     ]
     plugin = root / "plugin/plugins/onex"
-    assert json.loads((plugin / ".claude-plugin/plugin.json").read_text())[
-        "name"
-    ] == "onex-delegation"
+    assert (
+        json.loads((plugin / ".claude-plugin/plugin.json").read_text())["name"]
+        == "onex-delegation"
+    )
     assert json.loads((plugin / "hooks/hooks.json").read_text()) == {
         "modules": ["./lib/native_delegation_mod.js"]
     }
@@ -390,3 +435,57 @@ def test_installer_registers_the_native_plugin_through_claude_cli(
     manifest = json.loads((root / "rollback-manifest.json").read_text())
     assert manifest["entrypoint"] == "native"
     assert manifest["claude_settings"] == str(home / ".claude/settings.json")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "planted",
+    [
+        "hooks-delegation.json",
+        ".claude-plugin",
+        ".claude-plugin/marketplace.json",
+        "plugin/plugins/onex/.claude-plugin",
+        "plugin/plugins/onex/.claude-plugin/plugin.json",
+        "plugin/plugins/onex/hooks/hooks.json",
+        "plugin/plugins/onex/hooks/delegation-runtime.json",
+        "plugin/plugins/onex/hooks/lib/native_delegation_mod.js",
+    ],
+)
+def test_prepare_refuses_a_symlink_planted_at_an_owned_path(
+    tmp_path: Path, planted: str
+) -> None:
+    """A symlink at a fixed path under the install root must not redirect the
+    write to its target; prepare refuses before writing anything."""
+    from omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.handler_native_delegation import (
+        HandlerNativeDelegation,
+    )
+    from omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.models.model_native_delegation import (
+        ModelNativeDelegationRequest,
+    )
+
+    root = tmp_path / "root"
+    (root / "plugin/plugins/onex/hooks/lib").mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    victim = outside / "victim.json"
+    victim.write_text("victim original\n")
+    link = root / planted
+    link.parent.mkdir(parents=True, exist_ok=True)
+    is_dir = not planted.endswith((".json", ".js"))
+    link.symlink_to(outside if is_dir else victim, target_is_directory=is_dir)
+    request = ModelNativeDelegationRequest(
+        operation="prepare",
+        install_root=root,
+        claude_settings=tmp_path / "profile/settings.json",
+        python_bin=sys.executable,
+    )
+
+    with pytest.raises(ValueError, match="symlink"):
+        HandlerNativeDelegation().handle(request)
+
+    assert victim.read_text() == "victim original\n"
+    assert sorted(p.name for p in outside.iterdir()) == ["victim.json"]
+    written = [
+        p for p in root.rglob("*") if p.is_file() and not p.is_symlink() and p != link
+    ]
+    assert written == [], written

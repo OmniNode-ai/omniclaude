@@ -27,6 +27,19 @@ def _write(path: Path, value: dict) -> None:
     path.write_text(json.dumps(value, indent=2) + "\n")
 
 
+def _owned(root: Path, relative: str) -> Path:
+    """``root / relative``, refusing a symlink at it or at any folder below root.
+
+    A link planted at a fixed install path would send the write to its target.
+    """
+    path = root
+    for part in Path(relative).parts:
+        path = path / part
+        if path.is_symlink():
+            raise ValueError(f"Refusing to write through a symlink at {path}.")
+    return path
+
+
 def _vendor(*args: str) -> None:
     completed = subprocess.run(
         ["claude", "--setting-sources", "", "plugin", *args],
@@ -53,6 +66,18 @@ class HandlerNativeDelegation:
     def _prepare(self, request: ModelNativeDelegationRequest) -> None:
         root = request.install_root
         plugin = root / "plugin/plugins/onex"
+        # Every fixed path is checked before anything is written.
+        owned = {
+            name: _owned(root, name)
+            for name in (
+                "plugin/plugins/onex/hooks/lib/native_delegation_mod.js",
+                "plugin/plugins/onex/hooks/hooks.json",
+                "plugin/plugins/onex/hooks/delegation-runtime.json",
+                "plugin/plugins/onex/.claude-plugin/plugin.json",
+                ".claude-plugin/marketplace.json",
+                "hooks-delegation.json",
+            )
+        }
         asset = Path(__file__).parents[3] / "handlers/native_delegation.ts"
         if not asset.is_file():
             asset = (
@@ -61,26 +86,29 @@ class HandlerNativeDelegation:
             )
         shutil.copyfile(
             asset,
-            plugin / "hooks/lib/native_delegation_mod.js",
+            owned["plugin/plugins/onex/hooks/lib/native_delegation_mod.js"],
         )
         modules = {"modules": ["./lib/native_delegation_mod.js"]}
-        _write(plugin / "hooks/hooks.json", modules)
-        _write(plugin / "hooks/delegation-runtime.json", {"python": request.python_bin})
+        _write(owned["plugin/plugins/onex/hooks/hooks.json"], modules)
+        _write(
+            owned["plugin/plugins/onex/hooks/delegation-runtime.json"],
+            {"python": request.python_bin},
+        )
         digest = hashlib.sha256()
         for path in sorted(plugin.rglob("*")):
             if path.is_file() and path.relative_to(plugin).parts[0] in ("hooks", "lib"):
                 digest.update(str(path.relative_to(plugin)).encode())
                 digest.update(path.read_bytes())
-        metadata = plugin / ".claude-plugin"
-        metadata.mkdir(exist_ok=True)
+        metadata = owned["plugin/plugins/onex/.claude-plugin/plugin.json"]
+        metadata.parent.mkdir(exist_ok=True)
         _write(
-            metadata / "plugin.json",
+            metadata,
             {"name": "onex-delegation", "version": "0.0.1-r" + digest.hexdigest()[:16]},
         )
-        market = root / ".claude-plugin"
-        market.mkdir(exist_ok=True)
+        market = owned[".claude-plugin/marketplace.json"]
+        market.parent.mkdir(exist_ok=True)
         _write(
-            market / "marketplace.json",
+            market,
             {
                 "name": MARKETPLACE,
                 "owner": {"name": "OmniNode"},
@@ -90,7 +118,7 @@ class HandlerNativeDelegation:
             },
         )
         _write(
-            root / "hooks-delegation.json",
+            owned["hooks-delegation.json"],
             {"entrypoint": "native", "plugin_id": PLUGIN_ID, "hooks": {}, **modules},
         )
 
