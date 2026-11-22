@@ -1235,7 +1235,9 @@ def _kill_during_commit_then_fail(script: Path, tmp_path: Path) -> dict:
 def test_a_kill_while_deleting_a_committed_snapshot_is_not_restored_over_the_install(
     tmp_path: Path,
 ) -> None:
-    seen = _kill_during_commit_then_fail(ROOT / "scripts/install-delegation.sh", tmp_path)
+    seen = _kill_during_commit_then_fail(
+        ROOT / "scripts/install-delegation.sh", tmp_path
+    )
 
     assert [n.split(".")[1] for n in seen["left_by_kill"]] == ["done"]
     # The next run (its Claude fails, so it undoes itself) ends where the killed
@@ -1251,7 +1253,9 @@ def test_the_rename_test_fails_when_the_commit_is_a_plain_removal(
 ) -> None:
     """Positive control: with the rename reverted to ``rm -rf`` the same
     scenario restores the partial snapshot over the good install."""
-    mutant = _installer_copy(tmp_path, _COMMIT_REMOVAL, '    rm -rf "${TREE_SNAPSHOT}"\n')
+    mutant = _installer_copy(
+        tmp_path, _COMMIT_REMOVAL, '    rm -rf "${TREE_SNAPSHOT}"\n'
+    )
     seen = _kill_during_commit_then_fail(mutant, tmp_path)
 
     assert [n.split(".")[1] for n in seen["left_by_kill"]] == ["run"]
