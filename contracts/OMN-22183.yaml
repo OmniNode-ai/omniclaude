@@ -43,3 +43,10 @@ dod_evidence:
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/skills/test_onboarding_detached_rule_omn22183.py -q --no-cov -k walk_2026_11_02 -p no:randomly"
+  - id: dod-omn22183-ac3-reverse-direction
+    binds_ac: [AC3]
+    description: "The guide's floor-marker sentence says the anchor is accepted and any other detached commit refused; fails on a guide that refuses the anchor (the reverse direction)."
+    source: manual
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/skills/test_onboarding_detached_rule_omn22183.py -q --no-cov -k accepts_the_anchor_and_refuses_elsewhere -p no:randomly"
