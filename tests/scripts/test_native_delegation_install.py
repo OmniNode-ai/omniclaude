@@ -1016,3 +1016,129 @@ def test_prepare_reads_src_index_ts_only_in_a_source_checkout(
         else "// top-level index.ts\n"
     )
     assert copied == expected
+
+
+def _owned_history_commands(settings: Path, root: Path) -> list[str]:
+    return [
+        c
+        for c in _registered_commands(settings)
+        if "--history-only" in c or f"{root}/" in c
+    ]
+
+
+@pytest.mark.unit
+def test_native_on_registers_no_history_helper(tmp_path: Path) -> None:
+    """Amendment 17: on the native path the native turn is the history, so on
+    registers the plugin and no separate history helper, in settings.json or
+    in the plugin's own hook files Claude loads."""
+    home = tmp_path / "home"
+    (home / ".claude").mkdir(parents=True)
+    settings = home / ".claude/settings.json"
+    settings.write_text(json.dumps({"hooks": {"Stop": [GUARD]}}))
+    root = home / ".omninode/delegation"
+    bin_dir = tmp_path / "bin"
+    _stub_claude(bin_dir, tmp_path / "calls.log")
+
+    result = _run_stub_install(home, bin_dir)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _owned_history_commands(settings, root) == []
+    plugin = root / "plugin/plugins/onex"
+    assert json.loads((plugin / "hooks/hooks.json").read_text()) == {
+        "modules": ["./lib/native_delegation_mod.js"]
+    }
+    assert "hooks" not in json.loads(
+        (plugin / ".claude-plugin/plugin.json").read_text()
+    )
+    assert json.loads((root / "hooks-delegation.json").read_text())["hooks"] == {}
+
+
+_PENDING = """\
+import sys
+from omnimarket.nodes.node_hook_delegate_effect.handlers.handler_prompt_delegate import (
+    HandlerPromptDelegate as H,
+)
+action, session = sys.argv[1:3]
+if action == "record":
+    H._record(session, "what is 2+2", "4", "local-model", "run-" + session)
+print(H._pending(session, 100000))
+"""
+
+
+def _pending(home: Path, action: str, session: str) -> str:
+    """Write (``record``) or read (``read``) omnimarket's real pending history."""
+    done = subprocess.run(
+        [sys.executable, "-c", _PENDING, action, session],
+        env={"HOME": str(home), "PATH": "/usr/bin:/bin"},
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=True,
+    )
+    return done.stdout.strip()
+
+
+def _history_helper(home: Path, session: str) -> str:
+    """What the classic history helper would hand Claude, with delegation off."""
+    done = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "plugins/onex/hooks/lib/delegation_hook_runner.py"),
+            "--history-only",
+        ],
+        input=json.dumps({"session_id": session}),
+        env={"HOME": str(home), "PATH": "/usr/bin:/bin", "ONEX_HOOKS_MASK": "0"},
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=True,
+    )
+    return done.stdout.strip()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("action", ["--uninstall", "--pause"])
+def test_native_off_removes_the_plugin_and_clears_pending_history(
+    tmp_path: Path, action: str
+) -> None:
+    """Amendment 17: off on the native path removes the plugin and clears any
+    pending history, so nothing recorded while on is replayed to Claude later
+    by the prompt hook or a history helper. The store is omnimarket's prompt
+    handler's (~/.onex_state/claude_prompt_history/<session hash>.json)."""
+    home = tmp_path / "home"
+    (home / ".claude").mkdir(parents=True)
+    root = home / ".omninode/delegation"
+    bin_dir = tmp_path / "bin"
+    _stub_claude(bin_dir, tmp_path / "calls.log")
+    installed = _run_stub_install(home, bin_dir)
+    assert installed.returncode == 0, installed.stdout + installed.stderr
+    # Positive control: an entry recorded in the real store is replayed by the
+    # real helper (and consumed), so an empty answer later means "cleared".
+    assert "run-control" in _pending(home, "record", "control")
+    assert "run-control" in _history_helper(home, "control")
+    assert "run-s1" in _pending(home, "record", "s1")
+    store = home / ".onex_state/claude_prompt_history"
+    assert list(store.glob("*.json"))
+
+    removed = subprocess.run(
+        [
+            "/bin/bash",
+            str(ROOT / "scripts/install-delegation.sh"),
+            action,
+            "--python",
+            sys.executable,
+        ],
+        env={"HOME": str(home), "PATH": f"{bin_dir}{os.pathsep}/usr/bin:/bin"},
+        cwd=home,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+
+    assert removed.returncode == 0, removed.stdout + removed.stderr
+    assert not (root / "plugin").exists()
+    assert not (root / ".claude-plugin").exists()
+    assert [p.name for p in store.glob("*.json")] == []
+    assert _pending(home, "read", "s1") == ""
+    assert _history_helper(home, "s1") == ""

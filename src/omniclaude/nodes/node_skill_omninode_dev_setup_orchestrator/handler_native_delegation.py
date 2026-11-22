@@ -4,8 +4,10 @@
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -50,6 +52,25 @@ def _vendor(*args: str) -> None:
     )
     if completed.returncode:
         raise RuntimeError(completed.stderr or completed.stdout)
+
+
+def _clear_pending_prompt_history() -> None:
+    """Delete every pending prompt history file omnimarket's prompt handler kept.
+
+    The store is HandlerPromptDelegate's: one JSON list per session at
+    ``${ONEX_STATE_DIR:-~/.onex_state}/claude_prompt_history/<hash>.json``,
+    written under an flock on the sibling ``<hash>.lock``. Each file is removed
+    under that same lock, so a hook writing at this moment is not lost half
+    way; the lock files stay (OMN-23413 Amendment 17).
+    """
+    state = Path(os.environ.get("ONEX_STATE_DIR", str(Path.home() / ".onex_state")))
+    store = state / "claude_prompt_history"
+    if not store.is_dir():
+        return
+    for pending in store.glob("*.json"):
+        with open(pending.with_suffix(".lock"), "a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            pending.unlink(missing_ok=True)
 
 
 class HandlerNativeDelegation:
@@ -178,4 +199,7 @@ class HandlerNativeDelegation:
             _vendor("uninstall", PLUGIN_ID, "--scope", "user", "--json")
         if known is not None or declared is not None:
             _vendor("marketplace", "remove", MARKETPLACE)
+        # The native turn is the history: off leaves nothing for the prompt
+        # hook or a history helper to hand Claude again (Amendment 17).
+        _clear_pending_prompt_history()
         return True

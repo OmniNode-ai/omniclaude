@@ -122,7 +122,8 @@ Usage:
 
 Options:
   --apply                 Execute changes (default is dry-run preview).
-  --pause                 Remove delegation entry points, retaining pending-history files.
+  --pause                 Remove delegation entry points; a classic install keeps its
+                          pending-history helper, a native install clears pending history.
   --uninstall             Restore prior state using the rollback manifest.
   --endpoint-url <url>    LLM endpoint URL to write into the bifrost endpoint
                           overlay (e.g. http://llm.example.com:8000). If omitted
