@@ -199,13 +199,14 @@ def _tree(root: Path) -> dict[str, bytes | None]:
     """Every path under the install root, file bytes or None for a folder.
 
     bifrost_overrides.yaml is the endpoint overlay, written before registration
-    and kept on every run, and backups/ is the installer's own folder; neither
+    and kept on every run, the run lock file is kept by design, and backups/ is the installer's own folder; neither
     is part of what a failed registration undoes. Files left in backups/ count.
     """
     return {
         str(p.relative_to(root)): p.read_bytes() if p.is_file() else None
         for p in sorted(root.rglob("*"))
-        if p.name != "bifrost_overrides.yaml" and p != root / "backups"
+        if p.name not in ("bifrost_overrides.yaml", ".install.lock")
+        and p != root / "backups"
     }
 
 
@@ -1142,3 +1143,232 @@ def test_native_off_removes_the_plugin_and_clears_pending_history(
     assert [p.name for p in store.glob("*.json")] == []
     assert _pending(home, "read", "s1") == ""
     assert _history_helper(home, "s1") == ""
+
+
+# --- round 4 (OMN-23413): commit rename, .done cleanup, strays, run lock -----
+
+_COMMIT_REMOVAL = (
+    '    mv "${TREE_SNAPSHOT}" "${committed}"\n    rm -rf "${committed}"\n'
+)
+_DONE_CLEANUP = (
+    '    for run in "${CLAUDE_SETTINGS_BACKUP_DIR}"/install-tree.done.*; do\n'
+    '      if [[ -d "${run}" && ! -L "${run}" ]]; then\n'
+    '        rm -rf "${run}"\n'
+    "      fi\n"
+    "    done\n"
+)
+
+
+def _installer_copy(tmp_path: Path, old: str = "", new: str = "") -> Path:
+    """The installer as a copy next to links to the repo's trees, with ``old``
+    replaced by ``new`` (a mutant). The text must be there: a mutation that
+    matches nothing would pass every test it was meant to fail."""
+    scripts = tmp_path / "copy/scripts"
+    scripts.mkdir(parents=True)
+    text = (ROOT / "scripts/install-delegation.sh").read_text()
+    if old:
+        assert old in text, "the installer no longer contains the mutated text"
+        text = text.replace(old, new)
+    (scripts / "install-delegation.sh").write_text(text)
+    for name in ("plugins", "src", "pyproject.toml"):
+        (tmp_path / "copy" / name).symlink_to(ROOT / name)
+    return scripts / "install-delegation.sh"
+
+
+def _install_with(
+    script: Path, home: Path, bin_dir: Path, *args: str
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["/bin/bash", str(script), "--apply", "--skip-pip", "--skip-smoke",
+         "--python", sys.executable, *args],
+        env={"HOME": str(home), "PATH": f"{bin_dir}{os.pathsep}/usr/bin:/bin"},
+        cwd=home,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )  # fmt: skip
+
+
+def _outside_backups(tree: dict) -> dict:
+    return {k: v for k, v in tree.items() if not k.startswith("backups/")}
+
+
+def _kill_during_commit_then_fail(script: Path, tmp_path: Path) -> dict:
+    """Kill the installer (SIGKILL) while it deletes the snapshot of a run that
+    succeeded, with a stub ``rm`` that removes plugin/ from that folder and then
+    kills its parent, as a kill part way through ``rm -rf`` leaves it. Then run
+    the installer again with a Claude that fails. Returns what was seen."""
+    home = tmp_path / "home"
+    root = _classic_install(home)
+    bin_dir = tmp_path / "bin"
+    _stub_claude(bin_dir, tmp_path / "calls.log")
+    fired = tmp_path / "rm-fired"
+    rm = bin_dir / "rm"
+    rm.write_text(
+        "#!/bin/bash\n"
+        'for a in "$@"; do\n'
+        f'  if [[ "$a" == */backups/install-tree.* && ! -e "{fired}" ]]; then\n'
+        f'    : > "{fired}"; /usr/bin/rm -rf "$a/plugin"; kill -9 $PPID; exit 1\n'
+        "  fi\n"
+        "done\n"
+        'exec /usr/bin/rm "$@"\n'
+    )
+    rm.chmod(0o755)
+    killed = _install_with(script, home, bin_dir)
+    assert killed.returncode == -9, killed.stdout + killed.stderr
+    assert fired.exists(), "the stub rm never ran on a snapshot folder"
+    after_kill = _outside_backups(_tree(root))
+    left_by_kill = sorted(p.name for p in (root / "backups").glob("install-tree.*"))
+    _stub_claude(bin_dir, tmp_path / "calls.log", install_exit=1)
+    again = _install_with(script, home, bin_dir)
+    return {
+        "after_kill": after_kill,
+        "left_by_kill": left_by_kill,
+        "again": again,
+        "after_again": _outside_backups(_tree(root)),
+        "leftovers": sorted(p.name for p in (root / "backups").glob("install-tree.*")),
+    }
+
+
+@pytest.mark.unit
+def test_a_kill_while_deleting_a_committed_snapshot_is_not_restored_over_the_install(
+    tmp_path: Path,
+) -> None:
+    seen = _kill_during_commit_then_fail(ROOT / "scripts/install-delegation.sh", tmp_path)
+
+    assert [n.split(".")[1] for n in seen["left_by_kill"]] == ["done"]
+    # The next run (its Claude fails, so it undoes itself) ends where the killed
+    # run left the good install, not on a half-restored old one.
+    assert seen["after_again"] == seen["after_kill"], seen["again"].stderr
+    assert "stale run snapshot" not in seen["again"].stderr
+    assert seen["leftovers"] == []
+
+
+@pytest.mark.unit
+def test_the_rename_test_fails_when_the_commit_is_a_plain_removal(
+    tmp_path: Path,
+) -> None:
+    """Positive control: with the rename reverted to ``rm -rf`` the same
+    scenario restores the partial snapshot over the good install."""
+    mutant = _installer_copy(tmp_path, _COMMIT_REMOVAL, '    rm -rf "${TREE_SNAPSHOT}"\n')
+    seen = _kill_during_commit_then_fail(mutant, tmp_path)
+
+    assert [n.split(".")[1] for n in seen["left_by_kill"]] == ["run"]
+    assert "stale run snapshot" in seen["again"].stderr
+    assert seen["after_again"] != seen["after_kill"]
+
+
+@pytest.mark.unit
+def test_a_leftover_committed_snapshot_is_cleared_by_the_next_run(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / "home"
+    root = _classic_install(home)
+    bin_dir = tmp_path / "bin"
+    _stub_claude(bin_dir, tmp_path / "calls.log")
+    leftover = root / "backups/install-tree.done.abc123"
+    (leftover / "plugin").mkdir(parents=True)
+    (leftover / "hooks-delegation.json").write_text("{}")
+
+    result = _install_with(ROOT / "scripts/install-delegation.sh", home, bin_dir)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not leftover.exists()
+    assert "stale run snapshot" not in result.stderr
+
+
+@pytest.mark.unit
+def test_the_cleanup_test_fails_without_the_done_cleanup(tmp_path: Path) -> None:
+    """Positive control: a copy without the cleanup leaves the folder."""
+    mutant = _installer_copy(tmp_path, _DONE_CLEANUP, "    :\n")
+    home = tmp_path / "home"
+    root = _classic_install(home)
+    bin_dir = tmp_path / "bin"
+    _stub_claude(bin_dir, tmp_path / "calls.log")
+    leftover = root / "backups/install-tree.done.abc123"
+    leftover.mkdir(parents=True)
+
+    result = _install_with(mutant, home, bin_dir)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert leftover.exists()
+
+
+@pytest.mark.unit
+def test_a_second_installer_run_is_refused_while_one_is_running(
+    tmp_path: Path,
+) -> None:
+    """Without a lock the second run takes the live run's install-tree.run.*
+    folder for a stale one and restores it under the first run's feet. It is
+    refused instead, touches nothing, and the first run finishes its install."""
+    home = tmp_path / "home"
+    root = _classic_install(home)
+    bin_dir = tmp_path / "bin"
+    started = tmp_path / "claude-started"
+    _stub_claude(
+        bin_dir, tmp_path / "calls.log", on_install=f'touch "{started}"; sleep 4'
+    )
+    first = _spawn_stub_install(home, bin_dir)
+    _wait_until_started(started, first)
+    snapshot = _run_files(root)
+    assert snapshot, "the first run has no snapshot; nothing to protect"
+
+    second = _run_stub_install(home, bin_dir)
+    out, err = first.communicate(timeout=120)
+
+    assert second.returncode != 0, second.stdout + second.stderr
+    assert "another install-delegation run" in second.stderr
+    assert "stale run snapshot" not in second.stderr
+    assert first.returncode == 0, out + err
+    assert json.loads((root / "hooks-delegation.json").read_text())["entrypoint"] == (
+        "native"
+    )
+    assert _run_files(root) == []
+    # The lock does not outlive its run.
+    assert _run_stub_install(home, bin_dir).returncode == 0
+
+
+@pytest.mark.unit
+def test_native_off_clears_a_stray_tmp_and_follows_onex_state_dir(
+    tmp_path: Path,
+) -> None:
+    """A hook killed between writing <hash>.tmp and renaming it leaves the .tmp,
+    which holds pending history too. Off clears it, in the store that
+    ONEX_STATE_DIR names (the omnimarket handler's own resolution)."""
+    home = tmp_path / "home"
+    (home / ".claude").mkdir(parents=True)
+    state = tmp_path / "elsewhere"
+    bin_dir = tmp_path / "bin"
+    _stub_claude(bin_dir, tmp_path / "calls.log")
+    assert _run_stub_install(home, bin_dir).returncode == 0
+    done = subprocess.run(
+        [sys.executable, "-c", _PENDING, "record", "s1"],
+        env={"HOME": str(home), "PATH": "/usr/bin:/bin", "ONEX_STATE_DIR": str(state)},
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=True,
+    )
+    assert "run-s1" in done.stdout
+    store = state / "claude_prompt_history"
+    (stray,) = store.glob("*.json")
+    stray_tmp = stray.with_suffix(".tmp")
+    stray_tmp.write_text(stray.read_text())
+    assert not (home / ".onex_state").exists()
+
+    removed = subprocess.run(
+        ["/bin/bash", str(ROOT / "scripts/install-delegation.sh"), "--uninstall",
+         "--python", sys.executable],
+        env={"HOME": str(home), "PATH": f"{bin_dir}{os.pathsep}/usr/bin:/bin",
+             "ONEX_STATE_DIR": str(state)},
+        cwd=home,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )  # fmt: skip
+
+    assert removed.returncode == 0, removed.stdout + removed.stderr
+    assert [p.name for p in store.glob("*.json")] == []
+    assert not stray_tmp.exists()

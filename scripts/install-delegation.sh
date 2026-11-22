@@ -935,8 +935,32 @@ Next steps:
 EOF
 }
 
+# One run at a time on an install root. Without this a second run reads the
+# live run's install-tree.run.* folder as a stale one and restores it under the
+# live run's feet. The lock is an flock on a file in the install root, held on
+# fd 9 until the process exits (the kernel drops it on any exit, SIGKILL
+# included, so a dead run never blocks the next). A dry run writes nothing and
+# takes no lock. Known limit, not fixed: SIGKILL after Claude's installer has
+# written its registry but before commit_run_state restores the old tree while
+# Claude's registry already names the new plugin; the next run (or --uninstall)
+# is what puts that right. Without flock(1) (macOS) runs are not serialised.
+acquire_run_lock() {
+  "${DRY_RUN}" && return 0
+  if ! command -v flock >/dev/null 2>&1; then
+    log_warn "flock is not installed; concurrent install-delegation runs are not prevented."
+    return 0
+  fi
+  mkdir -p "${INSTALL_ROOT}"
+  exec 9>"${INSTALL_ROOT}/.install.lock"
+  if ! flock -n 9; then
+    log_err "another install-delegation run is in progress on ${INSTALL_ROOT}; wait for it to finish and re-run."
+    exit 1
+  fi
+}
+
 main() {
   print_banner
+  acquire_run_lock
   recover_stale_run_state
 
   if "${UNINSTALL}" || "${PAUSE}"; then

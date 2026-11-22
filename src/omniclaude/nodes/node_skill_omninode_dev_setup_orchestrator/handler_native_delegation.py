@@ -61,13 +61,23 @@ def _clear_pending_prompt_history() -> None:
     ``${ONEX_STATE_DIR:-~/.onex_state}/claude_prompt_history/<hash>.json``,
     written under an flock on the sibling ``<hash>.lock``. Each file is removed
     under that same lock, so a hook writing at this moment is not lost half
-    way; the lock files stay (OMN-23413 Amendment 17).
+    way; the lock files stay. A ``<hash>.tmp`` is the handler's write in
+    flight (it writes the .tmp, then renames it over the .json); a hook killed
+    between the two leaves it, so it is cleared the same way (OMN-23413
+    Amendment 17, round 4).
+
+    The directory is resolved exactly as ``HandlerPromptDelegate._history_file``
+    in omnimarket resolves it, from this process's environment. What that
+    cannot cover: a hook that ran with a different ``ONEX_STATE_DIR`` (or
+    ``HOME``) than the process running off wrote elsewhere and is not found; and
+    a Claude session already running keeps the hooks it loaded and can record
+    again after off. Both are known limits, not built around.
     """
     state = Path(os.environ.get("ONEX_STATE_DIR", str(Path.home() / ".onex_state")))
     store = state / "claude_prompt_history"
     if not store.is_dir():
         return
-    for pending in store.glob("*.json"):
+    for pending in (*store.glob("*.json"), *store.glob("*.tmp")):
         with open(pending.with_suffix(".lock"), "a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             pending.unlink(missing_ok=True)
