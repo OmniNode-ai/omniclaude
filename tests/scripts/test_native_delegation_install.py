@@ -249,3 +249,88 @@ def test_native_install_upgrade_repeat_and_off(
     assert "onex-delegation-local" not in stopped.get("extraKnownMarketplaces", {})
     known = json.loads((profile / "plugins/known_marketplaces.json").read_text())
     assert "onex-delegation-local" not in known
+
+
+_NO_OMNIMARKET = """\
+import sys
+
+
+class _NoOmnimarket:
+    @staticmethod
+    def find_spec(name, path=None, target=None):
+        if name == "omnimarket" or name.startswith("omnimarket."):
+            raise ModuleNotFoundError(f"No module named {name!r}", name=name)
+        return None
+
+
+sys.meta_path.insert(0, _NoOmnimarket)
+"""
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("action", ["--uninstall", "--pause"])
+def test_classic_install_rolls_back_without_omnimarket(
+    tmp_path: Path, action: str
+) -> None:
+    """A classic (command-hook) install made before the native port must still
+    roll back on a host where omnimarket is not importable: the old uninstall
+    had no such dependency. --pause keeps the history helper row, as before."""
+    home = tmp_path / "home"
+    profile = home / ".claude"
+    profile.mkdir(parents=True)
+    root = home / ".omninode/delegation"
+    root.mkdir(parents=True)
+    scripts = f"{root}/plugin/plugins/onex/hooks"
+    owned = {
+        "UserPromptSubmit": [
+            {"hooks": [{"type": "command", "command": f"ONEX_DELEGATION_HOOK=prompts {scripts}/scripts/pre_tool_use_delegation.sh", "timeout": 300}]},
+            {"hooks": [{"type": "command", "command": f"{sys.executable} {scripts}/lib/delegation_hook_runner.py --history-only 2>/dev/null || true", "timeout": 10}]},
+        ],
+        "SessionStart": [{"hooks": [{"type": "command", "command": f"{scripts}/scripts/session-start.sh"}]}],
+    }
+    (root / "hooks-delegation.json").write_text(json.dumps({"hooks": owned}))
+    settings = profile / "settings.json"
+    hooks = {"UserPromptSubmit": [GUARD, *owned["UserPromptSubmit"]], "SessionStart": owned["SessionStart"]}
+    settings.write_text(json.dumps({"model": "keep", "hooks": hooks}))
+    (root / "rollback-manifest.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "install_root": str(root),
+                "claude_settings": str(settings),
+                "settings_backup": None,
+                "installed_hook_config": str(root / "hooks-delegation.json"),
+                "package": "omninode-claude",
+            }
+        )
+    )
+    blocker = tmp_path / "no-omnimarket"
+    blocker.mkdir()
+    (blocker / "sitecustomize.py").write_text(_NO_OMNIMARKET)
+    env = {"HOME": str(home), "PATH": "/usr/bin:/bin", "PYTHONPATH": str(blocker)}
+    probe = subprocess.run(
+        [sys.executable, "-c", "import omnimarket"], env=env, capture_output=True, check=False
+    )
+    assert probe.returncode != 0, "the scenario needs omnimarket not importable"
+
+    result = subprocess.run(
+        ["/bin/bash", str(ROOT / "scripts/install-delegation.sh"), action, "--python", sys.executable],
+        env=env,
+        cwd=home,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    after = json.loads(settings.read_text())
+    assert after["model"] == "keep"
+    commands = [h["command"] for groups in after["hooks"].values() for g in groups for h in g["hooks"]]
+    kept = [c for c in commands if str(root) in c]
+    if action == "--pause":
+        assert len(kept) == 1 and "delegation_hook_runner.py --history-only" in kept[0], kept
+    else:
+        assert kept == [], kept
+        assert not (root / "hooks-delegation.json").exists()
+    assert "/unrelated/guard.sh" in commands

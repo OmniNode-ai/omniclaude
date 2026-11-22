@@ -619,12 +619,80 @@ uninstall() {
   local native
   native="$(native_plugin remove)"
   # Native removal is owned by the package handler. Only older command-hook
-  # installs need the legacy consumer's exact-command rollback API.
+  # installs need the legacy consumer's exact-command rollback API, and they
+  # still roll back where omnimarket is not installed (OMN-23413 review).
   if ! "${native}"; then
     "${PYTHON_BIN}" - "${ROLLBACK_MANIFEST}" "${PAUSE}" <<'PY'
-import pathlib, sys
-from omnimarket.nodes.node_onex_setup_effect.handlers.handler_setup_claude import HandlerSetupClaude
-print(HandlerSetupClaude.rollback_hook_registration(pathlib.Path(sys.argv[1]), sys.argv[2] == 'true'))
+import json
+import sys
+from pathlib import Path
+
+manifest_path = Path(sys.argv[1])
+pause = sys.argv[2] == "true"
+
+try:
+    from omnimarket.nodes.node_onex_setup_effect.handlers.handler_setup_claude import HandlerSetupClaude
+except ModuleNotFoundError as e:
+    if not (e.name or "").startswith("omnimarket"):
+        raise
+    # Local copy: same exact-command removal the classic installer always did,
+    # kept so a classic install rolls back where omnimarket is not installed.
+    def rollback_hook_registration(manifest_path: Path, preserve_history: bool = False) -> str:
+        """Remove exact installer-owned registrations, optionally retaining history."""
+        manifest = json.loads(manifest_path.read_text())
+        pause = preserve_history
+        backup = manifest.get("settings_backup")
+        settings = manifest.get("claude_settings")
+        hooks_config = manifest.get("installed_hook_config")
+        settings_path = Path(settings) if settings else None
+        if settings_path is None:
+            raise SystemExit("rollback manifest missing claude_settings")
+        if not settings_path.exists():
+            if backup and Path(backup).exists():
+                settings_path.parent.mkdir(parents=True, exist_ok=True)
+                settings_path.write_text(Path(backup).read_text())
+                return f"restored missing {settings} from {backup}"
+            return ""
+        current = json.loads(settings_path.read_text())
+        hook_cfg = {}
+        if hooks_config and Path(hooks_config).exists():
+            hook_cfg = json.loads(Path(hooks_config).read_text()).get("hooks", {})
+        delegation_commands = {
+            hook.get("command")
+            for groups in hook_cfg.values()
+            for group in groups
+            for hook in group.get("hooks", [])
+            if hook.get("command")
+            and not (pause and "--history-only" in hook["command"])
+        }
+        hooks = current.get("hooks", {})
+        for event in list(hooks):
+            filtered_groups = []
+            for group in hooks.get(event, []):
+                filtered_hooks = [
+                    hook
+                    for hook in group.get("hooks", [])
+                    if hook.get("command") not in delegation_commands
+                ]
+                if filtered_hooks:
+                    filtered_groups.append({**group, "hooks": filtered_hooks})
+            if filtered_groups:
+                hooks[event] = filtered_groups
+            else:
+                hooks.pop(event, None)
+        if hooks:
+            current["hooks"] = hooks
+        else:
+            current.pop("hooks", None)
+        if current:
+            settings_path.write_text(json.dumps(current, indent=2) + "\n")
+            return f"removed delegation hooks from {settings}"
+        settings_path.unlink()
+        return f"removed {settings} after clearing installer-managed hooks"
+
+    print(rollback_hook_registration(manifest_path, pause))
+else:
+    print(HandlerSetupClaude.rollback_hook_registration(manifest_path, pause))
 PY
   fi
   if "${PAUSE}" && ! "${native}"; then
