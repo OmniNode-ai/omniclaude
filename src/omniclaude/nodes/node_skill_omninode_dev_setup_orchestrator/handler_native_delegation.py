@@ -55,7 +55,7 @@ def _vendor(*args: str) -> None:
 
 
 def _clear_pending_prompt_history() -> None:
-    """Delete every pending prompt history file omnimarket's prompt handler kept.
+    """Remove every pending prompt history file omnimarket's prompt handler kept.
 
     The store is HandlerPromptDelegate's: one JSON list per session at
     ``${ONEX_STATE_DIR:-~/.onex_state}/claude_prompt_history/<hash>.json``,
