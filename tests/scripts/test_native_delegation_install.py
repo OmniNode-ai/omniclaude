@@ -1,9 +1,14 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Real installer + real Claude registry, isolated from the operator's profile.
+"""Real installer, isolated from the operator's profile.
 
 Catch classic/mod double registration, stale cache, destructive merges,
 non-idempotent install, and native enablement surviving OFF.
+
+The upgrade/repeat/OFF journey needs a real Claude Code CLI and real registry
+and skips, saying so, on a host without one. The installer's registration
+itself (the exact plugin install call and the marketplace and plugin it points
+at) is checked with a stub CLI, so it runs everywhere.
 """
 
 import json
@@ -148,7 +153,12 @@ def test_failed_plugin_install_leaves_settings_exactly_as_they_were(
 def test_native_install_upgrade_repeat_and_off(
     tmp_path: Path, legacy: bool, already_removed: bool, monkeypatch
 ):
-    assert shutil.which("claude"), "Real Claude CLI required for install verification"
+    if not shutil.which("claude"):
+        pytest.skip(
+            "needs a real Claude Code CLI on PATH; the installer's registration call "
+            "is covered without one by "
+            "test_installer_registers_the_native_plugin_through_claude_cli"
+        )
     home = tmp_path / "home"
     profile = home / ".claude"
     profile.mkdir(parents=True)
@@ -334,3 +344,49 @@ def test_classic_install_rolls_back_without_omnimarket(
         assert kept == [], kept
         assert not (root / "hooks-delegation.json").exists()
     assert "/unrelated/guard.sh" in commands
+
+
+@pytest.mark.unit
+def test_installer_registers_the_native_plugin_through_claude_cli(
+    tmp_path: Path,
+) -> None:
+    """Registration without a real CLI: the installer makes exactly one user-scope
+    plugin install call naming its own marketplace, and that marketplace holds
+    the native plugin (module-only hooks.json, the shipped mod, an absolute
+    interpreter binding) the call installs."""
+    home = tmp_path / "home"
+    (home / ".claude").mkdir(parents=True)
+    root = home / ".omninode/delegation"
+    calls = tmp_path / "calls.log"
+    _stub_claude(tmp_path / "bin", calls)
+
+    result = _run_stub_install(home, tmp_path / "bin")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    installs = [line for line in calls.read_text().splitlines() if "[install]" in line]
+    assert installs == [
+        f"[--setting-sources][][plugin][install][onex-delegation]"
+        f"[--marketplace][{root}][--scope][user][--json]"
+    ], installs
+    market = json.loads((root / ".claude-plugin/marketplace.json").read_text())
+    assert market["name"] == "onex-delegation-local"
+    assert market["plugins"] == [
+        {"name": "onex-delegation", "source": "./plugin/plugins/onex"}
+    ]
+    plugin = root / "plugin/plugins/onex"
+    assert json.loads((plugin / ".claude-plugin/plugin.json").read_text())[
+        "name"
+    ] == "onex-delegation"
+    assert json.loads((plugin / "hooks/hooks.json").read_text()) == {
+        "modules": ["./lib/native_delegation_mod.js"]
+    }
+    assert (plugin / "hooks/lib/native_delegation_mod.js").read_bytes() == (
+        ROOT / "src/handlers/native_delegation.ts"
+    ).read_bytes()
+    runtime = json.loads((plugin / "hooks/delegation-runtime.json").read_text())
+    assert runtime == {"python": sys.executable}
+    owned = json.loads((root / "hooks-delegation.json").read_text())
+    assert owned["entrypoint"] == "native" and owned["plugin_id"] == PLUGIN
+    manifest = json.loads((root / "rollback-manifest.json").read_text())
+    assert manifest["entrypoint"] == "native"
+    assert manifest["claude_settings"] == str(home / ".claude/settings.json")

@@ -1,12 +1,18 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""The delegation hook runs as a customer installed it (OMN-22498, Amendment 2).
+"""The installed delegation hook script runs as the native mod invokes it (OMN-22498, OMN-23413).
 
-``scripts/install-delegation.sh --apply`` registers the delegation hook in
-``~/.claude/settings.json``, pointing at copies under ``~/.omninode/delegation``.
-Claude Code runs that command with no ``CLAUDE_PLUGIN_ROOT``, from the
-customer's own project. These tests install into a scratch HOME and run the
-installed command exactly that way.
+``scripts/install-delegation.sh --apply`` copies the hook tree under
+``~/.omninode/delegation`` and registers the native plugin; nothing is written
+into ``~/.claude/settings.json``. The native mod (``native_delegation.ts``) runs
+``hooks/scripts/pre_tool_use_delegation.sh`` with ``PLUGIN_PYTHON_BIN`` taken
+from the plugin's ``hooks/delegation-runtime.json``, with no
+``CLAUDE_PLUGIN_ROOT``, from the customer's own project. These tests install
+into a scratch HOME (stub claude CLI) and run the installed script exactly that
+way: they cover the shell/runner boundary of the installed copy and the switch.
+They do not read a registration; the registration call and the marketplace it
+names are covered by ``test_native_delegation_install.py`` (stub CLI, and the
+real CLI where one is installed).
 
 Failure modes:
   F1. A helper the hook sources (error-guard.sh and what it loads) is not
@@ -18,9 +24,10 @@ Failure modes:
   F3. The installed copy ignores the switch: with bit 11 off it still routes.
   F5. `onex hooks disable` saves the mask in ~/.omnibase/.env; the installed
       hook ignored it, because only common.sh reads that file.
-  F4. No Python is found: Claude Code runs a settings.json hook with no
-      PLUGIN_PYTHON_BIN, so the command itself must carry the interpreter the
-      installer resolved. The test environment sets none.
+  F4. No Python is found: the installed script gets no interpreter from its
+      environment, so the installer's binding (delegation-runtime.json, which
+      the native mod passes as PLUGIN_PYTHON_BIN) must name a usable one. The
+      test environment sets none of its own.
   F6. The scenario is not the customer's: a python3 on the caller's PATH that
       imports a dev-workspace omnibase_core makes mode.sh resolve to full, so
       the lite default is never exercised (dod-closeout-sweep, 2026-11-11). The
@@ -91,8 +98,11 @@ def _install(tmp_path: Path) -> Path:
 
 
 def _installed_pre_tool_command(home: Path) -> str:
-    # Test the shell/runner boundary the native mod invokes. Registration and
-    # actual Claude cache loading are covered by test_native_delegation_install.
+    """The command the native mod runs, built from the installed binding.
+
+    Not read from any registration: registration and Claude's cache loading are
+    covered by test_native_delegation_install.
+    """
     plugin = home / ".omninode/delegation/plugin/plugins/onex"
     runtime = json.loads((plugin / "hooks/delegation-runtime.json").read_text())
     return shlex.join(
