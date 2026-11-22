@@ -211,8 +211,11 @@ def test_second_install_changes_nothing(tmp_path: Path) -> None:
     """T4: a second install leaves settings.json byte for byte the same."""
     home = tmp_path / "home"
     (home / ".claude").mkdir(parents=True)
-    _run_installer(home, tmp_path)
     settings_path = home / ".claude" / "settings.json"
+    # Start from an older install, so the first run really rewrites the file
+    # (the installer writes settings.json only to remove an owned row).
+    settings_path.write_text(json.dumps(_older_install(home), indent=2) + "\n")
+    _run_installer(home, tmp_path)
     first = settings_path.read_bytes()
     _run_installer(home, tmp_path)
     assert settings_path.read_bytes() == first

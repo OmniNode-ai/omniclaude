@@ -55,12 +55,29 @@ def test_installer_only_changes_selected_profile(tmp_path: Path) -> None:
     result = install(tmp_path, profile)
     assert result.returncode == 0, result.stdout + result.stderr
     assert default.read_text() == '{"model":"untouched"}\n'
-    settings = json.loads((profile / "settings.json").read_text())
-    assert settings["hooks"] == {}
+    # The selected profile had no settings.json and nothing of it was owned, so
+    # the installer leaves it absent (the vendor CLI, stubbed here, writes its own).
+    assert not (profile / "settings.json").exists()
     manifest = json.loads(
         (tmp_path / ".omninode/delegation/rollback-manifest.json").read_text()
     )
     assert manifest["claude_settings"] == str(profile / "settings.json")
+
+
+@pytest.mark.parametrize(
+    "text",
+    ['{"model":"keep","env":{"A":"1"}}', '{\n  "model": "keep",\n  "hooks": {}\n}\n'],
+    ids=["no-hooks-key", "empty-hooks"],
+)
+def test_install_leaves_unowned_settings_byte_for_byte(tmp_path: Path, text: str) -> None:
+    """Settings with nothing the installer owns stay exactly as they were: no
+    "hooks": {} is added and nothing is reformatted."""
+    profile = tmp_path / ".claude"
+    profile.mkdir()
+    (profile / "settings.json").write_text(text)
+    result = install(tmp_path, profile)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (profile / "settings.json").read_text() == text
 
 
 def test_install_preserves_non_backend_overlay_metadata(tmp_path: Path) -> None:

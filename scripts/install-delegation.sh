@@ -504,19 +504,35 @@ PY
   "${PYTHON_BIN}" - "${CLAUDE_SETTINGS}" "${INSTALL_HOOKS_JSON}" "${INSTALL_ROOT}" <<'PY'
 import json, pathlib, sys
 settings_path = pathlib.Path(sys.argv[1])
-if settings_path.exists():
-    settings = json.loads(settings_path.read_text())
-else:
-    settings = {}
+if not settings_path.exists():
+    sys.exit(0)
+settings = json.loads(settings_path.read_text())
+if "hooks" not in settings:
+    sys.exit(0)
 
-existing = settings.setdefault("hooks", {})
 # Remove earlier owned command hooks; the native plugin is registered by the
-# vendor CLI. Preserve every unrelated hook and setting.
+# vendor CLI. Preserve every unrelated hook and setting: the file is written
+# only when an owned row was removed, and "hooks" itself is never added or
+# dropped, so settings holding nothing of ours stay byte for byte the same.
+existing = settings["hooks"]
+removed = False
 for event in list(existing):
-    groups = [{**g, "hooks": [h for h in g.get("hooks", []) if f"{sys.argv[3]}/" not in (h.get("command") or "")]} for g in existing[event]]
-    existing[event] = [g for g in groups if g["hooks"]]
-    if not existing[event]: existing.pop(event)
-settings_path.write_text(json.dumps(settings, indent=2) + "\n")
+    groups, changed = [], False
+    for g in existing[event]:
+        kept = [h for h in g.get("hooks", []) if f"{sys.argv[3]}/" not in (h.get("command") or "")]
+        if len(kept) != len(g.get("hooks", [])):
+            changed = True
+            if not kept:
+                continue
+        groups.append({**g, "hooks": kept})
+    if changed:
+        removed = True
+        existing[event] = groups
+        if not groups:
+            existing.pop(event)
+
+if removed:
+    settings_path.write_text(json.dumps(settings, indent=2) + "\n")
 PY
   log_ok "merged delegation hooks into ${CLAUDE_SETTINGS}"
 }
