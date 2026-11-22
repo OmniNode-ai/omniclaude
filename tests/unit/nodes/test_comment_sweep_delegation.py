@@ -171,10 +171,18 @@ print(json.dumps({{'run_id': {run_id!r}, 'status': {status!r},
     wrapper.parent.mkdir(parents=True)
     wrapper.write_text(script)
     wrapper.chmod(0o755)
-    binary = root / "dispatch/bin/onex"
-    binary.parent.mkdir(parents=True)
-    binary.write_text(script)
-    binary.chmod(0o755)
+    # OMN-25070: the dispatch venv carries omnibase-core's CLI module and its own
+    # interpreter, and no onex console script; the handler checks both and runs
+    # the wrapper, never the interpreter itself.
+    python = root / "dispatch/bin/python"
+    python.parent.mkdir(parents=True)
+    python.write_text("#!/bin/sh\nexit 97\n")
+    python.chmod(0o755)
+    cli = (
+        root / "dispatch/lib/python3.12/site-packages/omnibase_core/cli/cli_commands.py"
+    )
+    cli.parent.mkdir(parents=True)
+    cli.write_text("")
     return run_id
 
 
@@ -190,7 +198,7 @@ async def test_missing_binary_keeps_work_and_reports_fallback(
     assert record.outcome == "fallback"
     assert record.work_unit_id == "reply-1"
     assert record.reason == "missing_binary"
-    assert record.onex_binary == str(registry / "dispatch/bin/onex")
+    assert record.onex_binary == str(registry / "dispatch/bin/python")
     assert record.searched_venv == str(registry / "dispatch")
     assert record.run_id is None
     assert "onex" in record.detail
@@ -198,6 +206,65 @@ async def test_missing_binary_keeps_work_and_reports_fallback(
     artifact = json.loads(Path(record.artifact_path).read_text())
     assert artifact["render_delegation"]["outcome"] == "fallback"
     assert artifact["output"] == FALLBACK
+
+
+@pytest.mark.asyncio
+async def test_a_leftover_dispatch_onex_alone_falls_back(
+    registry: Path, renderer: RecordedRenderer
+) -> None:
+    """A bin/onex left by an older omnibase-core, with no interpreter or core
+    CLI beside it, is not a declared CLI."""
+    install_cli(registry)
+    (registry / "dispatch/bin/python").unlink()
+    (
+        registry
+        / "dispatch/lib/python3.12/site-packages/omnibase_core/cli/cli_commands.py"
+    ).unlink()
+    leftover = registry / "dispatch/bin/onex"
+    leftover.write_text("#!/bin/sh\nexit 0\n")
+    leftover.chmod(0o755)
+    result = await HandlerCommentSweepSkill(task_dispatcher=renderer).handle(request())
+    assert result.render_delegation is not None
+    assert result.render_delegation.outcome == "fallback"
+    assert result.render_delegation.reason == "missing_binary"
+    assert not (registry / "argv.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_an_interpreter_without_the_core_cli_falls_back(
+    registry: Path, renderer: RecordedRenderer
+) -> None:
+    """An interpreter whose venv lacks omnibase-core's CLI module cannot run
+    the CLI, even beside a leftover bin/onex."""
+    install_cli(registry)
+    (
+        registry
+        / "dispatch/lib/python3.12/site-packages/omnibase_core/cli/cli_commands.py"
+    ).unlink()
+    leftover = registry / "dispatch/bin/onex"
+    leftover.write_text("#!/bin/sh\nexit 0\n")
+    leftover.chmod(0o755)
+    result = await HandlerCommentSweepSkill(task_dispatcher=renderer).handle(request())
+    assert result.render_delegation is not None
+    assert result.render_delegation.outcome == "fallback"
+    assert result.render_delegation.reason == "missing_binary"
+    assert "omnibase_core.cli.cli_commands" in (result.render_delegation.detail or "")
+    assert not (registry / "argv.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_the_core_cli_without_an_interpreter_falls_back(
+    registry: Path, renderer: RecordedRenderer
+) -> None:
+    """omnibase-core's CLI module without an executable interpreter beside it
+    cannot run, so the handler falls back rather than delegating."""
+    install_cli(registry)
+    (registry / "dispatch/bin/python").unlink()
+    result = await HandlerCommentSweepSkill(task_dispatcher=renderer).handle(request())
+    assert result.render_delegation is not None
+    assert result.render_delegation.outcome == "fallback"
+    assert result.render_delegation.reason == "missing_binary"
+    assert not (registry / "argv.json").exists()
 
 
 @pytest.mark.asyncio

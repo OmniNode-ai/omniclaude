@@ -268,7 +268,8 @@ def test_the_scripts_own_delegation_uses_the_developers_command() -> None:
         "config is what a developer's own command resolves"
     )
     assert (
-        'env -u PYTHONPATH "$WORKSPACE/.onex-dispatch-venv/bin/onex" '
+        'env -u PYTHONPATH "$WORKSPACE/.onex-dispatch-venv/bin/python" '
+        "-m omnibase_core.cli.cli_commands "
         'delegate --json "Reply with exactly one word: hello"'
     ) in body
 

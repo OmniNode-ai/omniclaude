@@ -29,6 +29,20 @@ requirements:
         statement: "AC3 (this repository's launcher-move part): CI and hook callers run python -m omnibase_core.cli.cli_commands,
           and the prune scripts resolve the internal venv to its python running that module -- falsifier: the
           bound test and check fail at the merge base, where they run uv run onex and resolve .venv/bin/onex"
+  - id: req-omn25070-dispatch-venv-callers
+    statement: The comment sweep and the developer onboarding script use the dispatch venv's own interpreter with omnibase-core's CLI module, never a bin/onex launcher.
+    acceptance:
+      - id: AC3
+        statement: >-
+          AC3 (the launcher move), the part the developer path carries in this repository: once omnibase-core
+          stops declaring onex, the dispatch venv has no bin/onex, so the comment sweep delegates only when the
+          dispatch venv has an executable bin/python and omnibase-core's CLI module, and otherwise records the
+          missing CLI and keeps its fallback; plugins/onex/skills/_bin/lab-onboarding.sh runs the dispatch venv's
+          python -m omnibase_core.cli.cli_commands for its delegation check and its model commands, and treats the
+          dispatch venv as current only when that interpreter and module are present -- falsifier: uv run pytest
+          tests/unit/nodes/test_comment_sweep_delegation.py tests/skills/test_lab_onboarding_script_omn20150.py
+          tests/skills/test_onboarding_ladder_omn23168.py, which fails on dev, where both check for or run the
+          dispatch venv's bin/onex.
 dod_evidence:
   - id: dod-omn25070-validate-links-module
     description: The hook entry runs the link check module, and the module passes on this repository.
@@ -52,4 +66,12 @@ dod_evidence:
       - check_type: test_passes
         check_value: uv run --frozen pytest -q tests/scripts/test_worktree_auto_prune_pr_heads_omn20977.py -k
           internal_venv && ! grep -nE '^[^#]*(uv run onex |worktree-safe.sh onex )' .github/workflows/ci.yml .pre-commit-config.yaml
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn25070-dispatch-venv-callers
+    description: The comment sweep falls back for a dispatch venv holding only a leftover bin/onex or lacking the core CLI module, and delegates with the interpreter and module present; the onboarding script's delegation check and model commands run the dispatch venv's python with the core CLI module, through a stand-in interpreter that refuses any other invocation. Fails on dev, where both use bin/onex.
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: test_passes
+        check_value: uv run --frozen pytest -q tests/unit/nodes/test_comment_sweep_delegation.py tests/skills/test_onboarding_ladder_omn23168.py "tests/skills/test_lab_onboarding_script_omn20150.py::test_the_scripts_own_delegation_uses_the_developers_command"
         cwd: ${OMNI_HOME}/omniclaude

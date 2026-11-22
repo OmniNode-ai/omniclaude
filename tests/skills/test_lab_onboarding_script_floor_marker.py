@@ -95,6 +95,23 @@ def _refusal(workspace: Path, template: str) -> str:
     return ""
 
 
+def _route_dispatch_python(venv: Path, fake_cli: Path) -> None:
+    """OMN-25070: the onboarding script runs the dispatch venv's python with
+    omnibase-core's CLI module. Route that one invocation to the fake CLI and
+    hand every other call (the floor stamp's script) to the real interpreter."""
+    python = venv / "bin" / "python"
+    if python.is_symlink() or python.exists():
+        python.unlink()
+    python.write_text(
+        "#!/bin/bash\n"
+        'if [ "${1:-}" = "-m" ] && [ "${2:-}" = "omnibase_core.cli.cli_commands" ]; then\n'
+        f'  shift 2; exec "{fake_cli}" "$@"\n'
+        "fi\n"
+        f'exec "{sys.executable}" "$@"\n'
+    )
+    python.chmod(0o755)
+
+
 class FreshWorkspace:
     """A just-installed machine: dispatch venv built, clones in place, no marker."""
 
@@ -115,13 +132,14 @@ class FreshWorkspace:
         )
         receipt = self.run_dir / "receipt.json"
         receipt.write_text(json.dumps({"endpoint": "provider", "model": "m"}) + "\n")
-        entrypoint = venv / "bin" / "onex"
+        entrypoint = venv / "fake-core-cli"
         entrypoint.write_text(
             f"#!{sys.executable}\nimport sys\n"
             'print(\'{"status": "success"}\')\n'
             f"print('delegate artifacts: {receipt}', file=sys.stderr)\n"
         )
         entrypoint.chmod(0o755)
+        _route_dispatch_python(venv, entrypoint)
         scripts = self.workspace / "omnibase_infra" / "scripts"
         scripts.mkdir(parents=True)
         (scripts / "reconcile_verify_movement.py").write_text(FAKE_MOVEMENT)
