@@ -61,11 +61,18 @@ def _resolve_command(command: str) -> Path:
 
     Leading NAME=value environment assignments (for example
     ``ONEX_DELEGATION_HOOK=prompts <script>``, OMN-23413) are skipped.
+    A leading interpreter named by a variable (``${ONEX_DELEGATION_PYTHON}
+    <script>``, the history helper, OMN-23413 AC39/AC43) is skipped too, so
+    the script it runs is what is checked.
     """
     plugin_root = str(Path(__file__).parent.parent.parent / "plugins" / "onex")
     resolved = command.replace("${CLAUDE_PLUGIN_ROOT}", plugin_root)
     words = shlex.split(resolved)
     while len(words) > 1 and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=\S*", words[0]):
+        words.pop(0)
+    if len(words) > 1 and re.fullmatch(
+        r"\$(?:\{[A-Za-z_]\w*\}|[A-Za-z_]\w*)", words[0]
+    ):
         words.pop(0)
     return Path(words[0]) if words else Path(resolved)
 
@@ -167,3 +174,20 @@ def test_hook_script_is_executable(
         f"  path: {path}\n"
         "Run: chmod +x <path>"
     )
+
+
+_HISTORY_HELPER = "${ONEX_DELEGATION_PYTHON} ${CLAUDE_PLUGIN_ROOT}/hooks/lib/delegation_hook_runner.py --history-only 2>/dev/null || true"
+
+
+def test_an_interpreter_variable_resolves_to_the_script_it_runs() -> None:
+    """The history-only row names its interpreter through ONEX_DELEGATION_PYTHON (OMN-23413 AC39/AC43); the checker must check the script, not the variable."""
+    resolved = _resolve_command(_HISTORY_HELPER)
+    assert resolved == _HOOKS_DIR / "lib" / "delegation_hook_runner.py"
+    assert resolved.is_file()
+
+
+def test_a_missing_script_after_an_interpreter_variable_still_fails() -> None:
+    """Positive control; skipping the interpreter must not let a missing script through."""
+    command = _HISTORY_HELPER.replace("delegation_hook_runner.py", "no_such_runner.py")
+    with pytest.raises(AssertionError, match="does not resolve to a regular file"):
+        test_hook_command_exists("hooks-delegation.v1", "UserPromptSubmit", command)
