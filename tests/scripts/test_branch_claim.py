@@ -710,14 +710,27 @@ def test_the_command_line_reports_an_incomplete_store_as_a_check_that_did_not_ru
     assert "THE CLAIM STORE IS INCOMPLETE" in result.stderr
 
 
-def test_the_backfill_resolves_a_holder_from_a_rolled_claim(tmp_path: Path) -> None:
-    """`lane_identity reconcile` registers worktrees from the same store. A
-    holder it cannot see is a worktree left unregistered, and an unregistered
-    worktree is silent to the pre-push hook -- so the false negative propagates
-    from the resolution into the arming."""
-    ledger = _rolled_store(tmp_path, lane="delta")
-    holders = li.claim_holders(ledger, LEDGER_NAME, bc.load_claim_index())
-    assert holders.get("OMN-9999") == "delta"
+def test_the_backfill_resolves_a_holder_from_the_reader_nodes_open_claims(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`lane_identity reconcile` registers worktrees from the claim store, read through the
+    work-ledger reader node (OMN-26527). A holder it cannot see is a worktree left unregistered,
+    and an unregistered worktree is silent to the pre-push hook."""
+    fresh = _real_stamp(0)
+    reader = tmp_path / "reader-python"
+    reader.write_text(
+        "#!/bin/sh\ncat <<'ROWS'\n"
+        f"OPEN-CLAIM lane=delta claim={fresh} db:1 ticket=OMN-9999 newest-row={fresh} kind=CLAIM age=1m rows=1 host=none run=none leases=none liveness=unknown\n"
+        f"OPEN-CLAIM lane=echo claim=2020-01-01T00:00:00Z db:2 ticket=OMN-9998 newest-row=2020-01-01T00:00:00Z kind=CLAIM age=9d rows=1 host=none run=none leases=none liveness=unknown\n"
+        "ROWS\nexit 0\n",
+        encoding="utf-8",
+    )
+    reader.chmod(0o755)
+    monkeypatch.setenv("ONEX_LEDGER_READER_PYTHON", str(reader))
+    assert li.claim_holders() == {"OMN-9999": "delta"}
+    monkeypatch.setenv("ONEX_LEDGER_READER_PYTHON", str(tmp_path / "absent"))
+    with pytest.raises(li.ClaimStoreUnreadable):
+        li.claim_holders()
 
 
 # OMN-20526 claim-index regressions ported from omnibase_internal a0646d9.

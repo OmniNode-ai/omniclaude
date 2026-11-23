@@ -120,7 +120,7 @@ class HandlerCommentSweepSkill:
                         render_delegation=ModelRenderDelegation(
                             work_unit_id=request.args["work-unit-id"],
                             outcome="pending",
-                            onex_binary=str(venv / "bin/onex"),
+                            onex_binary=str(venv / "bin/python"),
                             searched_venv=str(venv),
                         ),
                     ),
@@ -191,15 +191,23 @@ class HandlerCommentSweepSkill:
         venv = Path(
             os.environ.get("ONEX_DISPATCH_VENV") or home / ".onex-dispatch-venv"
         )
-        binary = venv / "bin/onex"
+        # OMN-25070: omnibase-core no longer declares the onex console script; the
+        # wrapper runs the dispatch venv's own interpreter with the core CLI module.
+        binary = venv / "bin/python"
         wrapper = home / "omnibase_infra/scripts/onex"
-        if not venv.is_absolute() or not os.access(binary, os.X_OK):
+        core_cli = any(
+            venv.glob("lib/python3*/site-packages/omnibase_core/cli/cli_commands.py")
+        )
+        if not venv.is_absolute() or not os.access(binary, os.X_OK) or not core_cli:
             return await self._fallback(
                 request,
                 binary=str(binary),
                 venv=str(venv),
                 reason="missing_binary",
-                detail=f"onex is unavailable at {binary}; searched CLI venv {venv}",
+                detail=(
+                    f"onex (omnibase_core.cli.cli_commands) is unavailable at {binary}; "
+                    f"searched CLI venv {venv}"
+                ),
             )
         if not os.access(wrapper, os.X_OK):
             return await self._fallback(

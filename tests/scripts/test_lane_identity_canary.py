@@ -126,6 +126,7 @@ def workspace(tmp_path: Path) -> dict:
         li.WORKSPACE_ENV: str(home),
         "ONEX_LANE_REGISTRY_ROOT": str(home / ".onex_state"),
         "ONEX_LANE_PYTHON": sys.executable,
+        "ONEX_LEDGER_READER_PYTHON": str(tmp_path / "reader-python"),
         "ONEX_BRANCH_CLAIM_LEDGER": str(home / LEDGER_NAME),
         "ONEX_BRANCH_CLAIM_LEDGER_NAME": LEDGER_NAME,
     }
@@ -153,6 +154,12 @@ def workspace(tmp_path: Path) -> dict:
     git("push", "-q", "origin", "main")
 
     (home / LEDGER_NAME).write_text("# scratch claim store\n", encoding="utf-8")
+    # The work-ledger reader node, faked (OMN-26527): the backfill reads open claims through it.
+    reader = tmp_path / "reader-python"
+    reader.write_text(
+        f"#!/bin/sh\ncat {home}/open-claims.txt 2>/dev/null\nexit 0\n", encoding="utf-8"
+    )
+    reader.chmod(0o755)
 
     return {"home": home, "repo": repo, "shared": shared, "env": env, "git": git}
 
@@ -187,6 +194,18 @@ def _claim(workspace: dict, lane: str, ticket: str, offset_hours: float = 0.0) -
     with ledger.open("a", encoding="utf-8") as handle:
         handle.write(
             f"{_stamp(offset_hours)} | CLAIM | lane={lane} | tickets={ticket} | taking it\n"
+        )
+
+
+def _open_claim(
+    workspace: dict, lane: str, ticket: str, offset_hours: float = 0.0
+) -> None:
+    """One OPEN-CLAIM line, as the reader node prints it for a claim no TERMINAL closed."""
+    with (workspace["home"] / "open-claims.txt").open("a", encoding="utf-8") as handle:
+        handle.write(
+            f"OPEN-CLAIM lane={lane} claim={_stamp(offset_hours)} db:1 ticket={ticket} "
+            f"newest-row={_stamp(offset_hours)} kind=CLAIM age=1m rows=1 host=none run=none "
+            "leases=none liveness=unknown\n"
         )
 
 
@@ -341,13 +360,8 @@ def test_reconcile_backfills_only_a_worktree_with_a_live_holder(
     released = _add_worktree(workspace, "OMN-9906", "lane/omn-9906-a")
     never = _add_worktree(workspace, "OMN-9907", "lane/omn-9907-a")
 
-    _claim(workspace, "alpha", "OMN-9905")
-    _claim(workspace, "beta", "OMN-9906", offset_hours=2)
-    ledger = workspace["home"] / LEDGER_NAME
-    with ledger.open("a", encoding="utf-8") as handle:
-        handle.write(
-            f"{_stamp(1)} | RELEASE | lane=beta | tickets=OMN-9906 | done with it\n"
-        )
+    # The reader node answers the claim no TERMINAL closed; beta's was released, so no line.
+    _open_claim(workspace, "alpha", "OMN-9905")
 
     assert _lane_identity(workspace, "reconcile", "--execute").returncode == 0
 
@@ -366,9 +380,9 @@ def test_reconcile_backfills_nothing_when_the_claim_store_is_unreachable(
     are safe without any registration -- but a holder is never guessed by a
     local parser standing in for an unreadable claim store."""
     worktree = _add_worktree(workspace, "OMN-9909", "lane/omn-9909-a")
-    _claim(workspace, "alpha", "OMN-9909")
+    _open_claim(workspace, "alpha", "OMN-9909")
     env = dict(workspace["env"])
-    env["ONEX_BRANCH_CLAIM_LEDGER"] = str(workspace["home"] / "absent.md")
+    env["ONEX_LEDGER_READER_PYTHON"] = str(workspace["home"] / "absent-python")
     result = subprocess.run(  # noqa: PLW1510 - the return code IS the assertion
         [
             sys.executable,
@@ -380,8 +394,8 @@ def test_reconcile_backfills_nothing_when_the_claim_store_is_unreachable(
         text=True,
         env=env,
     )
-    assert result.returncode == 2, result.stdout + result.stderr
-    assert "cannot read the claim store" in result.stderr
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "the claim store could not be resolved" in result.stderr
     assert li.resolve(workspace["home"] / ".onex_state", worktree) is None
     # The install half still happened.
     assert (workspace["repo"] / ".git" / "hooks" / "prepare-commit-msg").is_file()
