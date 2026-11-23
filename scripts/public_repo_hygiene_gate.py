@@ -1206,8 +1206,8 @@ def _record_stale_cache(vocab: Vocabulary, origin: str, age_days: int) -> None:
     remote lane's relay outbox (``ONEX_LEDGER_RELAY_OUTBOX``) when one is set,
     since a lab host's ledger is a read-only copy, and otherwise through the
     packaged ledger writer in ``$OMNIBASE_INTERNAL_HOME`` (or
-    ``ONEX_LEDGER_APPEND_TOOL``, a script taking the same arguments). CI keeps
-    no ledger and no state directory, so there the warning is the whole record.
+    ``ONEX_LEDGER_APPEND_TOOL``, a script taking the same ``append-rows`` arguments).
+    CI keeps no ledger and no state directory, so there the warning is the whole record.
     Nothing here can fail the run: the scan has already been decided.
     """
     state = os.environ.get("ONEX_STATE_DIR")
@@ -1257,17 +1257,16 @@ def _append_ledger_row(row: str) -> bool:
             print(f"  stale-cache FRICTION row not queued: {exc}", file=sys.stderr)
             return False
         return True
-    ledger = os.environ.get("ONEX_LEDGER_PATH")
     tool = os.environ.get("ONEX_LEDGER_APPEND_TOOL")
     project = os.environ.get("OMNIBASE_INTERNAL_HOME")
-    if not ledger or not (tool or project):
+    if not (tool or project):
         print(
-            "  stale-cache FRICTION row not written: set ONEX_LEDGER_PATH and "
-            "OMNIBASE_INTERNAL_HOME (the ledger writer) to record it.",
+            "  stale-cache FRICTION row not written: set OMNIBASE_INTERNAL_HOME "
+            "(the ledger writer) to record it.",
             file=sys.stderr,
         )
         return False
-    args = [ledger, "--timeout", "10s", "--append", row]
+    args = ["append-rows", "--timeout", "10s", "-"]
     if tool:
         cmd = [sys.executable, tool, *args]
     else:
@@ -1275,6 +1274,7 @@ def _append_ledger_row(row: str) -> bool:
     try:
         done = subprocess.run(
             cmd,
+            input=row + "\n",
             capture_output=True,
             text=True,
             timeout=_LEDGER_APPEND_TIMEOUT_S,

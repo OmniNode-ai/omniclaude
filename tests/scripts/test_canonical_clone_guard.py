@@ -961,8 +961,13 @@ def test_refusal_resolves_live_claim_and_ignores_terminal_claim(
         f"2026-10-08T00:00:00Z | CLAIM | lane=claim-replay | ticket=OMN-1 | worktree={worktree}\n",
         encoding="utf-8",
     )
+    # the open claims are answered by the work-ledger reader node: a stand-in serving the rows
+    reader = ledger.parent / "reader-python"
+    reader.write_text(f'#!/bin/sh\ncat "{ledger}"\n', encoding="utf-8")
+    reader.chmod(0o755)
+    served = {"extra_env": {"ONEX_LEDGER_READER_PYTHON": str(reader)}}
     command = f"git -C {registry.clone('omnimarket')} commit -m x"
-    assert bash(registry, command, worktree).denied
+    assert bash(registry, command, worktree, **served).denied
     _stamp, verdict, fields = log_fields(registry.log.splitlines()[-1])
     assert verdict == "DENY"
     assert json.loads(fields["lane"]) == "claim-replay"
@@ -971,7 +976,7 @@ def test_refusal_resolves_live_claim_and_ignores_terminal_claim(
 
     with ledger.open("a", encoding="utf-8") as fh:
         fh.write("2026-10-08T00:01:00Z | TERMINAL | lane=claim-replay | outcome=done\n")
-    assert bash(registry, command, worktree).denied
+    assert bash(registry, command, worktree, **served).denied
     _stamp, _verdict, fields = log_fields(registry.log.splitlines()[-1])
     assert json.loads(fields["lane"]) != "claim-replay"
     assert fields["lane_source"] == "worktree"

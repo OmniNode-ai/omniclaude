@@ -25,7 +25,7 @@ THE ORDER, first hit wins, each with its own ``lane_source``:
    child's refusal the env names the parent lane.
 4. ``registry`` -- the lane registry (OMN-18260) for the payload cwd and for
    every worktree path the tool call names.
-5. ``claim``    -- an open CLAIM row in a bounded tail of the ledger whose
+5. ``claim``    -- an open CLAIM row in the work-ledger reader's recent window whose
    ``worktree=`` names that worktree, or failing that whose ``ticket=``
    matches the worktree directory's ticket; used only when exactly ONE lane
    matches.
@@ -50,6 +50,7 @@ from __future__ import annotations
 import os
 import re
 import shlex
+import subprocess
 import sys
 from collections.abc import Iterable, Iterator, Mapping
 from pathlib import Path
@@ -65,7 +66,6 @@ __all__ = [
     "LANE_SOURCE_SKILL",
     "LANE_SOURCE_UNRESOLVED",
     "LANE_SOURCE_WORKTREE",
-    "LEDGER_TAIL_BYTES",
     "candidate_paths",
     "claim_lane",
     "lane_cell",
@@ -108,9 +108,10 @@ GENERIC_AGENT_TYPES = frozenset(
 #: then the id and the agent names).
 LANE_ENV_VARS = ("ONEX_LANE", "ONEX_LANE_ID", "ONEX_AGENT_NAME", "CLAUDE_AGENT_NAME")
 
-#: At most this much of the ledger's tail is read for CLAIM rows. The live
-#: ledger is tens of megabytes; an open claim for a worktree in use is recent.
-LEDGER_TAIL_BYTES = 2 * 1024 * 1024
+#: The overlay's reader name (OMN-26508) and the read: 6 hours of CLAIM and TERMINAL rows.
+READER = "hook-refusal-lane"
+READER_MODULE = "omnimarket.nodes.node_work_ledger_reader_effect"
+READ_ARGS = "--query rows --window-hours 6 --kind CLAIM --kind TERMINAL"
 
 _LANE_CHARS = 120
 _MAX_COMMAND_CHARS = 65536
@@ -333,22 +334,6 @@ def _registry_lane(paths: Iterable[Path]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _ledger_tail(ledger: Path) -> list[str]:
-    try:
-        with ledger.open("rb") as fh:
-            fh.seek(0, os.SEEK_END)
-            size = fh.tell()
-            start = max(0, size - LEDGER_TAIL_BYTES)
-            fh.seek(start)
-            data = fh.read()
-    except OSError:
-        return []
-    lines = data.decode("utf-8", errors="replace").splitlines()
-    if start > 0 and lines:
-        lines = lines[1:]  # a partial first line
-    return lines
-
-
 def _row(line: str) -> tuple[str, dict[str, str]] | None:
     cells = [cell.strip() for cell in line.split(" | ")]
     if len(cells) < 3 or cells[1] not in ("CLAIM", "TERMINAL"):
@@ -429,30 +414,36 @@ def claim_lane(
     return "", len(by_ticket) > 1
 
 
-def _ledger_path(explicit: str | None, env: Mapping[str, str]) -> Path | None:
-    if explicit:
-        return Path(explicit)
-    value = env.get("ONEX_LEDGER_PATH", "").strip()
-    if value:
-        return Path(value)
+def _claim_rows(env: Mapping[str, str]) -> list[str]:
+    """CLAIM and TERMINAL rows from the reader node, ``[]`` when it did not answer."""
+    reader = env.get("ONEX_LEDGER_READER_PYTHON") or env.get(
+        "ONEX_LEDGER_BUS_APPEND_COMMAND"
+    )
     home = env.get("OMNI_HOME", "").strip()
-    if home:
-        return Path(home) / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md"
-    return None
+    venv = Path(home, ".onex-dispatch-venv", "bin", "python") if home else None
+    python = (shlex.split(reader or "") or [str(venv) if venv else ""])[0]
+    if not python or (not reader and not os.access(python, os.X_OK)):
+        return []
+    argv = [python, "-m", READER_MODULE, "--reader", READER, *READ_ARGS.split()]
+    try:
+        done = subprocess.run(
+            argv, capture_output=True, text=True, env=dict(env), timeout=60, check=False
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    return done.stdout.splitlines() if done.returncode in (0, 1) else []
 
 
 def open_claims(
     env: Mapping[str, str], ledger: str | None = None
 ) -> list[dict[str, str]]:
-    """The open CLAIM rows in the ledger's bounded tail, oldest first.
+    """The open CLAIM rows of the work-ledger reader node's recent window, oldest first.
 
-    Open means no later TERMINAL for the same lane. ``[]`` when no ledger
-    path resolves or the file cannot be read. Also read by the ticket-creation
-    guard's lane intake (OMN-17942), which names a workflow subagent's lane
-    only when that lane holds an open CLAIM.
+    Open means no later TERMINAL for the same lane; ``[]`` when the node did not
+    answer, never the file. Also read by the ticket-creation guard's lane intake
+    (OMN-17942). ``ledger`` is retired: it names nothing (OMN-26508).
     """
-    ledger_file = _ledger_path(ledger, env)
-    return _open_claims(_ledger_tail(ledger_file)) if ledger_file else []
+    return _open_claims(_claim_rows(env))
 
 
 # ---------------------------------------------------------------------------

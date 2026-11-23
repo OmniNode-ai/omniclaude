@@ -177,7 +177,16 @@ def _lanes(module: ModuleType, tmp: Path) -> dict[str, list[str]]:
         "2026-10-09T00:00:03Z | CLAIM | lane=delta | ticket=OMN-333 | x\n"
         "2026-10-09T00:00:04Z | TERMINAL | lane=delta | ticket=OMN-333 | x\n"
     )
-    env = {"OMNI_HOME": str(tmp), "ONEX_WORKTREES_ROOT": str(wt), "HOME": str(tmp)}
+    # the claims are answered by the work-ledger reader node: a stand-in that serves the rows
+    reader = tmp / "reader-python"
+    reader.write_text(f'#!/bin/sh\ncat "{ledger}"\n')
+    reader.chmod(0o755)
+    env = {
+        "OMNI_HOME": str(tmp),
+        "ONEX_WORKTREES_ROOT": str(wt),
+        "HOME": str(tmp),
+        "ONEX_LEDGER_READER_PYTHON": str(reader),
+    }
     cases: dict[str, tuple[dict[str, object] | None, dict[str, str]]] = {
         "env_lane": ({"cwd": str(tmp)}, {**env, "ONEX_LANE": "from-env"}),
         "env_ignored_for_subagent": (
