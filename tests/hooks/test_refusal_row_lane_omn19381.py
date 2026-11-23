@@ -47,16 +47,24 @@ ERROR_GUARD = SCRIPTS_DIR / "error-guard.sh"
 SESSION_ID = "5f0c2a8e-1111-4222-8333-944455556666"
 AGENT_ID = "a3f9c1d2e4b5a6c7"
 
-#: A stand-in for uv run --project omnibase_internal onex-ledger.
+#: A stand-in for uv run --project <the ledger writer> onex-ledger: ``append-rows -`` writes the
+#: row on stdin to the fake bus's store (OMN-26508); the scratch form appends to its ledger.
 _FAKE_LOCKER = (
     f"#!{sys.executable}\n"
-    "import pathlib, sys\n"
+    "import os, pathlib, sys\n"
     "sys.argv = sys.argv[5:]\n"
-    "ledger = pathlib.Path(sys.argv[1])\n"
-    "row = sys.argv[sys.argv.index('--append') + 1]\n"
+    "if sys.argv[1] == 'append-rows':\n"
+    "    ledger = pathlib.Path(os.environ['FAKE_BUS_LEDGER'])\n"
+    "    row = sys.stdin.read().rstrip('\\n')\n"
+    "else:\n"
+    "    ledger = pathlib.Path(sys.argv[1])\n"
+    "    row = sys.argv[sys.argv.index('--append') + 1]\n"
     "with ledger.open('a', encoding='utf-8') as fh:\n"
     "    fh.write(row + '\\n')\n"
 )
+
+#: A stand-in for the reader node's interpreter: it answers with the fake bus's store.
+_FAKE_READER = '#!/bin/sh\ncat "$FAKE_BUS_LEDGER"\n'
 
 #: A guard's shape, reduced to the two lines that matter here: the payload is
 #: read from stdin into TOOL_INFO, and the deny path calls the recorder.
@@ -98,6 +106,9 @@ class Sandbox:
         stub = tmp_path / "uv"
         stub.write_text(_FAKE_LOCKER, encoding="utf-8")
         stub.chmod(0o755)
+        reader = tmp_path / "reader-python"
+        reader.write_text(_FAKE_READER, encoding="utf-8")
+        reader.chmod(0o755)
         self.ledger = self.home / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md"
         self.ledger.parent.mkdir(parents=True)
         self.ledger.write_text("# ledger\n", encoding="utf-8")
@@ -177,6 +188,8 @@ class Sandbox:
             "PATH": f"{self.tmp}:" + os.environ.get("PATH", "/usr/bin:/bin"),
             "HOME": str(self.tmp),
             "OMNI_HOME": str(self.home),
+            "FAKE_BUS_LEDGER": str(self.ledger),
+            "ONEX_LEDGER_READER_PYTHON": str(self.tmp / "reader-python"),
             "CLAUDE_PROJECT_DIR": str(self.home),
             "CLAUDE_PROJECTS_DIR": str(self.tmp / "projects"),
             "ONEX_HOOK_REFUSAL_STATE_DIR": str(self.tmp / "refusal_state"),

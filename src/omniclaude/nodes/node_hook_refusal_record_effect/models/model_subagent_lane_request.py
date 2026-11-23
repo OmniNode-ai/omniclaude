@@ -26,7 +26,7 @@ class ModelSubagentLaneRequest(BaseModel):
     )
     environ: dict[str, str] = Field(
         default_factory=dict,
-        description="ONEX_LEDGER_PATH, OMNI_HOME and the session-start state directories.",
+        description="OMNI_HOME, the lane variables and the session-start state directories.",
     )
     allow_parent: bool = Field(
         default=True,

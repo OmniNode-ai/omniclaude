@@ -31,13 +31,18 @@ HOOK = ROOT / "plugins/onex/hooks/scripts/pre_tool_use_bash_guards.sh"
 
 GUARD = "pre_tool_use_lane_github_read_guard"
 
-#: A stand-in for ``uv run --project <ledger writer project> onex-ledger <ledger> --append <row>``.
+#: A stand-in for ``uv run --project <ledger writer project> onex-ledger append-rows -`` (the row
+#: on stdin goes to the fake bus's store) and for the scratch form (OMN-26508).
 _FAKE_LOCKER = (
     f"#!{sys.executable}\n"
-    "import pathlib, sys\n"
+    "import os, pathlib, sys\n"
     "sys.argv = sys.argv[5:]\n"
-    "ledger = pathlib.Path(sys.argv[1])\n"
-    "row = sys.argv[sys.argv.index('--append') + 1]\n"
+    "if sys.argv[1] == 'append-rows':\n"
+    "    ledger = pathlib.Path(os.environ['FAKE_BUS_LEDGER'])\n"
+    "    row = sys.stdin.read().rstrip('\\n')\n"
+    "else:\n"
+    "    ledger = pathlib.Path(sys.argv[1])\n"
+    "    row = sys.argv[sys.argv.index('--append') + 1]\n"
     "with ledger.open('a', encoding='utf-8') as fh:\n"
     "    fh.write(row + '\\n')\n"
 )
@@ -70,6 +75,7 @@ class Scratch:
         env.update(
             PATH=f"{self.tmp}:" + os.environ.get("PATH", "/usr/bin:/bin"),
             OMNI_HOME=str(self.home),
+            FAKE_BUS_LEDGER=str(self.ledger),
             OMNIBASE_INTERNAL_HOME=str(self.project),
             ONEX_STATE_DIR=str(self.tmp / "state"),
             ONEX_HOOK_LOG=str(self.tmp / "hooks.log"),

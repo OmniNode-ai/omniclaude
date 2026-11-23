@@ -46,13 +46,19 @@ ROUTE_LINE = (
     "ROUTE: band=B2 score=9 dims=S1A1R1V2N2C1J1 dest=lab model=sonnet effort=high"
 )
 
-#: A stand-in for ``uv run --project <p> onex-ledger <ledger> --append <row>``.
+#: A stand-in for ``uv run --project <p> onex-ledger append-rows -`` (the row on stdin, the
+#: ledger of record named by the environment, as the verb resolves it) and for the scratch
+#: form ``onex-ledger <ledger> --append <row>`` (OMN-26508).
 _FAKE_UV = (
     f"#!{sys.executable}\n"
-    "import pathlib, sys\n"
+    "import os, pathlib, sys\n"
     "argv = sys.argv[5:]\n"
-    "ledger = pathlib.Path(argv[1])\n"
-    "row = argv[argv.index('--append') + 1]\n"
+    "if argv[1] == 'append-rows':\n"
+    "    ledger = pathlib.Path(os.environ['FAKE_BUS_LEDGER'])\n"
+    "    row = sys.stdin.read().rstrip('\\n')\n"
+    "else:\n"
+    "    ledger = pathlib.Path(argv[1])\n"
+    "    row = argv[argv.index('--append') + 1]\n"
     "with ledger.open('a', encoding='utf-8') as fh:\n"
     "    fh.write(row + '\\n')\n"
 )
@@ -128,6 +134,7 @@ class Box:
             "OMNI_HOME": str(self.home),
             "OMNIBASE_INTERNAL_HOME": str(self.project),
             "ONEX_LEDGER_PATH": str(self.ledger),
+            "FAKE_BUS_LEDGER": str(self.ledger),
             "CLAUDE_PROJECT_DIR": str(self.home),
             "ONEX_HOOK_REFUSAL_STATE_DIR": str(self.tmp / "refusal_state"),
             "ONEX_STATE_DIR": str(self.home / ".onex_state"),

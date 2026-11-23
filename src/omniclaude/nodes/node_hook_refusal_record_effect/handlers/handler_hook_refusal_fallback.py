@@ -137,16 +137,16 @@ def write_fallback_row(
             "ledger writer project\n"
         )
         return 0
-    ledger = (
-        env.get("ONEX_LEDGER_PATH") or f"{root}/docs/tracking/ROLLING_WORK_LEDGER.md"
-    )
-    if not (Path(project, "pyproject.toml").is_file() and Path(ledger).is_file()):
+    if not Path(project, "pyproject.toml").is_file():
         return 0
     stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     row = build_row(request, env, stamp, _redactor(request.hooks_lib))
+    # OMN-26508: ``append-rows`` names the ledger itself and publishes over the bus
     subprocess.run(
-        ["uv", "run", "--quiet", "--project", project, "onex-ledger", ledger]
-        + ["--append", row, "--timeout", "120s"],
+        ["uv", "run", "--quiet", "--project", project, "onex-ledger"]
+        + ["append-rows", "--timeout", "120s", "-"],
+        input=row + "\n",
+        text=True,
         check=False,
     )
     return 0

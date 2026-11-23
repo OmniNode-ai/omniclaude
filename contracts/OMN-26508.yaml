@@ -1,0 +1,131 @@
+schema_version: "1.0.0"
+ticket_id: OMN-26508
+title: The omniclaude hook libraries, gates and scripts read and write the ledger only through the bus, with no ledger file name or path variable left in runtime code
+summary: >-
+  First slice of the omniclaude group of the ledger-file census: six of the eighteen runtime files move
+  onto the work-ledger bus. The hook refusal recorder, its fallback and its lane resolver, the hook emit
+  alarm and the public-repo hygiene gate write through onex-ledger append-rows (which names the ledger of
+  record itself and publishes over the bus) or read through the work-ledger reader node, and name neither
+  the ledger file nor its path variable. The other twelve files are listed in the pull request body with
+  the reason each stays.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn26508-bus-only
+    statement: The moved omniclaude runtime files read and write the work ledger only through the bus.
+    acceptance:
+      - id: AC1
+        statement: >-
+          AC1: the census node, run over the omniclaude worktree, lists none of the moved runtime files as a
+          hit and counts fewer runtime files than origin/dev -- falsifier: the census node run with
+          --packaged-overlay --register omniclaude --directory omniclaude=<worktree> --verbose, grep of the
+          moved paths, run first on origin/dev as the positive control
+      - id: AC2
+        statement: >-
+          AC2: a test run with the ledger path variable unset and no ledger file on disk shows each moved
+          reader or writer calling the bus-backed work-ledger client and never opening the file --
+          falsifier: uv run pytest tests/test_runtime_ledger_bus.py -q, failing on the merge base
+      - id: AC3
+        statement: >-
+          AC3: no moved script or handler carries the path variable or the ledger file name as a path to
+          read or write -- falsifier: uv run pytest tests/test_runtime_ledger_bus.py -k no_file_path -q,
+          failing on the merge base
+      - id: AC4
+        statement: >-
+          AC4: the branch installed on a lab host runs the moved refusal lane resolver with the path
+          variable unset and the live reader node answers it ledger rows -- falsifier: the lab run readback
+          of the row count, run first on the origin/dev install where it must read no rows or fail
+evidence_requirements:
+  - kind: tests
+    description: The bus tests pass at the head and fail at the merge base.
+    command: uv run pytest tests/test_runtime_ledger_bus.py -q
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+  - id: dod-omn26508-ac2-bus-calls
+    description: >-
+      Each moved reader or writer calls the fake bus (the reader node's interpreter and uv running
+      onex-ledger append-rows) with the ledger path variable unset and no ledger file on disk; at the
+      merge base these tests fail because the old code opens the file or names the ledger path.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC2
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/test_runtime_ledger_bus.py -q
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn26508-ac3-no-file-path
+    description: >-
+      No moved runtime file names the ledger path variable or the ledger file name; at the merge base
+      every one of these checks fails.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC3
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/test_runtime_ledger_bus.py -k no_file_path -q
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn26508-ac1-census-ratchet
+    description: >-
+      The census ratchet row for omniclaude and the per-file table only shrink: the moved files are dropped
+      from the table and the row equals the table's size, which is at most 55; at the merge base the moved
+      files are still listed and the row is above 55, so the test fails there.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC1
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/test_runtime_ledger_bus.py -k census_table -q
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn26508-ac4-lab-install
+    description: >-
+      The branch revision is installed on a lab host and the moved refusal lane resolver, run there with the
+      path variable unset, is answered by the live reader node (rows returned greater than 0); the lane's
+      STATUS row carries installed=<host>:<sha> and observed=<what ran>.
+    source: manual
+    execution_scope: local_done_gate
+    checks:
+      - check_type: command
+        check_value: |-
+          set -o pipefail
+          python3 "${OMNI_PLUGIN_ROOT:?}/skills/lane-brief/scripts/lane_brief.py" grep --tail 100000 'installed=' \
+            | grep -F ' | STATUS | ' | grep -F 'ticket=OMN-26508' | grep -E 'installed=[A-Za-z0-9._-]+:[0-9a-f]{40}' | grep -F 'observed=' | tail -1
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn26508-hosted-source-deploy-readback
+    description: >-
+      Read the refusal lane resolver at the checked-out commit from GitHub and require the work-ledger
+      reader's name in it. There is no live deploy of this module to probe, so the check reads the file as
+      published; at the merge base the file names no reader and the check fails. It does not establish the
+      lab install, which dod-omn26508-ac4-lab-install records.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC2
+    checks:
+      - check_type: command
+        check_value: >-
+          gh api "repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_hook_refusal_record_effect/handlers/handler_hook_refusal_lane.py?ref=$(git rev-parse HEAD)"
+          --jq '.content | gsub("\n"; "") | @base64d | contains("READER = \"hook-refusal-lane\"")'
+          | grep -qx true
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn26508-ac4-hosted
+    description: >-
+      AC4 (hosted half): the refusal lane resolver, run with the ledger path variable unset and no ledger
+      file on disk, reads its CLAIM and TERMINAL rows from the work-ledger reader node's answer (here a fake
+      reader interpreter) and returns the open claims; at the merge base the tests file does not exist and
+      the resolver opens the ledger file, so this fails there. The lab install and the live reader's row
+      count are the local half, dod-omn26508-ac4-lab-install.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC4
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/test_runtime_ledger_bus.py -k refusal_lane -q
+        cwd: ${OMNI_HOME}/omniclaude
