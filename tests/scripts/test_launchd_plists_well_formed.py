@@ -44,7 +44,6 @@ _OTHER_PLACEHOLDERS = {
     "__ROOT__": "/opt/sample/omniclaude",
     "__STATE_DIR__": "/var/tmp/sample-state",
     "__INTERNAL_HOME__": "/opt/sample/internal",
-    "__LEDGER__": "/var/tmp/sample-ledger.jsonl",
     "__UV_DIR__": "/opt/sample/uv",
 }
 
@@ -88,6 +87,7 @@ def test_rendered_plist_parses(template: Path) -> None:
     rendered = _fill_other_placeholders(_render(template))
     assert "__OMNI_HOME__" not in rendered
     assert "__HOME__" not in rendered
+    assert not re.search(r"__[A-Z_]+__", rendered), "an unexpanded placeholder"
     parsed = plistlib.loads(rendered.encode("utf-8"))
     assert parsed["Label"] == template.stem
 

@@ -1,0 +1,64 @@
+schema_version: "1.0.0"
+ticket_id: OMN-26569
+title: The omniclaude hook-process canary installer and launchd plist hand no ledger file path to the canary and require no ledger path variable
+summary: >-
+  The canary installer drops its ledger option and its ledger path variable requirement, and the launchd
+  template drops that variable's key and its placeholder; the canary keeps OMNIBASE_INTERNAL_HOME
+  and OMNI_HOME, which the bus append needs. Both files leave the ledger-file census and its ratchet.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn26569-canary-installer-bus
+    statement: The canary installer and plist carry no ledger file path.
+    acceptance:
+      - id: AC1
+        statement: >-
+          AC1: the census node, run over the omniclaude worktree, lists neither the installer nor the canary plist
+          as a runtime hit and both ratchet rows are lowered -- falsifier: the census node run on origin/dev
+          lists both files and the run on the branch lists neither
+      - id: AC2
+        statement: >-
+          AC2: the installer's dry run with no ledger option and no ledger path variable in the environment renders a
+          plist and a cron line that carry no ledger path and still carry OMNIBASE_INTERNAL_HOME and OMNI_HOME,
+          and a ledger option is refused as unknown -- falsifier: uv run pytest
+          tests/scripts/test_install_hook_process_canary_bus.py -q, failing on the merge base
+      - id: AC3
+        statement: >-
+          AC3: the rendered plist is well formed and holds no placeholder left unexpanded -- falsifier: uv run
+          pytest tests/scripts/test_launchd_plists_well_formed.py -q, failing on the merge base
+evidence_requirements:
+  - kind: manual
+    description: The installer, the plist template and the ratchet file hold no ledger file path for the canary.
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+  - id: dod-omn26569-ac1-ratchet-rows
+    description: The two ratchet rows of the installer and the plist are gone from the committed table; they are present at the merge base, so the check fails there.
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: command
+        check_value: >-
+          ! grep -Eq 'install-hook-process-canary.sh|ai.omninode.hook-process-canary.plist' config/ledger_file_census_ratchet.yaml
+        cwd: .
+  - id: dod-omn26569-ac2-installer-bus
+    description: The new installer test passes at the checked-out commit and fails at the merge base, where the installer still accepts a ledger option.
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: command
+        check_value: >-
+          uv run pytest tests/scripts/test_install_hook_process_canary_bus.py -q --no-cov
+        cwd: .
+  - id: dod-omn26569-ac3-plist-well-formed
+    description: The plist well-formedness test passes at the checked-out commit and fails at the merge base, where the template holds an unexpanded ledger placeholder.
+    source: manual
+    binds_ac: [AC3]
+    checks:
+      - check_type: command
+        check_value: >-
+          uv run pytest tests/scripts/test_launchd_plists_well_formed.py -q --no-cov
+        cwd: .

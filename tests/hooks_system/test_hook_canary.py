@@ -455,7 +455,6 @@ def test_installer_refuses_without_a_state_dir(tmp_path: Path) -> None:
     sys.platform != "darwin", reason="renders the launchd plist on macOS"
 )
 def test_installer_renders_a_complete_plist(tmp_path: Path) -> None:
-    ledger = tmp_path / "ledger.md"
     run = subprocess.run(
         [
             "bash",
@@ -463,8 +462,6 @@ def test_installer_renders_a_complete_plist(tmp_path: Path) -> None:
             "--dry-run",
             "--state-dir",
             str(tmp_path / "state"),
-            "--ledger",
-            str(ledger),
             "--internal-home",
             str(tmp_path / "omnibase_internal"),
             "--omni-home",
@@ -517,15 +514,15 @@ def test_installer_renders_a_cron_line_that_cannot_stack_up(tmp_path: Path) -> N
 
 
 @pytest.mark.skipif(sys.platform == "darwin", reason="renders the cron line on Linux")
-def test_installer_cron_line_with_a_ledger_carries_omni_home(tmp_path: Path) -> None:
+def test_installer_cron_line_with_an_internal_home_carries_omni_home(
+    tmp_path: Path,
+) -> None:
     command = [
         "bash",
         str(_INSTALLER),
         "--dry-run",
         "--state-dir",
         str(tmp_path / "state"),
-        "--ledger",
-        str(tmp_path / "ledger.md"),
         "--internal-home",
         str(tmp_path / "internal_home"),
     ]
