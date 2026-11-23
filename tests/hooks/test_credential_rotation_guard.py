@@ -14,6 +14,7 @@ an agent's own judgement is never the authorisation, so no test may encode one.
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import subprocess
@@ -59,6 +60,8 @@ from credential_rotation_guard import (  # noqa: E402
 )
 
 pytestmark = pytest.mark.unit
+
+crg = importlib.import_module("credential_rotation_guard")
 
 
 # --------------------------------------------------------------------------
@@ -110,35 +113,81 @@ def policy() -> Policy:
     return load_policy(POLICY_PATH)
 
 
+#: The timestamps the served ledger rows carry, one per fixture row (the shared fixtures above
+#: share one timestamp, and a timestamp that names two rows is refused as ambiguous). Line numbers
+#: are the order the rows were served in: 1 GOOD_ROW, 2 JAKE_ROW, 3 SELF_APPROVED_ROW,
+#: 4 NO_OUT_OF_SCOPE_ROW, 5 CLAIM_ROW, 6 OTHER_CREDENTIAL_ROW.
+_GOOD_STAMP = "2026-09-05T12:00:00Z"
+_LINE_STAMPS = {
+    1: _GOOD_STAMP,
+    2: "2026-09-05T12:00:01Z",
+    3: "2026-09-05T12:00:02Z",
+    4: "2026-09-05T12:00:03Z",
+    5: "2026-09-05T11:00:00Z",
+    6: "2026-09-05T12:00:04Z",
+}
+
+#: A stand-in for the dispatch venv's interpreter: it answers the one point read the guard asks
+#: (``-I -c <program> <reader> <stamp> <kind>``) from ``rows.txt`` beside it, records every call
+#: in ``calls.log``, and can be told to be down or slow. It opens no ledger file.
+_FAKE_READER = """#!/bin/sh
+bus="{bus}"
+reader=""; stamp=""; kind=""
+for a in "$@"; do reader=$stamp; stamp=$kind; kind=$a; done
+printf '%s %s %s\\n' "$reader" "$stamp" "$kind" >> "$bus/calls.log"
+if [ -f "$bus/down" ]; then
+  echo "reader $reader: unreadable (node-did-not-answer)" >&2
+  exit 2
+fi
+if [ -f "$bus/slow" ]; then
+  exec sleep 5
+fi
+[ -f "$bus/rows.txt" ] || exit 0
+awk -F'|' -v s="$stamp" -v k="$kind" '{{
+  a=$1; b=$2; gsub(/^ +| +$/, "", a); gsub(/^ +| +$/, "", b)
+  if (a == s && b == k) print
+}}' "$bus/rows.txt"
+"""
+
+
+def _serve(home: Path, rows: list[str]) -> Path:
+    """Make ``home`` an OMNI_HOME whose reader answers from ``rows``; returns the bus dir.
+
+    The reader is where the guard looks for it by default
+    (``<home>/.onex-dispatch-venv/bin/python``). No ledger file is written anywhere.
+    """
+    bus = home / ".reader-fixture"
+    bus.mkdir(parents=True, exist_ok=True)
+    (bus / "rows.txt").write_text("\n".join(rows) + "\n", encoding="utf-8")
+    python = home / ".onex-dispatch-venv" / "bin" / "python"
+    python.parent.mkdir(parents=True, exist_ok=True)
+    python.write_text(_FAKE_READER.format(bus=bus), encoding="utf-8")
+    python.chmod(0o755)
+    return bus
+
+
 @pytest.fixture
 def ledger(tmp_path: Path) -> Path:
-    """A fake OMNI_HOME carrying a ledger whose rows are the fixtures above.
+    """A fake OMNI_HOME whose reader node answers the rows fixtured above.
 
-    Returns the OMNI_HOME root. Line numbers are 1-based and stable:
-      1 GOOD_ROW, 2 JAKE_ROW, 3 SELF_APPROVED_ROW, 4 NO_OUT_OF_SCOPE_ROW,
-      5 CLAIM_ROW, 6 OTHER_CREDENTIAL_ROW.
+    Returns the OMNI_HOME root. There is no ledger file under it: a read that
+    opened one would find nothing (OMN-26589).
     """
-    tracking = tmp_path / "docs" / "tracking"
-    tracking.mkdir(parents=True)
-    (tracking / "ROLLING_WORK_LEDGER.md").write_text(
-        "\n".join(
-            [
-                GOOD_ROW,
-                JAKE_ROW,
-                SELF_APPROVED_ROW,
-                NO_OUT_OF_SCOPE_ROW,
-                CLAIM_ROW,
-                OTHER_CREDENTIAL_ROW,
-            ]
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+    originals = [GOOD_ROW, JAKE_ROW, SELF_APPROVED_ROW, NO_OUT_OF_SCOPE_ROW]
+    served = [
+        row.replace(_GOOD_STAMP, _LINE_STAMPS[line], 1)
+        for line, row in enumerate(originals, start=1)
+    ]
+    served.append(CLAIM_ROW)
+    served.append(OTHER_CREDENTIAL_ROW.replace(_GOOD_STAMP, _LINE_STAMPS[6], 1))
+    _serve(tmp_path, served)
     return tmp_path
 
 
 def _cite(line: int, path: str = "docs/tracking/ROLLING_WORK_LEDGER.md") -> str:
-    return f"# ROTATION-CONSENT: {path}:{line}"
+    """The citation of fixture row ``line`` by its timestamp; an unknown line stays a line."""
+    stamp = _LINE_STAMPS.get(line)
+    return f"# ROTATION-CONSENT: {path}" + (f"@{stamp}" if stamp else f":{line}")
 
 
 def codes(findings: list[Finding]) -> set[str]:
@@ -286,10 +335,10 @@ def test_row_without_out_of_scope_is_refused(policy: Policy, ledger: Path) -> No
 def test_citation_pointing_at_a_non_consent_row_is_refused(
     policy: Policy, ledger: Path
 ) -> None:
-    """A CLAIM row carrying both scope lists is still not consent."""
+    """A CLAIM row carrying both scope lists is still not consent: the node answers no consent row."""
     command = "aws secretsmanager rotate-secret --secret-id operator-k8s"
     findings = check_bash_command(f"{command} {_cite(5)}", policy, ledger)
-    assert "consent_row_not_operator_consent" in codes(findings)
+    assert "consent_stamp_absent" in codes(findings)
 
 
 def test_scope_naming_a_different_credential_is_refused(
@@ -300,10 +349,22 @@ def test_scope_naming_a_different_credential_is_refused(
     assert "consent_scope_omits_credential" in codes(findings)
 
 
-def test_citation_past_end_of_ledger_is_refused(policy: Policy, ledger: Path) -> None:
+def test_a_line_citation_is_refused_with_the_timestamp_form_named(
+    policy: Policy, ledger: Path
+) -> None:
+    """The reader node has no line numbers; a line form is never resolved against anything."""
     command = "aws secretsmanager rotate-secret --secret-id operator-k8s"
-    findings = check_bash_command(f"{command} {_cite(9999)}", policy, ledger)
-    assert "consent_line_absent" in codes(findings)
+    for line in (1, 9999):
+        findings = check_bash_command(
+            f"{command} # ROTATION-CONSENT: docs/tracking/ROLLING_WORK_LEDGER.md:{line}",
+            policy,
+            ledger,
+        )
+        assert "consent_line_form_unresolvable" in codes(findings)
+        reason = next(
+            f.fix for f in findings if f.code == "consent_line_form_unresolvable"
+        )
+        assert "<row timestamp>" in reason
 
 
 def test_citation_to_a_non_canonical_path_is_refused(
@@ -544,7 +605,7 @@ def test_hook_script_allows_a_cited_rotation(tmp_path: Path, ledger: Path) -> No
             "tool_input": {
                 "command": (
                     "aws secretsmanager rotate-secret --secret-id operator-k8s "
-                    "# ROTATION-CONSENT: docs/tracking/ROLLING_WORK_LEDGER.md:1"
+                    "# ROTATION-CONSENT: docs/tracking/ROLLING_WORK_LEDGER.md@2026-09-05T12:00:00Z"
                 )
             },
         },
@@ -1128,99 +1189,118 @@ def _stamp_cite(stamp: str, path: str = "docs/tracking/ROLLING_WORK_LEDGER.md") 
 
 @pytest.fixture
 def stamped_home(tmp_path: Path) -> Path:
-    """An OMNI_HOME whose ledger carries exactly one uniquely-stamped row."""
-    tracking = tmp_path / "docs" / "tracking"
-    tracking.mkdir(parents=True)
-    (tracking / "ROLLING_WORK_LEDGER.md").write_text(
-        "\n".join([CLAIM_ROW, _UNIQUE_ROW]) + "\n", encoding="utf-8"
-    )
+    """An OMNI_HOME whose reader answers exactly one uniquely-stamped consent row."""
+    _serve(tmp_path, [CLAIM_ROW, _UNIQUE_ROW])
     return tmp_path
+
+
+def _guard(home: Path, command: str, policy: Policy) -> list[Finding]:
+    return check_bash_command(command, policy, home)
 
 
 def test_a_timestamp_citation_resolves_the_consent_row(
     policy: Policy, stamped_home: Path
 ) -> None:
-    findings = check_bash_command(
-        f"{_ROTATE} {_stamp_cite(_UNIQUE_STAMP)}", policy, stamped_home
-    )
+    findings = _guard(stamped_home, f"{_ROTATE} {_stamp_cite(_UNIQUE_STAMP)}", policy)
     assert findings == [], f"a valid timestamp citation was refused: {findings}"
 
 
-def test_the_line_form_still_resolves_the_same_row(
+def test_a_line_citation_never_resolves_the_same_row(
     policy: Policy, stamped_home: Path
 ) -> None:
-    """The replacement must not invalidate citations already written.
-
-    Pending rotations in flight cite lines. A change that made the timestamp
-    form work by breaking the line form would refuse exactly the authorisations
-    it was meant to protect.
-    """
-    findings = check_bash_command(f"{_ROTATE} {_cite(2)}", policy, stamped_home)
-    assert findings == [], f"the line form stopped working: {findings}"
+    line_cite = "# ROTATION-CONSENT: docs/tracking/ROLLING_WORK_LEDGER.md:2"
+    findings = _guard(stamped_home, f"{_ROTATE} {line_cite}", policy)
+    assert "consent_line_form_unresolvable" in codes(findings), findings
 
 
-def test_a_timestamp_citation_survives_the_row_being_rolled(
+def test_the_consent_row_is_read_from_the_reader_node_never_a_file(
     policy: Policy, stamped_home: Path
 ) -> None:
-    """The property the whole form exists for.
+    """AC2: no ledger file on disk, and a planted file is not consulted either.
 
-    The row is moved out of the live ledger into the archive, exactly as a
-    cap-crossing roll does. Its line number is now meaningless; its timestamp
-    is not.
+    The cited ledger path does not exist under the home, and the one question the reader
+    node was asked is the cited instant and the consent kind.
     """
-    tracking = stamped_home / "docs" / "tracking"
-    archive = tracking / "archive"
-    archive.mkdir()
-    (archive / "ROLLING_WORK_LEDGER_2026-09-06-split.md").write_text(
-        "## Rolled\n\n" + _UNIQUE_ROW + "\n", encoding="utf-8"
-    )
-    (tracking / "ROLLING_WORK_LEDGER.md").write_text(CLAIM_ROW + "\n", encoding="utf-8")
+    assert not (stamped_home / "docs").exists()
+    findings = _guard(stamped_home, f"{_ROTATE} {_stamp_cite(_UNIQUE_STAMP)}", policy)
+    assert findings == []
+    calls = (stamped_home / ".reader-fixture" / "calls.log").read_text().splitlines()
+    assert calls == [f"{crg.CONSENT_READER} {_UNIQUE_STAMP} OPERATOR-CONSENT"]
 
-    findings = check_bash_command(
-        f"{_ROTATE} {_stamp_cite(_UNIQUE_STAMP)}", policy, stamped_home
+
+def test_a_consent_row_planted_in_the_ledger_file_is_not_read(
+    policy: Policy, tmp_path: Path
+) -> None:
+    """The reader node is the only source: a file naming the cited row proves nothing."""
+    _serve(tmp_path, [CLAIM_ROW])
+    tracking = tmp_path / "docs" / "tracking"
+    tracking.mkdir(parents=True)
+    (tracking / "ROLLING_WORK_LEDGER.md").write_text(
+        _UNIQUE_ROW + "\n", encoding="utf-8"
+    )
+    findings = _guard(tmp_path, f"{_ROTATE} {_stamp_cite(_UNIQUE_STAMP)}", policy)
+    assert "consent_stamp_absent" in codes(findings), findings
+
+
+def _plant_ledger_file(home: Path) -> None:
+    """A ledger file holding the consent row: a guard that fell back to it would allow."""
+    tracking = home / "docs" / "tracking"
+    tracking.mkdir(parents=True, exist_ok=True)
+    (tracking / "ROLLING_WORK_LEDGER.md").write_text(
+        _UNIQUE_ROW + "\n", encoding="utf-8"
     )
 
-    assert findings == [], (
-        f"a rolled consent row stopped authorising its own rotation: {findings}"
-    )
+
+def test_unanswered_reader_leaves_the_rotation_refused(
+    policy: Policy, stamped_home: Path
+) -> None:
+    """AC3: a reader node that does not answer is an unreadable ledger, never an allow."""
+    _plant_ledger_file(stamped_home)
+    (stamped_home / ".reader-fixture" / "down").write_text("", encoding="utf-8")
+    findings = _guard(stamped_home, f"{_ROTATE} {_stamp_cite(_UNIQUE_STAMP)}", policy)
+    assert "consent_ledger_unreadable" in codes(findings), findings
+
+
+def test_unanswered_reader_that_times_out_leaves_the_rotation_refused(
+    policy: Policy, stamped_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _plant_ledger_file(stamped_home)
+    (stamped_home / ".reader-fixture" / "slow").write_text("", encoding="utf-8")
+    monkeypatch.setattr(crg, "READ_TIMEOUT_S", 1)
+    findings = _guard(stamped_home, f"{_ROTATE} {_stamp_cite(_UNIQUE_STAMP)}", policy)
+    assert "consent_ledger_unreadable" in codes(findings), findings
+
+
+def test_unanswered_reader_with_no_interpreter_leaves_the_rotation_refused(
+    policy: Policy, tmp_path: Path
+) -> None:
+    _plant_ledger_file(tmp_path)
+    findings = _guard(tmp_path, f"{_ROTATE} {_stamp_cite(_UNIQUE_STAMP)}", policy)
+    assert "consent_ledger_unreadable" in codes(findings), findings
 
 
 def test_an_absent_timestamp_is_refused(policy: Policy, stamped_home: Path) -> None:
-    findings = check_bash_command(
-        f"{_ROTATE} {_stamp_cite('2026-01-01T00:00:00Z')}", policy, stamped_home
+    findings = _guard(
+        stamped_home, f"{_ROTATE} {_stamp_cite('2026-01-01T00:00:00Z')}", policy
     )
     assert "consent_stamp_absent" in codes(findings)
 
 
 def test_an_ambiguous_timestamp_is_refused_not_picked(
-    policy: Policy, ledger: Path
+    policy: Policy, tmp_path: Path
 ) -> None:
     """Ambiguity is a refusal, never a choice.
 
-    Two lanes can append inside the same second, so a row timestamp is not
-    guaranteed unique -- four rows in the shared fixture share one. Choosing
-    among them would mean this guard authorising a rotation against a row
+    Two lanes can append inside the same second, so a row timestamp is not guaranteed
+    unique. Choosing among them would mean this guard authorising a rotation against a row
     nobody cited, which is worse than refusing.
     """
-    findings = check_bash_command(
-        f"{_ROTATE} {_stamp_cite('2026-09-05T12:00:00Z')}", policy, ledger
-    )
-
+    twin = _UNIQUE_ROW.replace("lane=fixture-lane", "lane=another-lane")
+    _serve(tmp_path, [_UNIQUE_ROW, twin])
+    findings = _guard(tmp_path, f"{_ROTATE} {_stamp_cite(_UNIQUE_STAMP)}", policy)
     assert "consent_stamp_ambiguous" in codes(findings)
     reason = next(f.reason for f in findings if f.code == "consent_stamp_ambiguous")
-    # Counted from the fixture, not hard-coded: a constant here would drift the
-    # moment a row is added to the shared ledger fixture, and the count is the
-    # part of the message that tells the reader how bad the ambiguity is.
-    rows = (
-        (ledger / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md")
-        .read_text(encoding="utf-8")
-        .splitlines()
-    )
-    sharing = sum(
-        1 for row in rows if row.split("|", 1)[0].strip() == "2026-09-05T12:00:00Z"
-    )
-    assert sharing > 1, "the fixture no longer has an ambiguous timestamp"
-    assert f"{sharing} rows" in reason, reason
+    assert "2 rows" in reason, reason
 
 
 def test_a_timestamp_quoted_inside_a_row_body_does_not_resolve(
@@ -1228,145 +1308,42 @@ def test_a_timestamp_quoted_inside_a_row_body_does_not_resolve(
 ) -> None:
     """Matched on the row's FIRST field, not anywhere in the line.
 
-    Rows routinely quote other rows' timestamps -- every citation in this fleet
-    does. Matching those would resolve a citation to a row that merely mentions
-    the one meant, which is the same class of wrongness as the line shift but
-    harder to notice.
+    Rows routinely quote other rows' timestamps. Matching those would resolve a citation to
+    a row that merely mentions the one meant; the guard re-checks the first field of every
+    row the node returns.
     """
-    tracking = tmp_path / "docs" / "tracking"
-    tracking.mkdir(parents=True)
-    mentioning = CLAIM_ROW + f" | see {_UNIQUE_STAMP} for the consent"
-    (tracking / "ROLLING_WORK_LEDGER.md").write_text(
-        mentioning + "\n", encoding="utf-8"
-    )
-
-    findings = check_bash_command(
-        f"{_ROTATE} {_stamp_cite(_UNIQUE_STAMP)}", policy, tmp_path
-    )
-
+    mentioning = _UNIQUE_ROW.replace(_UNIQUE_STAMP, "2026-09-06T09:00:00Z", 1)
+    _serve(tmp_path, [mentioning + f" | see {_UNIQUE_STAMP} for the consent"])
+    bus = tmp_path / ".reader-fixture"
+    # A node that answered a row whose own stamp differs from the cited instant.
+    python = tmp_path / ".onex-dispatch-venv" / "bin" / "python"
+    python.write_text(f"#!/bin/sh\ncat {bus / 'rows.txt'}\n", encoding="utf-8")
+    findings = _guard(tmp_path, f"{_ROTATE} {_stamp_cite(_UNIQUE_STAMP)}", policy)
     assert "consent_stamp_absent" in codes(findings), (
         f"a row that merely mentions the timestamp resolved the citation: {findings}"
     )
 
 
-def test_a_non_consent_row_cited_by_timestamp_is_still_refused(
+def test_a_non_consent_row_cited_by_timestamp_is_refused(
     policy: Policy, stamped_home: Path
 ) -> None:
-    """Control: the new form must not skip the checks the line form runs.
-
-    Resolving a row is only the first half; it still has to BE a consent row
-    with both scope lists and one of the two approvers. A form that resolved
-    rows but bypassed those would be an authorisation bypass, not a fix.
-    """
-    findings = check_bash_command(
-        f"{_ROTATE} {_stamp_cite('2026-09-05T11:00:00Z')}", policy, stamped_home
+    """Control: a CLAIM row is not an OPERATOR-CONSENT row, so the node answers none."""
+    findings = _guard(
+        stamped_home, f"{_ROTATE} {_stamp_cite('2026-09-05T11:00:00Z')}", policy
     )
-
     assert findings, "citing a CLAIM row by timestamp was allowed"
-    assert "consent_row_not_operator_consent" in codes(findings)
+    assert "consent_stamp_absent" in codes(findings)
 
 
-def test_an_archive_file_outside_the_roll_naming_shape_is_not_read(
-    policy: Policy, stamped_home: Path
+def test_a_non_consent_row_the_node_answers_is_still_refused(
+    policy: Policy, tmp_path: Path
 ) -> None:
-    """The archive search is scoped to the names a roll actually writes.
-
-    A bare ``*.md`` glob would read every markdown file in the archive
-    directory, so anything that could land a file there -- a stray doc, a
-    partial write, a crafted name -- could carry a row with the target timestamp
-    and the required fields and authorise a rotation nobody consented to. This
-    plants exactly such a file under a name no roll produces and asserts the
-    guard does not see it.
-    """
-    tracking = stamped_home / "docs" / "tracking"
-    archive = tracking / "archive"
-    archive.mkdir()
-    (archive / "notes.md").write_text(_UNIQUE_ROW + "\n", encoding="utf-8")
-    (tracking / "ROLLING_WORK_LEDGER.md").write_text(CLAIM_ROW + "\n", encoding="utf-8")
-
-    findings = check_bash_command(
-        f"{_ROTATE} {_stamp_cite(_UNIQUE_STAMP)}", policy, stamped_home
+    """Control: a row the node answers is still checked for its own kind."""
+    python = tmp_path / ".onex-dispatch-venv" / "bin" / "python"
+    python.parent.mkdir(parents=True)
+    python.write_text(f"#!/bin/sh\necho '{CLAIM_ROW}'\n", encoding="utf-8")
+    python.chmod(0o755)
+    findings = _guard(
+        tmp_path, f"{_ROTATE} {_stamp_cite('2026-09-05T11:00:00Z')}", policy
     )
-
-    assert "consent_stamp_absent" in codes(findings), (
-        f"a consent row planted under a name no roll writes was accepted: {findings}"
-    )
-
-
-def test_a_conforming_archive_name_is_still_read(
-    policy: Policy, stamped_home: Path
-) -> None:
-    """Positive control for the scoping above.
-
-    Without it, narrowing the glob to something that matches nothing would
-    satisfy the test above while silently retiring archive resolution -- which
-    is the one behaviour the timestamp form exists to provide.
-    """
-    tracking = stamped_home / "docs" / "tracking"
-    archive = tracking / "archive"
-    archive.mkdir()
-    (archive / "ROLLING_WORK_LEDGER_2026-09-06-split.md").write_text(
-        _UNIQUE_ROW + "\n", encoding="utf-8"
-    )
-    (tracking / "ROLLING_WORK_LEDGER.md").write_text(CLAIM_ROW + "\n", encoding="utf-8")
-
-    findings = check_bash_command(
-        f"{_ROTATE} {_stamp_cite(_UNIQUE_STAMP)}", policy, stamped_home
-    )
-
-    assert findings == [], f"archive resolution stopped working entirely: {findings}"
-
-
-def test_a_symlinked_archive_entry_is_not_read(
-    policy: Policy, stamped_home: Path, tmp_path: Path
-) -> None:
-    """The glob restricts the NAME; this restricts the inode.
-
-    A symlink called ``<ledger stem>_<date>-split.md`` matches the pattern, and
-    ``read_text`` follows symlinks, so without the check a link planted in the
-    archive directory could point at any file on the host and answer a citation
-    with whatever that file contains. The name is attacker-choosable; the target
-    must not be.
-    """
-    tracking = stamped_home / "docs" / "tracking"
-    archive = tracking / "archive"
-    archive.mkdir()
-    elsewhere = tmp_path / "planted.md"
-    elsewhere.write_text(_UNIQUE_ROW + "\n", encoding="utf-8")
-    (archive / "ROLLING_WORK_LEDGER_2026-09-06-split.md").symlink_to(elsewhere)
-    (tracking / "ROLLING_WORK_LEDGER.md").write_text(CLAIM_ROW + "\n", encoding="utf-8")
-
-    findings = check_bash_command(
-        f"{_ROTATE} {_stamp_cite(_UNIQUE_STAMP)}", policy, stamped_home
-    )
-
-    assert "consent_stamp_absent" in codes(findings), (
-        "a consent row reached through a symlink out of the archive directory "
-        f"was accepted: {findings}"
-    )
-
-
-def test_a_symlinked_archive_directory_does_not_defeat_the_check(
-    policy: Policy, stamped_home: Path, tmp_path: Path
-) -> None:
-    """The second half: the directory itself can be the link.
-
-    Checking only the entry would still read a real file sitting in a real
-    directory that the archive path merely points at.
-    """
-    tracking = stamped_home / "docs" / "tracking"
-    real_dir = tmp_path / "planted_archive"
-    real_dir.mkdir()
-    (real_dir / "ROLLING_WORK_LEDGER_2026-09-06-split.md").write_text(
-        _UNIQUE_ROW + "\n", encoding="utf-8"
-    )
-    (tracking / "archive").symlink_to(real_dir, target_is_directory=True)
-    (tracking / "ROLLING_WORK_LEDGER.md").write_text(CLAIM_ROW + "\n", encoding="utf-8")
-
-    findings = check_bash_command(
-        f"{_ROTATE} {_stamp_cite(_UNIQUE_STAMP)}", policy, stamped_home
-    )
-
-    assert "consent_stamp_absent" in codes(findings), (
-        f"an archive directory that is a symlink out of the tree was read: {findings}"
-    )
+    assert "consent_row_not_operator_consent" in codes(findings), findings

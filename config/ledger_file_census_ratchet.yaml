@@ -1,7 +1,7 @@
 # The shrink-only count of files in this repository that read or write the ledger file.
 # A repository whose count rises above its row fails the hook; a row is only ever lowered.
 ratchet:
-  omniclaude: 61
+  omniclaude: 60
 # The `files` table holds the files that hold such a reader or writer, with their line counts (run the
 # census node with --per-file): a file with no row, or with more lines than its row, fails the census.
 # A row is only ever lowered, and a file is only ever dropped.
@@ -15,7 +15,6 @@ files:
     plugins/onex/hooks/lib/hook_emit_bounded.py: 3
     plugins/onex/hooks/lib/lane_liveness.py: 2
     plugins/onex/hooks/tests/test_ticket_route_gate.py: 1
-    scripts/converge-canonical-clone.sh: 2
     scripts/hooks/pre-push-branch-claim: 1
     scripts/install-hook-process-canary.sh: 3
     scripts/lane_identity.py: 1
@@ -35,7 +34,7 @@ files:
     tests/hooks/fixtures/git_admission_parity_golden.json: 1
     tests/hooks/fixtures/workflow_model_guard/passing_pr-backlog-drain-wf_aeb1c3c7-41a.js: 1
     tests/hooks/test_canonical_clone_sync.py: 1
-    tests/hooks/test_credential_rotation_guard.py: 15
+    tests/hooks/test_credential_rotation_guard.py: 10
     tests/hooks/test_dev_runtime_mutation_guard_hook.py: 2
     tests/hooks/test_dev_runtime_mutation_interpreter_omn22405.py: 2
     tests/hooks/test_git_admission_parity.py: 1
@@ -56,7 +55,7 @@ files:
     tests/scripts/test_branch_claim.py: 2
     tests/scripts/test_branch_claim_check_workflow.py: 3
     tests/scripts/test_canonical_clone_guard.py: 1
-    tests/scripts/test_converge_canonical_clone.py: 5
+    tests/scripts/test_converge_canonical_clone.py: 4
     tests/scripts/test_gh_shim_refusal_row_omn21020.py: 1
     tests/scripts/test_install_canonical_clone_guard.py: 1
     tests/scripts/test_lane_identity.py: 1
