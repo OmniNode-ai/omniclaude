@@ -121,6 +121,11 @@ class Scratch:
 
 
 def _install_stub_writer(home: Path, *, exit_code: int = 0) -> Path:
+    """A stand-in for the ledger CLI's bus append: `onex-ledger append-rows ... -`.
+
+    It logs each call and appends what arrives on stdin to ``home/bus-rows.txt``, the
+    capture the tests read as "the ledger"; no ledger file is named to the script.
+    """
     stub_bin = home / "stub-bin"
     stub_bin.mkdir(exist_ok=True)
     stub = stub_bin / "uv"
@@ -128,10 +133,10 @@ def _install_stub_writer(home: Path, *, exit_code: int = 0) -> Path:
         "#!/usr/bin/env bash\n"
         f'echo "$@" >> "{home}/writer-calls.log"\n'
         f"[[ {exit_code} -eq 0 ]] || exit {exit_code}\n"
-        '[[ "$1 $2 $3" == "run --quiet --project" && "$5" == "onex-ledger" ]] || exit 64\n'
-        "shift 5\n"
-        '[[ "$2" == "--append" ]] || exit 64\n'
-        'printf \'%s\\n\' "$3" >> "$1"\n',
+        '[[ "$1 $2 $3" == "run --quiet --project" && "$5 $6" == "onex-ledger append-rows" ]] || exit 64\n'
+        "shift 6\n"
+        '[[ "$1 $3" == "--timeout -" ]] || exit 64\n'
+        f'cat >> "{home}/bus-rows.txt"\n',
         encoding="utf-8",
     )
     stub.chmod(0o755)
@@ -144,17 +149,18 @@ def scratch(tmp_path: Path) -> Scratch:
     omni_home = home / "omni_home"
     (omni_home / "docs" / "tracking").mkdir(parents=True)
     (omni_home / "omni_worktrees").mkdir()
-    ledger = omni_home / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md"
+    # No ledger file exists on this host: the capture below is what the stub writer received.
+    ledger = home / "bus-rows.txt"
     ledger.write_text("# ledger\n", encoding="utf-8")
     internal = home / "omnibase_internal"
     internal.mkdir()
     (internal / "pyproject.toml").write_text("")
     env = _git_env(home)
-    # OMN-18971: the script writes its row only through a sanctioned writer, and only
-    # to a ledger the environment names. The stub stands in for `onex-ledger`
-    # (same `<ledger> --append <row>` form) and logs each call.
+    # OMN-18971, OMN-26589: the script writes its row only through a sanctioned writer, over
+    # the bus, with the row on stdin. The stub stands in for `onex-ledger append-rows -`
+    # and logs each call; ONEX_LEDGER_PATH is unset, and the script never reads it.
     stub_bin = _install_stub_writer(home)
-    env["ONEX_LEDGER_PATH"] = str(ledger)
+    env.pop("ONEX_LEDGER_PATH", None)
     env["PATH"] = f"{stub_bin}{os.pathsep}{env['PATH']}"
     (home / "gitconfig").write_text("[init]\n\tdefaultBranch = dev\n", encoding="utf-8")
 
@@ -924,42 +930,38 @@ def _pending_rows(scratch: Scratch) -> Path:
 
 
 @pytest.mark.unit
-def test_no_named_ledger_keeps_the_row_in_an_untracked_state_file(
+def test_a_ledger_file_the_environment_names_is_never_written_or_read(
     scratch: Scratch,
 ) -> None:
+    """OMN-26589: the row goes over the bus; ONEX_LEDGER_PATH names nothing to this script."""
     _dirty_like_the_incident(scratch)
+    named = scratch.home / "named-ledger.md"
     proc = scratch.run(
-        "omnimarket",
-        "--execute",
-        drop_env=("ONEX_LEDGER_PATH",),
-        strip_path_stub=True,
+        "omnimarket", "--execute", extra_env={"ONEX_LEDGER_PATH": str(named)}
     )
     assert proc.returncode == 0, proc.stderr
-    assert scratch.ledger.read_text(encoding="utf-8") == "# ledger\n"
-    rows = _pending_rows(scratch).read_text(encoding="utf-8")
-    assert "| STATUS |" in rows and "event=CONVERGED" in rows
-    assert "ONEX_LEDGER_PATH is not set" in proc.stderr
-    assert "pending-ledger-rows.md" in proc.stderr
-    assert not (scratch.home / "writer-calls.log").exists()
+    assert not named.exists()
+    assert "event=CONVERGED" in scratch.ledger.read_text(encoding="utf-8")
+    assert not _pending_rows(scratch).exists()
 
 
 @pytest.mark.unit
-def test_named_ledger_is_written_only_through_the_sanctioned_writer(
+def test_the_row_is_appended_over_the_bus_with_the_row_on_stdin(
     scratch: Scratch,
 ) -> None:
     _dirty_like_the_incident(scratch)
     proc = scratch.run("omnimarket", "--execute")
     assert proc.returncode == 0, proc.stderr
     calls = (scratch.home / "writer-calls.log").read_text(encoding="utf-8")
-    assert calls.startswith(
-        f"run --quiet --project {scratch.clone.parent}/../omnibase_internal onex-ledger {scratch.ledger} --append "
-    )
+    assert calls.startswith("run --quiet --project ")
+    assert calls.endswith(" onex-ledger append-rows --timeout 30s -\n")
+    assert len(calls.splitlines()) == 1
     assert "event=CONVERGED" in scratch.ledger.read_text(encoding="utf-8")
     assert not _pending_rows(scratch).exists()
 
 
 @pytest.mark.unit
-def test_named_ledger_with_no_writer_falls_back_to_the_state_file(
+def test_no_writer_falls_back_to_the_state_file(
     scratch: Scratch,
 ) -> None:
     _dirty_like_the_incident(scratch)
@@ -989,7 +991,7 @@ def test_canonical_writer_override_preserves_bus_mode_and_refuses_invalid_roots(
     stub = scratch.home / "stub-bin" / "uv"
     stub.write_text(
         stub.read_text().replace(
-            "shift 5\n", '[[ "$ONEX_LEDGER_WRITE_VIA" == bus ]] || exit 66\nshift 5\n'
+            "shift 6\n", '[[ "$ONEX_LEDGER_WRITE_VIA" == bus ]] || exit 66\nshift 6\n'
         )
     )
     _dirty_like_the_incident(scratch)
@@ -1033,6 +1035,7 @@ def test_a_refused_ledger_append_keeps_the_row_and_fails_loudly(
 def test_script_never_appends_to_a_ledger_file_directly() -> None:
     text = SCRIPT.read_text(encoding="utf-8")
     assert "ROLLING_WORK_LEDGER.md" not in text.split("append_ledger_row() {")[1]
+    assert "ONEX_LEDGER_PATH" not in text.split("append_ledger_row() {")[1]
     assert '>> "$ledger"' not in text
 
 

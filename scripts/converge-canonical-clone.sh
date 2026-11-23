@@ -105,9 +105,10 @@
 # the clone is already converged; exit 1 on a failed git step.
 #
 # Evidence: $OMNI_HOME/.onex_state/canonical-clone-converge/<repo>-<utc>/
-# Ledger:   the file named by $ONEX_LEDGER_PATH, appended only through a sanctioned writer
-#           (uv run --project $OMNI_HOME/../omnibase_internal onex-ledger). With no
-#           ledger named or no writer, the row goes to
+# Ledger:   the row is appended over the bus, through the packaged ledger CLI
+#           (uv run --project <the ledger CLI project beside the registry root> onex-ledger append-rows -), with the
+#           row on stdin; the CLI names the ledger of record itself and no ledger file is opened
+#           or named here. With no writer, the row goes to
 #           .onex_state/canonical-clone-converge/pending-ledger-rows.md under the registry root
 #           (untracked) and stderr says so. Never a raw edit of a tracked file.
 # Never prints file contents or secrets; only paths, SHAs, counts and hashes.
@@ -202,8 +203,8 @@ g() { git -C "$clone" "$@"; }
 # ledger_lock.py or by a raw `>>`. On a lab host that file is a tracked file of the
 # registry's own clone, so the first STATUS row made that clone dirty and every later
 # fast-forward of it refused (measured on a lab host, 448 commits behind). The row now
-# goes to the ledger of record only when the environment NAMES one, through the
-# sanctioned typed writer; a host with no named ledger or no writer keeps the row
+# goes to the ledger of record over the bus, through the sanctioned typed writer
+# (`onex-ledger append-rows -`, the row on stdin); a host with no writer keeps the row
 # in an untracked state file, and says so on stderr.
 pending_rows_file() { printf '%s\n' "$omni_home_abs/.onex_state/canonical-clone-converge/pending-ledger-rows.md"; }
 
@@ -217,19 +218,14 @@ keep_row_untracked() {
 
 append_ledger_row() {
   local row="$1"
-  local ledger="${ONEX_LEDGER_PATH:-}"
-  if [[ -z "$ledger" ]]; then
-    keep_row_untracked "$row" "ONEX_LEDGER_PATH is not set on this host (no ledger of record is named)"
-    return 0
-  fi
   # One packaged writer; inherit bus mode and never fall back to an old copy.
   local internal="${OMNIBASE_INTERNAL_HOME:-$omni_home_abs/../omnibase_internal}"
   if [[ "$internal" != /* || ! -f "$internal/pyproject.toml" ]] || ! command -v uv >/dev/null 2>&1; then
     keep_row_untracked "$row" "no sanctioned ledger writer on this host (omnibase_internal project and uv required)"
     return 0
   fi
-  local -a writer=(uv run --quiet --project "$internal" onex-ledger)
-  if ! "${writer[@]}" "$ledger" --append "$row"; then
+  local -a writer=(uv run --quiet --project "$internal" onex-ledger append-rows --timeout 30s -)
+  if ! printf '%s\n' "$row" | "${writer[@]}"; then
     keep_row_untracked "$row" "the ledger writer refused the row"
     fail "ledger append via ${writer[*]} failed (the ref IS converged; evidence at $evidence)"
   fi
