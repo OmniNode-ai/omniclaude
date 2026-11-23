@@ -39,14 +39,14 @@ flip, a parent re-link, a rewritten problem statement, a ticked checkbox -- is
 admitted untouched, because gating those would block the board-truth work
 (OMN-16729) this guard exists to serve.
 
-A create is admitted only when all seven hold:
+A create is admitted only when all of these hold:
 
 1. ``parentId`` is present, **or** the description declares the issue an epic
    on a line of its own.
-2. NO project is named -- neither ``project`` (MCP surface) nor ``projectId``
-   (REST spelling). Operator ruling 2026-09-30T14:30:05Z: every new ticket is
-   created in the Backlog with no project. This inverts the original OMN-17942
-   rule 2, which required one.
+2. The project field is judged by ``handler_lane_sprint`` (OMN-25623): a
+   create from a lane carries the sprint project holding today's date, with
+   milestone and due date inside the sprint window; a person's create names
+   no project (operator ruling 2026-09-30T14:30:05Z).
 3. The description carries a binding line, on a line of its own. The shape of
    that line, the rewrites applied to what it carries, and every form the
    binding may take are declared ONCE, in ``config/gate_binding_grammar.json``,
@@ -1908,30 +1908,9 @@ def check_save_issue(
             )
         )
 
-    # Rule 2 -- NO project (operator ruling 2026-09-30T14:30:05Z: "all new
-    # tickets need to go into the backlog not into a project"). Inverts the
-    # OMN-17942 original, which refused a create that named no project.
-    if _is_present(tool_input.get("project")) or _is_present(
-        tool_input.get("projectId")
-    ):
-        findings.append(
-            Finding(
-                code="project_set",
-                field="project",
-                reason=(
-                    "the create sets a project, but the operator ruled "
-                    "(2026-09-30T14:30:05Z, ledger RULING lane=orchestrator-0c2f "
-                    "ticket=OMN-17427) that every new ticket is created in the "
-                    "Backlog with NO project"
-                ),
-                fix=(
-                    "remove project and projectId from the create; leave the "
-                    "state at Backlog. A parent epic link is fine. Moving a "
-                    "ticket into a sprint project is the operator's call, made "
-                    "later with an update, never at creation"
-                ),
-            )
-        )
+    # Rule 2 lives in handler_lane_sprint (OMN-25623): the sprint rules for a
+    # lane create, the no-project rule for a person's, judged in main() where
+    # the lane admission is known.
 
     # Rule 3 -- a binding line.
     binding = _binding_kind(description, policy) if description_readable else None
@@ -2149,6 +2128,11 @@ def main(argv: list[str] | None = None) -> int:
         help="judge only the lane-intake rules (11-13) for a create a node files",
     )
     parser.add_argument(
+        "--sprint-project",
+        default=None,
+        help="override the sprint project resolution (tests only): JSON or 'none'",
+    )
+    parser.add_argument(
         "--node",
         action="store_true",
         help="the caller is a node: a lane context whatever its environment says",
@@ -2213,6 +2197,18 @@ def main(argv: list[str] | None = None) -> int:
         )
         if admission is not None:
             findings += [Finding(**f) for f in intake.findings(tool_input, admission)]
+        if not args.lane_intake:
+            sprint_gate = _handler("handler_lane_sprint")
+            findings += [
+                Finding(**f)
+                for f in sprint_gate.project_findings(
+                    tool_input,
+                    admission,
+                    sprint_gate.resolve_sprint_project(
+                        api_key, args.sprint_project, _LINEAR_API_URL, _LOOKUP_TIMEOUT_S
+                    ),
+                )
+            ]
     if args.lane_intake and admission is None:
         sys.stderr.write("--lane-intake needs a create: a tool_input with no id\n")
         return 1
