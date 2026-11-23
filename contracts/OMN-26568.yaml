@@ -1,0 +1,74 @@
+schema_version: "1.0.0"
+ticket_id: OMN-26568
+title: The omniclaude hook-process canary writes its ledger alert row through the bus append verb, with no ledger file path or file check in the script
+summary: >-
+  scripts/hook_canary_ledger_append.sh required a ledger path, checked the ledger file, ran the test-write
+  guard against it and appended with the file form of onex-ledger. It now puts the row on the stdin of
+  onex-ledger append-rows --timeout 30s - (the bus append verb, RULING 2026-10-22T01:05:32Z lane=ledger-over-bus-0110;
+  operator ruling 2026-11-05 and operator ruling 2026-11-14T14:43:55Z), names no ledger path, opens no ledger file
+  and exits non-zero when that command does. The ONEX_LEDGER_APPEND_TOOL test seam takes the same stdin form.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn26568-canary-bus-append
+    statement: The hook-process canary appends its ledger ALERT row over the bus with no ledger file reader or writer in its script.
+    acceptance:
+      - id: AC1
+        statement: >-
+          AC1: the census node, run over the omniclaude worktree, lists scripts/hook_canary_ledger_append.sh as no
+          runtime hit and its ratchet row is lowered -- falsifier: ONEX_LEDGER_CENSUS_ROOT set and uv run python -m
+          omnimarket.nodes.node_work_ledger_file_census_effect --packaged-overlay --register omniclaude --directory
+          omniclaude=<worktree> --verbose, grep of the path, run first on origin/dev as the positive control
+      - id: AC2
+        statement: >-
+          AC2: with the ledger path variable unset and no ledger file on disk, the canary's ledger append calls onex-ledger
+          append-rows with the row on stdin and no ledger path argument, and exits non-zero when that command does --
+          falsifier: uv run pytest tests/unit/scripts/test_hook_canary_ledger_append.py -q, failing on the merge base
+      - id: AC3
+        statement: >-
+          AC3: no line of hook_canary_ledger_append.sh or hook_process_canary.py carries the ledger path variable or the ledger
+          file name as a path to read or write -- falsifier: uv run pytest
+          tests/unit/scripts/test_hook_canary_ledger_append.py -k no_file_path -q, failing on the merge base
+evidence_requirements:
+  - kind: tests
+    description: The canary append tests pass at the head and fail at the merge base.
+    command: uv run pytest tests/unit/scripts/test_hook_canary_ledger_append.py -q
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+  - id: dod-omn26568-ac1-ratchet-row-removed
+    description: The ratchet file no longer carries a row for the canary ledger writer.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC1
+    checks:
+      - check_type: command
+        check_value: >-
+          bash -c '! grep -q "hook_canary_ledger_append.sh" config/ledger_file_census_ratchet.yaml'
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn26568-ac2-bus-append
+    description: >-
+      With no ledger path in the environment the append runs onex-ledger append-rows with the row on stdin and
+      exits with that command's exit code; fails at the merge base, where the script requires the ledger path.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC2
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/unit/scripts/test_hook_canary_ledger_append.py -q
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn26568-ac3-no-file-path
+    description: Neither the script nor hook_process_canary.py names the ledger path variable; fails at the merge base.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC3
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/unit/scripts/test_hook_canary_ledger_append.py -k no_file_path -q
+        cwd: ${OMNI_HOME}/omniclaude
