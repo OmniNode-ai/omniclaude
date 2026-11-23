@@ -1321,7 +1321,7 @@ delegate_hello() { # -> stdout: the run's receipt.json (it names the endpoint an
   # the developer's own command instead of selecting the in-memory bus itself.
   local out line receipt
   # stderr too: the "delegate artifacts:" line naming receipt.json is printed there.
-  out="$(cd "$HOME" && env -u PYTHONPATH "$WORKSPACE/.onex-dispatch-venv/bin/onex" delegate --json "Reply with exactly one word: hello" 2>&1)" ||
+  out="$(cd "$HOME" && env -u PYTHONPATH "$WORKSPACE/.onex-dispatch-venv/bin/python" -m omnibase_core.cli.cli_commands delegate --json "Reply with exactly one word: hello" 2>&1)" ||
     { printf '%s\n' "$out" >>"$LOG"; return 1; }
   line="$(printf '%s\n' "$out" | grep -E '^\{' | tail -n 1)"
   [ "$(receipt_field "$line" status)" = "success" ] || { printf '%s\n' "$out" >>"$LOG"; return 1; }
@@ -1345,7 +1345,9 @@ stamp_proven_floor() {
 # A resumed phase 3 does not rebuild a dispatch venv that already holds the
 # proven set: the reconciler's --check mutates nothing and exits 0 when it does.
 dispatch_venv_current() {
-  [ -x "$WORKSPACE/.onex-dispatch-venv/bin/onex" ] || return 1
+  # omnibase-core no longer declares the onex console script, so the
+  # dispatch venv is current when its interpreter can reach the core CLI module.
+  { [ -x "$WORKSPACE/.onex-dispatch-venv/bin/python" ] && compgen -G "$WORKSPACE/.onex-dispatch-venv/lib/python3*/site-packages/omnibase_core/cli/cli_commands.py" >/dev/null; } || return 1
   env -u PYTHONPATH bash "$WORKSPACE/omnibase_infra/scripts/reconcile-workspace-venvs.sh" --omni-home "$WORKSPACE" --check
 }
 
@@ -1354,7 +1356,7 @@ dispatch_venv_current() {
 # and a pin answered by any other backend fails. Through the dispatch venv's
 # own entrypoint, like delegate_hello: the wrapper refuses until the floor is
 # stamped, after this phase.
-models_cmd() { (cd "$HOME" && env -u PYTHONPATH "$WORKSPACE/.onex-dispatch-venv/bin/onex" models "$@"); }
+models_cmd() { (cd "$HOME" && env -u PYTHONPATH "$WORKSPACE/.onex-dispatch-venv/bin/python" -m omnibase_core.cli.cli_commands models "$@"); }
 
 RES_GEMINI=""; RES_OPENROUTER=""; RES_OPENAI=""; RES_OLLAMA=""; RES_LOCAL=""; RES_COMPAT=""
 set_result() { case "$1" in gemini) RES_GEMINI="$2" ;; openrouter) RES_OPENROUTER="$2" ;; openai) RES_OPENAI="$2" ;; ollama) RES_OLLAMA="$2" ;; local) RES_LOCAL="$2" ;; openai_compatible) RES_COMPAT="$2" ;; esac; }
