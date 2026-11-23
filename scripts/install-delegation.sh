@@ -614,8 +614,7 @@ uninstall() {
   # installs need the legacy consumer's exact-command rollback API, and they
   # still roll back where omnimarket is not installed (OMN-23413 review).
   if [[ "${native}" != true ]]; then
-    # omnimarket's rollback API where it is installed, the handler's exact-command
-    # copy where it is not; a pause keeps the pending-history helper.
+    # The handler's exact-command rollback; a pause keeps the history helper.
     native_plugin classic-remove "${PAUSE}"
   fi
   if "${PAUSE}" && [[ "${native}" != true ]]; then

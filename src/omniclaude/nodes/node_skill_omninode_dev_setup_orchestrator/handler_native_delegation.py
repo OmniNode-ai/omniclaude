@@ -272,8 +272,10 @@ def _write_manifest(root: Path, settings: Path, backup: str) -> None:
 def _classic_rollback(manifest_path: Path, preserve_history: bool) -> str:
     """Remove the exact command rows an older (classic) install registered.
 
-    The same exact-command removal the classic installer always did, kept so a
-    classic install rolls back where omnimarket is not installed.
+    The same exact-command removal the classic installer always did, and the
+    same as omnimarket's HandlerSetupClaude.rollback_hook_registration, so a
+    classic install rolls back with or without omnimarket installed and this
+    handler imports no other handler module (handler DI gate, OMN-21531).
     """
     manifest = json.loads(manifest_path.read_text())
     backup = manifest.get("settings_backup")
@@ -322,21 +324,6 @@ def _classic_rollback(manifest_path: Path, preserve_history: bool) -> str:
     return f"removed {settings} after clearing installer-managed hooks"
 
 
-def _classic_remove(root: Path, preserve_history: bool) -> str:
-    manifest = root / "rollback-manifest.json"
-    try:
-        from omnimarket.nodes.node_onex_setup_effect.handlers.handler_setup_claude import (
-            HandlerSetupClaude,
-        )
-    except ModuleNotFoundError as error:
-        if not (error.name or "").startswith("omnimarket"):
-            raise
-        return _classic_rollback(manifest, preserve_history)
-    return str(
-        HandlerSetupClaude.rollback_hook_registration(manifest, preserve_history)
-    )
-
-
 class HandlerNativeDelegation:
     """Keep source, copied closure and vendor-owned cache on one identity."""
 
@@ -361,7 +348,9 @@ class HandlerNativeDelegation:
         elif operation == "manifest":
             _write_manifest(root, settings, argument)
         else:
-            output = _classic_remove(root, argument == "true")
+            output = _classic_rollback(
+                root / "rollback-manifest.json", argument == "true"
+            )
         return ModelNativeDelegationResult(native=True, output=output)
 
     def _prepare(self, request: ModelNativeDelegationRequest) -> None:
