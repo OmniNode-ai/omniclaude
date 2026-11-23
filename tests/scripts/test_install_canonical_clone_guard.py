@@ -212,10 +212,15 @@ def test_installed_guard_replays_dated_attributed_refusal(
         f"2026-10-08T00:00:00Z | CLAIM | lane=installed-replay | ticket=OMN-18982 | worktree={worktree}\n",
         encoding="utf-8",
     )
+    # the open claims are answered by the work-ledger reader node: a stand-in serving the rows
+    reader = ledger.parent / "reader-python"
+    reader.write_text(f'#!/bin/sh\ncat "{ledger}"\n', encoding="utf-8")
+    reader.chmod(0o755)
     env = {
         "PATH": os.environ.get("PATH", ""),
         "HOME": str(home),
         "OMNI_HOME": str(workspace),
+        "ONEX_LEDGER_READER_PYTHON": str(reader),
     }
     if lane_source == "env":
         env["ONEX_LANE"] = "installed-replay"

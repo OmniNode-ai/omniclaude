@@ -96,9 +96,9 @@ def stub_ledger(tmp_path: Path) -> tuple[Path, Path]:
         "import sys, os\n"
         "assert sys.argv[1:4] == ['run', '--quiet', '--project']\n"
         f"assert sys.argv[4] == os.environ.get('OMNIBASE_INTERNAL_HOME', {str(project)!r})\n"
-        "assert sys.argv[5] == 'onex-ledger'\n"
-        f"open({str(appended)!r}, 'a').write(sys.argv[-1] + '\\n')\n"
-        f"open({str(appended)!r}, 'a').write(' '.join(sys.argv[1:-1]) + '\\n')\n"
+        "assert sys.argv[5:7] == ['onex-ledger', 'append-rows']\n"
+        f"open({str(appended)!r}, 'a').write(sys.stdin.read().strip() + '\\n')\n"
+        f"open({str(appended)!r}, 'a').write(' '.join(sys.argv[1:]) + '\\n')\n"
     )
     stub.chmod(0o755)
     return ledger, appended
@@ -196,19 +196,16 @@ def test_unresolvable_credential_fails_loud_on_three_channels(
     assert "category=hook_emit_journal_dropped" in row
     assert "journal dropped 4 records" in row
     assert "|" not in row.split("detail=", 1)[1]
-    assert str(ledger) in rows[1]
+    assert "append-rows" in rows[1] and str(ledger) not in rows[1]
     # and the durable failure log names the unresolvable credential
     assert "unresolved" in (tmp_path / "failures.log").read_text()
     assert "UNDELIVERED" in marker.read_text()
 
 
-def test_ledger_paths_fall_back_to_the_state_dir_parent_for_the_drainer(
+def test_the_drainer_with_a_state_dir_and_no_ledger_variables_still_appends(
     tmp_path: Path, slack: FakeSlack, stub_ledger: tuple[Path, Path]
 ) -> None:
-    """The drainer's env has a state dir and no ledger variables."""
-    omni = tmp_path / "workspace"
-    (omni / "docs" / "tracking").mkdir(parents=True)
-    (omni / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md").write_text("")
+    """The drainer's env has a state dir and no ledger variables: the writer names the ledger."""
     _, appended = stub_ledger
     env = _drainer_env(tmp_path, slack)  # no credential anywhere
 
