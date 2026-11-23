@@ -126,10 +126,16 @@ class Install:
         self.workspace = root / "workspace"
         shim = root / "onex_shim.py"
         shim.write_text(ONEX_SHIM)
-        self.onex = self.workspace / ".onex-dispatch-venv/bin/onex"
+        # OMN-25070: the dispatch venv's interpreter runs the core CLI module; this
+        # stand-in refuses any other invocation, so the ladder proves the module form.
+        self.onex = self.workspace / ".onex-dispatch-venv/bin/python"
         self.onex.parent.mkdir(parents=True)
         self.onex.write_text(
             "#!/bin/bash\n"
+            'if [ "${1:-}" != "-m" ] || [ "${2:-}" != "omnibase_core.cli.cli_commands" ]; then\n'
+            '  echo "not the core CLI module: $*" >&2; exit 98\n'
+            "fi\n"
+            "shift 2\n"
             f'exec env -u PYTHONPATH LADDER_STUB_URL="{stub_url}" '
             f'"{sys.executable}" "{shim}" "$@"\n'
         )
@@ -139,7 +145,7 @@ class Install:
 
     def run_onex(self, *args: str, stdin: str = "") -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            [str(self.onex), *args],
+            [str(self.onex), "-m", "omnibase_core.cli.cli_commands", *args],
             input=stdin,
             capture_output=True,
             text=True,
