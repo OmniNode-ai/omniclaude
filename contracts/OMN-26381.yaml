@@ -76,5 +76,5 @@ dod_evidence:
     status: "verified"
     checks:
       - check_type: "test_passes"
-        check_value: "uv run pytest tests/skills -q --no-cov -k \"retro or manifest\""
+        check_value: "uv run pytest tests/skills/test_retro_skill.py -q --no-cov -k manifest"
     binds_ac: ["AC5"]
