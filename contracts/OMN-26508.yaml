@@ -90,8 +90,6 @@ dod_evidence:
       STATUS row carries installed=<host>:<sha> and observed=<what ran>.
     source: manual
     execution_scope: local_done_gate
-    binds_ac:
-      - AC4
     checks:
       - check_type: command
         check_value: |-
@@ -115,4 +113,19 @@ dod_evidence:
           gh api "repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_hook_refusal_record_effect/handlers/handler_hook_refusal_lane.py?ref=$(git rev-parse HEAD)"
           --jq '.content | gsub("\n"; "") | @base64d | contains("READER = \"hook-refusal-lane\"")'
           | grep -qx true
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn26508-ac4-hosted
+    description: >-
+      AC4 (hosted half): the refusal lane resolver, run with the ledger path variable unset and no ledger
+      file on disk, reads its CLAIM and TERMINAL rows from the work-ledger reader node's answer (here a fake
+      reader interpreter) and returns the open claims; at the merge base the tests file does not exist and
+      the resolver opens the ledger file, so this fails there. The lab install and the live reader's row
+      count are the local half, dod-omn26508-ac4-lab-install.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC4
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/test_runtime_ledger_bus.py -k refusal_lane -q
         cwd: ${OMNI_HOME}/omniclaude
