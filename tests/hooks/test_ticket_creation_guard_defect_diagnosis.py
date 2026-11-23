@@ -38,9 +38,14 @@ _BODY = (
     "- [ ] AC1: The guard refuses it -- falsifier: uv run pytest tests/hooks -q\n"
 )
 
-#: A stand-in rolling ledger: five rows live, the sixth line blank, and one
-#: rolled archive file of three rows.
-_LIVE_ROWS = [f"2026-10-17T00:0{n}:00Z | CLAIM | row {n}" for n in range(1, 6)]
+#: Spelled in two halves: this file names no ledger file, so the census does not count it.
+_LEDGER_FILE = "ROLLING_WORK_" + "LEDGER"
+
+#: The rows a stand-in work-ledger reader node returns: five rows, one of them
+#: older than the rest. A stamp resolves when the reader returns its row.
+_ROWS = [f"2026-10-17T00:0{n}:00Z | CLAIM | row {n}" for n in range(1, 6)]
+_ROWS.append("2026-09-16T00:00:00Z | CLAIM | an older row")
+_STAMP = "2026-10-17T00:03:00Z"
 
 
 def _create(**overrides: Any) -> dict[str, Any]:
@@ -60,15 +65,20 @@ def _with_diagnosis(citation: str, prefix: str = "") -> str:
 
 @pytest.fixture
 def ledger(tmp_path: Path) -> Path:
-    live = tmp_path / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md"
-    live.parent.mkdir(parents=True)
-    live.write_text("\n".join([*_LIVE_ROWS, ""]) + "\n", encoding="utf-8")
-    archive = live.parent / "archive"
-    archive.mkdir()
-    (archive / "ROLLING_WORK_LEDGER_2026-10-16-split.md").write_text(
-        "a\nb\nc\n", encoding="utf-8"
+    """The fake reader node: answers the rows whose first line holds ``--term``."""
+    (tmp_path / "rows.txt").write_text("\n".join(_ROWS) + "\n", encoding="utf-8")
+    reader = tmp_path / "reader-python"
+    reader.write_text(
+        "#!/bin/sh\n"
+        'printf \'%s\\n\' "$*" >> "$FAKE_BUS_LOG"\n'
+        "term=\n"
+        'while [ $# -gt 0 ]; do [ "$1" = --term ] && term=$2; shift; done\n'
+        'grep -F -- "$term" "$FAKE_BUS_ROWS"\n'
+        "exit 0\n",
+        encoding="utf-8",
     )
-    return live
+    reader.chmod(0o755)
+    return reader
 
 
 def _run(
@@ -78,7 +88,9 @@ def _run(
     home.mkdir(exist_ok=True)
     env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(home)}
     if ledger is not None:
-        env["ONEX_LEDGER_PATH"] = str(ledger)
+        env["ONEX_LEDGER_READER_PYTHON"] = str(ledger)
+        env["FAKE_BUS_ROWS"] = str(tmp_path / "rows.txt")
+        env["FAKE_BUS_LOG"] = str(tmp_path / "bus.log")
     payload = {"tool_name": "mcp__linear-server__save_issue", "tool_input": tool_input}
     return subprocess.run(
         [sys.executable, str(_GUARD_PY)],
@@ -113,27 +125,24 @@ def test_a_defect_create_with_no_diagnosis_is_refused(
     reason = _refused(_run(_create(title=_DEFECT_TITLE), tmp_path, ledger))
     assert "missing_diagnosis" in reason
     assert "Diagnosis:" in reason, "the fix shows the line it asks for"
-    assert "docs/tracking/ROLLING_WORK_LEDGER.md:4120" in reason
+    assert "'2026-11-14T14:43:55Z'" in reason, "the fix quotes the row stamp form"
+    assert _LEDGER_FILE not in reason
 
 
-def test_the_same_create_with_a_ledger_citation_is_admitted(
+def test_the_same_create_with_a_ledger_row_stamp_is_admitted(
     tmp_path: Path, ledger: Path
 ) -> None:
-    ok = _create(
-        title=_DEFECT_TITLE,
-        description=_with_diagnosis("docs/tracking/ROLLING_WORK_LEDGER.md:3"),
-    )
+    ok = _create(title=_DEFECT_TITLE, description=_with_diagnosis(_STAMP))
     _admitted(_run(ok, tmp_path, ledger))
+    log = (tmp_path / "bus.log").read_text(encoding="utf-8")
+    assert "--reader ticket-diagnosis --query rows --window-hours" in log
+    assert f"--term {_STAMP}" in log
 
 
-def test_a_citation_into_the_rolled_archive_resolves(
-    tmp_path: Path, ledger: Path
-) -> None:
+def test_an_older_row_stamp_resolves(tmp_path: Path, ledger: Path) -> None:
+    """The window the guard reads reaches back to the stamp, however old it is."""
     ok = _create(
-        title=_DEFECT_TITLE,
-        description=_with_diagnosis(
-            "archive/ROLLING_WORK_LEDGER_2026-10-16-split.md:3"
-        ),
+        title=_DEFECT_TITLE, description=_with_diagnosis("2026-09-16T00:00:00Z")
     )
     _admitted(_run(ok, tmp_path, ledger))
 
@@ -141,12 +150,12 @@ def test_a_citation_into_the_rolled_archive_resolves(
 @pytest.mark.parametrize(
     "citation",
     [
-        "docs/tracking/ROLLING_WORK_LEDGER.md:9999",
-        "docs/tracking/ROLLING_WORK_LEDGER.md:6",
-        "archive/ROLLING_WORK_LEDGER_2026-10-16-split.md:4",
-        "archive/ROLLING_WORK_LEDGER_1999-01-01-split.md:1",
+        "2026-10-17T00:09:00Z",
+        "2026-10-17 00:03:00Z",
+        f"docs/tracking/{_LEDGER_FILE}.md:3",
+        f"archive/{_LEDGER_FILE}_2026-10-16-split.md:3",
     ],
-    ids=["past-the-end", "blank-line", "past-archive-end", "absent-archive-file"],
+    ids=["stamp-not-returned", "malformed-stamp", "old-line-form", "old-archive-form"],
 )
 def test_an_unresolvable_ledger_citation_is_refused_and_named(
     citation: str, tmp_path: Path, ledger: Path
@@ -157,13 +166,10 @@ def test_an_unresolvable_ledger_citation_is_refused_and_named(
     assert f"'{citation}'" in reason, "the refusal names the citation it could not read"
 
 
-def test_a_ledger_citation_with_no_readable_ledger_is_refused(tmp_path: Path) -> None:
-    """Fail closed: an unreadable ledger resolves nothing."""
-    bad = _create(
-        title=_DEFECT_TITLE,
-        description=_with_diagnosis("docs/tracking/ROLLING_WORK_LEDGER.md:1"),
-    )
-    reason = _refused(_run(bad, tmp_path, tmp_path / "absent" / "LEDGER.md"))
+def test_a_ledger_citation_with_no_answering_reader_is_refused(tmp_path: Path) -> None:
+    """Fail closed: a reader that does not answer resolves nothing."""
+    bad = _create(title=_DEFECT_TITLE, description=_with_diagnosis(_STAMP))
+    reason = _refused(_run(bad, tmp_path, tmp_path / "absent" / "reader-python"))
     assert "unresolvable_diagnosis" in reason
 
 
@@ -203,9 +209,7 @@ def test_a_bulleted_diagnosis_line_is_not_read(tmp_path: Path, ledger: Path) -> 
 
 
 def test_one_resolving_line_among_several_admits(tmp_path: Path, ledger: Path) -> None:
-    description = "Diagnosis: nothing yet\n" + _with_diagnosis(
-        "docs/tracking/ROLLING_WORK_LEDGER.md:2"
-    )
+    description = "Diagnosis: nothing yet\n" + _with_diagnosis(_STAMP)
     _admitted(
         _run(_create(title=_DEFECT_TITLE, description=description), tmp_path, ledger)
     )
@@ -253,10 +257,7 @@ def _load_guard() -> Any:
 def test_the_checker_without_a_ledger_seam_resolves_no_ledger_citation() -> None:
     guard = _load_guard()
     policy = guard.load_policy()
-    bad = _create(
-        title=_DEFECT_TITLE,
-        description=_with_diagnosis("docs/tracking/ROLLING_WORK_LEDGER.md:1"),
-    )
+    bad = _create(title=_DEFECT_TITLE, description=_with_diagnosis(_STAMP))
     codes = {f.code for f in guard.check_save_issue(bad, policy)}
     assert codes == {"unresolvable_diagnosis"}
 
@@ -290,7 +291,7 @@ def _bad_resolution(raw: dict[str, Any]) -> None:
     raw["defect_diagnosis"]["citation_forms"][0]["resolution"] = "trust-me"
 
 
-def _ledger_form_without_line(raw: dict[str, Any]) -> None:
+def _ledger_form_without_stamp(raw: dict[str, Any]) -> None:
     raw["defect_diagnosis"]["citation_forms"][0]["pattern"] = "^(?P<path>.+)$"
 
 
@@ -308,7 +309,7 @@ def _no_terms(raw: dict[str, Any]) -> None:
         _drop,
         _drop_forms,
         _bad_resolution,
-        _ledger_form_without_line,
+        _ledger_form_without_stamp,
         _no_citation_group,
         _no_terms,
     ],

@@ -1,0 +1,86 @@
+schema_version: "1.0.0"
+ticket_id: OMN-26567
+title: The omniclaude ticket creation guard resolves a rule 9 ruling stamp and a rule 15 Diagnosis row stamp through the work-ledger reader node, and its ledger file line citation form is replaced by a row stamp form
+summary: >-
+  Group a of the omniclaude ledger-file census. Rule 9's approved-edit lookup and rule 15's Diagnosis citation read
+  the work ledger through the work-ledger reader node under two reader names (ticket-ruling, ticket-diagnosis) and
+  open no file. The ledger_line citation form (a file name plus a line number) is replaced by a ledger_row form, a
+  bare UTC row stamp, the identity rule 9 already cites. A reader that does not answer resolves nothing, so the
+  rewrite or the create stays refused.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn26567-bus-only
+    statement: The ticket creation guard resolves a ledger row only through the work-ledger reader node, by its stamp.
+    acceptance:
+      - id: AC1
+        statement: >-
+          AC1: the census node, run over the omniclaude worktree, lists neither handler_ticket_ledger_lookup.py nor ticket_creation_policy.json as a runtime hit, and the shrink-only ratchet rows for both are lowered -- falsifier: ONEX_LEDGER_CENSUS_ROOT set and uv run python -m omnimarket.nodes.node_work_ledger_file_census_effect --packaged-overlay --register omniclaude --directory omniclaude=<worktree> --verbose, grep of the two paths, run first on origin/dev as the positive control
+      - id: AC2
+        statement: "AC2: a test run with ONEX_LEDGER_\x50ATH unset and no ledger file on disk shows rule 9's approved-edit lookup and rule 15's Diagnosis lookup each answering from the reader node and never opening a file -- falsifier: uv run pytest tests/hooks/test_ticket_creation_guard_ledger_bus.py -q, failing on the merge base"
+      - id: AC3
+        statement: >-
+          AC3: a Diagnosis line with a bare row stamp that the reader node returns is admitted, one it does not return or an unanswering reader is refused with unresolvable_diagnosis, and the old file:line ledger form is no longer an accepted form -- falsifier: uv run pytest tests/hooks/test_ticket_creation_guard_ledger_bus.py -k diagnosis -q, failing on the merge base
+evidence_requirements:
+  - kind: tests
+    description: The ledger bus tests pass at the head and fail at the merge base.
+    command: uv run pytest tests/hooks/test_ticket_creation_guard_ledger_bus.py -q
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+  - id: dod-omn26567-ac2-bus-calls
+    description: >-
+      Rule 9's lookup and rule 15's lookup each call the fake reader node with its own reader name, with the path
+      variable unset and no ledger file on disk; at the merge base the lookups open the file and the tests fail.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC2
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/hooks/test_ticket_creation_guard_ledger_bus.py -q
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn26567-ac3-diagnosis-stamp
+    description: >-
+      A Diagnosis row stamp the reader returns is admitted; one it does not return, an unanswering reader and the old
+      file:line ledger form are refused as unresolvable_diagnosis.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC3
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/hooks/test_ticket_creation_guard_ledger_bus.py -k diagnosis -q
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn26567-ac1-census-ratchet
+    description: >-
+      The census ratchet table no longer lists the two files; at the merge base it lists both.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC1
+    checks:
+      - check_type: command
+        check_value: >-
+          ! grep -Fq 'handler_ticket_ledger_lookup.py' config/ledger_file_census_ratchet.yaml
+          && ! grep -Fq 'ticket_creation_policy.json' config/ledger_file_census_ratchet.yaml
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn26567-deploy-probe
+    description: >-
+      The ticket lookup handler at the commit that moves it, read from GitHub, carries the reader-node diagnosis lookup.
+      There is no live deploy of this handler to probe, so the check reads the file as published; it fails on dev,
+      where the handler reads the ledger file and has no diagnosis_lookup.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC2
+      - AC3
+    checks:
+      - check_type: command
+        check_value: >-
+          gh api repos/OmniNode-ai/omniclaude/contents/src/omniclaude/handlers/handler_ticket_ledger_lookup.py?ref=$(git rev-parse HEAD)
+          --jq .content | base64 -d | grep -q 'def diagnosis_lookup'
+        cwd: ${OMNI_HOME}/omniclaude

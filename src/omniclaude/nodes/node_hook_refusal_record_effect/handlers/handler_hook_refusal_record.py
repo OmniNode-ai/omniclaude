@@ -363,17 +363,26 @@ DIRECT_WRITE_ENV = ("ONEX_LEDGER_WRITE_VIA", "ONEX_LEDGER_RECORD_WRITER")
 
 
 def _run_writer(
-    row: str, *, ledger: Path, project: Path, timeout: str
+    row: str, *, ledger: Path | None, project: Path, timeout: str
 ) -> subprocess.CompletedProcess[str] | None:
-    """One ``onex-ledger --append`` run, or ``None`` when it could not start."""
+    """One ``onex-ledger`` run (``append-rows`` names the ledger of record itself and
+    publishes over the bus, OMN-26508; an explicit scratch ``ledger`` is appended to),
+    or ``None`` when it could not start."""
     # The friction guard calls this recorder from inside the ledger serve, whose environment
     # marks it a direct file writer; without those names the writer publishes over the bus.
     env = {k: v for k, v in os.environ.items() if k not in DIRECT_WRITE_ENV}
     argv = ["uv", "run", "--quiet", "--project", str(project), "onex-ledger"]
-    argv += [str(ledger), "--append", row, "--timeout", timeout]
+    argv += [str(ledger), "--append", row] if ledger else ["append-rows", "-"]
+    argv += ["--timeout", timeout]
     try:
         return subprocess.run(  # noqa: S603 - fixed argv, no shell
-            argv, capture_output=True, text=True, env=env, timeout=180, check=False
+            argv,
+            input=None if ledger else row + "\n",
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=180,
+            check=False,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         _say(
@@ -388,7 +397,7 @@ def _row_cell(row: str, key: str) -> str:
 
 
 def _alert_rejected_row(
-    row: str, why: str, *, ledger: Path, project: Path, timeout: str
+    row: str, why: str, *, ledger: Path | None, project: Path, timeout: str
 ) -> None:
     """Record, as a STATUS ``state=ALERT`` row, a refusal row the writer rejected (OMN-20883).
 
@@ -414,12 +423,13 @@ def _alert_rejected_row(
         )
 
 
-def append_row(row: str, *, ledger: Path, project: Path, timeout: str) -> bool:
+def append_row(
+    row: str, *, project: Path, timeout: str, ledger: Path | None = None
+) -> bool:
     """Append through packaged ``onex-ledger``. Never a direct ledger write.
 
-    The ledger is a shared append-only file many lanes write concurrently;
-    the locked writer is the only sanctioned path and it also carries the
-    dedupe-on-retry behaviour this caller would otherwise need itself.
+    Many lanes write the ledger concurrently; the packaged writer is the only
+    sanctioned path and carries the dedupe-on-retry behaviour of its own.
 
     A row the writer rejects (the row grammar refuses it) is not dropped: a
     STATUS ``state=ALERT`` row records the rejection (OMN-20883).
@@ -428,12 +438,6 @@ def append_row(row: str, *, ledger: Path, project: Path, timeout: str) -> bool:
         _say(
             "hook refusal recorder: ledger writer project is unavailable: "
             + redact(str(project)),
-            err=True,
-        )
-        return False
-    if not ledger.is_file():
-        _say(
-            "hook refusal recorder: ledger is unavailable: " + redact(str(ledger)),
             err=True,
         )
         return False
@@ -683,11 +687,7 @@ class HandlerHookRefusalRecord:
             )
         if registry_root is None or project is None:
             return failed()
-        ledger = (
-            Path(request.ledger)
-            if request.ledger
-            else registry_root / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md"
-        )
+        ledger = Path(request.ledger) if request.ledger else None
         if not append_row(row, ledger=ledger, project=project, timeout=request.timeout):
             return failed(
                 "hook refusal recorder: ledger append failed; dedupe state unchanged"

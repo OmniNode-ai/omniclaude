@@ -2603,84 +2603,9 @@ def test_the_refusal_names_the_approved_edit_path() -> None:
     assert "Criterion-edit ruling:" in findings[0].fix
 
 
-def _ledger_rows(ledger: Path, stamp: str) -> list[str]:
-    """The reader the guard binds, now lifted into a handler the guard loads by path."""
-    return list(
-        _GUARD._handler("handler_ticket_ledger_lookup").rows_for_stamp(
-            ledger, stamp, _GUARD._LEDGER_CELL_SEPARATOR
-        )
-    )
-
-
-def test_the_ledger_reader_finds_a_ruling_in_the_live_file(tmp_path: Path) -> None:
-    ledger = tmp_path / "ROLLING_WORK_LEDGER.md"
-    ledger.write_text(f"unrelated\n{_RULING_ROW}\n", encoding="utf-8")
-    assert _ledger_rows(ledger, _RULING_STAMP) == [_RULING_ROW]
-    assert _ledger_rows(ledger, "2026-01-01T00:00:00Z") == []
-    assert _ledger_rows(tmp_path / "absent.md", _RULING_STAMP) == []
-
-
-def test_the_ledger_reader_finds_a_ruling_in_a_rolled_archive(tmp_path: Path) -> None:
-    ledger = tmp_path / "ROLLING_WORK_LEDGER.md"
-    ledger.write_text("live row only\n", encoding="utf-8")
-    archive = tmp_path / "archive"
-    archive.mkdir()
-    (archive / "ROLLING_WORK_LEDGER_2026-10-08-split.md").write_text(
-        f"{_RULING_ROW}\n", encoding="utf-8"
-    )
-    assert _ledger_rows(ledger, _RULING_STAMP) == [_RULING_ROW]
-
-
-def test_the_ledger_reader_does_not_follow_a_symlinked_archive_directory(
-    tmp_path: Path,
-) -> None:
-    """A ruling reachable only through a symlinked ``archive`` approves nothing."""
-    elsewhere = tmp_path / "elsewhere"
-    elsewhere.mkdir()
-    (elsewhere / "ROLLING_WORK_LEDGER_2026-10-08-split.md").write_text(
-        f"{_RULING_ROW}\n", encoding="utf-8"
-    )
-    home = tmp_path / "home"
-    home.mkdir()
-    ledger = home / "ROLLING_WORK_LEDGER.md"
-    ledger.write_text("live row only\n", encoding="utf-8")
-    (home / "archive").symlink_to(elsewhere, target_is_directory=True)
-    assert _ledger_rows(ledger, _RULING_STAMP) == []
-
-
-def test_the_ledger_reader_does_not_follow_a_symlinked_ledger(tmp_path: Path) -> None:
-    real = tmp_path / "real.md"
-    real.write_text(f"{_RULING_ROW}\n", encoding="utf-8")
-    ledger = tmp_path / "ROLLING_WORK_LEDGER.md"
-    ledger.symlink_to(real)
-    assert _ledger_rows(ledger, _RULING_STAMP) == []
-
-
-def test_main_admits_an_approved_rewrite_end_to_end(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """The decision core as the hook runs it: env ledger, stdin payload, exit code."""
-    import io
-
-    ledger = tmp_path / "ROLLING_WORK_LEDGER.md"
-    ledger.write_text(f"{_RULING_ROW}\n", encoding="utf-8")
-    monkeypatch.setenv("ONEX_LEDGER_PATH", str(ledger))
-    monkeypatch.setattr(_GUARD, "_resolve_api_key", lambda: "k")
-    monkeypatch.setattr(_GUARD, "_fetch_issue_body", lambda _ref, _key: _AC_BODY)
-
-    def run(description: str) -> tuple[int, str]:
-        payload = {
-            "tool_name": "mcp__linear-server__save_issue",
-            "tool_input": {"id": "OMN-18387", "description": description},
-        }
-        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
-        written = io.StringIO()
-        monkeypatch.setattr(sys, "stdout", written)
-        return _GUARD.main([]), written.getvalue()
-
-    assert run(_corrected()) == (0, "")
-    code, out = run(_corrected(citation=None))
-    assert code == 3 and "criterion_text_rewritten" in json.loads(out)["reason"]
+# The reader seam itself (the reader node call, its bound and its fail-closed
+# answers) and the end-to-end admission are pinned in
+# tests/hooks/test_ticket_creation_guard_ledger_bus.py (OMN-26567).
 
 
 # ---------------------------------------------------------------------------

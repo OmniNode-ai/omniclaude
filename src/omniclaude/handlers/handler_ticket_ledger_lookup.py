@@ -1,66 +1,63 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Rolling-ledger lookups of the ticket-creation guard (OMN-18404 rule 9).
+"""Work-ledger lookups of the ticket-creation guard (OMN-18404 rule 9, OMN-26567).
 
-Lifted out of ``plugins/onex/hooks/lib/ticket_creation_guard.py`` so the guard
-script, a baselined mod file that may only shrink under the canonical-file-shape
-ratchet, can take the defect-diagnosis rule (rule 15) without growing. The guard
-loads this module by path and runs it under a bare interpreter with no
-``omniclaude`` package, so it imports the standard library only.
+Lifted out of ``plugins/onex/hooks/lib/ticket_creation_guard.py``, a baselined
+file that may only shrink. The guard loads this module by path under a bare
+interpreter with the standard library only, so the reader node is a subprocess,
+never an import. A row is named by its stamp, the first cell of the row; rule 9
+and rule 15 each resolve a stamp through the work-ledger reader node under their
+own reader name and open no file. A reader that does not answer resolves nothing.
 """
 
 from __future__ import annotations
 
 import os
 from collections.abc import Callable
-from pathlib import Path
+from datetime import UTC, datetime
+from subprocess import SubprocessError, run
+
+READER_MODULE = "omnimarket.nodes.node_work_ledger_reader_effect"
+#: The reader names listed in ``moved_readers`` of the reader node's overlay.
+RULING_READER = "ticket-ruling"
+DIAGNOSIS_READER = "ticket-diagnosis"
 
 
-def ledger_path() -> Path | None:
-    """The rolling ledger to resolve rulings against, or ``None``.
-
-    ``ONEX_LEDGER_PATH`` first, which is where a dispatched lane's copy lives;
-    ``$OMNI_HOME/docs/tracking/ROLLING_WORK_LEDGER.md`` second.
-    """
-    explicit = os.environ.get("ONEX_LEDGER_PATH", "").strip()
-    if explicit:
-        return Path(explicit)
-    home = os.environ.get("OMNI_HOME", "").strip()
-    if home:
-        return Path(home) / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md"
-    return None
-
-
-def rows_for_stamp(ledger: Path, stamp: str, separator: str) -> list[str]:
-    """Every row of ``ledger`` (and its rolled archive) whose first cell is ``stamp``.
-
-    An unreadable file contributes no rows, so an unreadable ledger approves
-    nothing: the rewrite stays refused. A symlinked ledger, a symlinked
-    ``archive`` directory and a symlinked archive file are never followed, so a
-    ruling cannot be read from outside the ledger's own directory.
-    """
-    files = [ledger]
-    archive = ledger.parent / "archive"
-    if archive.is_dir() and not archive.is_symlink():
-        files.extend(sorted(archive.glob(f"{ledger.stem}_*-split.md")))
-    prefix = f"{stamp}{separator}"
-    rows: list[str] = []
-    for path in files:
-        if path.is_symlink() or not path.is_file():
-            continue
-        try:
-            lines = path.read_text(encoding="utf-8").splitlines()
-        except OSError:
-            continue
-        rows.extend(line for line in lines if line.startswith(prefix))
-    return rows
+def rows_for_stamp(
+    reader: str, stamp: str, separator: str, bound_s: float = 25.0
+) -> list[str]:
+    """Rows the reader returns whose first cell is ``stamp`` (its ``--term`` matches
+    anywhere in the first line); none when the reader errors, is absent or answers
+    after ``bound_s``: the guard sits on a tool call and the reader can be slow."""
+    try:
+        then = datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
+    except ValueError:
+        return []
+    hours = max(1, int((datetime.now(UTC) - then).total_seconds() // 3600) + 2)
+    python = (
+        os.environ.get("ONEX_LEDGER_READER_PYTHON")
+        or f"{os.environ.get('OMNI_HOME', '')}/.onex-dispatch-venv/bin/python"
+    )
+    command = [python, "-m", READER_MODULE, "--reader", reader, "--query", "rows"]
+    command += ["--window-hours", str(hours), "--term", stamp]
+    try:
+        done = run(
+            command, capture_output=True, text=True, timeout=bound_s, check=False
+        )
+    except (OSError, SubprocessError):
+        return []
+    if done.returncode not in (0, 1):
+        return []
+    return [
+        line for line in done.stdout.splitlines() if line.split(separator)[0] == stamp
+    ]
 
 
 def ruling_lookup(separator: str) -> Callable[[str], list[str]]:
-    """Bind rule 9's ledger seam to the rolling ledger on this machine."""
-    ledger = ledger_path()
+    """Rule 9's ledger seam: a stamp to the rows of the ruling reader."""
+    return lambda stamp: rows_for_stamp(RULING_READER, stamp, separator)
 
-    def lookup(stamp: str) -> list[str]:
-        return rows_for_stamp(ledger, stamp, separator) if ledger is not None else []
 
-    return lookup
+def diagnosis_lookup(separator: str) -> Callable[[str], list[str]]:
+    """Rule 15's ledger seam: a stamp to the rows of the diagnosis reader."""
+    return lambda stamp: rows_for_stamp(DIAGNOSIS_READER, stamp, separator)
