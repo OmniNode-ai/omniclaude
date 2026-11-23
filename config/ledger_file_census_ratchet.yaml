@@ -1,7 +1,7 @@
 # The shrink-only count of files in this repository that read or write the ledger file.
 # A repository whose count rises above its row fails the hook; a row is only ever lowered.
 ratchet:
-  omniclaude: 55
+  omniclaude: 51
 # The `files` table holds the files that hold such a reader or writer, with their line counts (run the
 # census node with --per-file): a file with no row, or with more lines than its row, fails the census.
 # A row is only ever lowered, and a file is only ever dropped.
@@ -10,7 +10,6 @@ files:
     .github/workflows/branch-claim-check-reusable.yml: 1
     config/public_repo_hygiene_scrub_map.yaml: 1
     plugins/onex/hooks/config/credential_rotation_policy.json: 1
-    plugins/onex/hooks/config/ticket_creation_policy.json: 1
     plugins/onex/hooks/lib/credential_rotation_guard.py: 1
     plugins/onex/hooks/lib/lane_liveness.py: 2
     plugins/onex/hooks/tests/test_ticket_route_gate.py: 1
@@ -21,7 +20,6 @@ files:
     scripts/launchd/ai.omninode.hook-process-canary.plist: 1
     scripts/private_repo_runner_placement_gate.py: 2
     scripts/worktree_auto_prune.py: 2
-    src/omniclaude/handlers/handler_ticket_ledger_lookup.py: 2
     src/omniclaude/nodes/node_git_effect/git_admission_policy.json: 2
     src/omniclaude/nodes/node_git_effect/handlers/handler_git_admission.py: 2
     tests/conftest.py: 1
@@ -42,8 +40,6 @@ files:
     tests/hooks/test_refusal_row_lane_omn19381.py: 1
     tests/hooks/test_refusal_surface_omn18983.py: 1
     tests/hooks/test_shared_tree_git_guard.py: 12
-    tests/hooks/test_ticket_creation_guard.py: 6
-    tests/hooks/test_ticket_creation_guard_defect_diagnosis.py: 2
     tests/hooks/test_ticket_creation_guard_lane_intake.py: 1
     tests/hooks_system/fixtures/bash_guard_corpus.json: 13
     tests/hooks_system/fixtures/bash_guard_golden.json: 88
