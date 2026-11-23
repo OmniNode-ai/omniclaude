@@ -98,6 +98,12 @@ def test_the_template_and_the_installer_name_no_ledger_path() -> None:
     assert "OMNIBASE_INTERNAL_HOME" in template and "OMNI_HOME" in template
 
 
+def test_the_installer_copies_no_test_write_guard_beside_the_bus_writer() -> None:
+    # The canary's writer appends over the bus and opens no ledger file, so it loads no guard.
+    installer = _INSTALLER.read_text(encoding="utf-8")
+    assert "handler_ledger_write_guard" not in installer
+
+
 def test_the_template_renders_to_a_parseable_plist_with_no_placeholder_left() -> None:
     template = _TEMPLATE.read_text(encoding="utf-8")
     placeholders = set(re.findall(r"__[A-Z_]+__", template))
