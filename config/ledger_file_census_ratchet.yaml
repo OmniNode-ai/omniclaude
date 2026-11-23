@@ -1,7 +1,7 @@
 # The shrink-only count of files in this repository that read or write the ledger file.
 # A repository whose count rises above its row fails the hook; a row is only ever lowered.
 ratchet:
-  omniclaude: 62
+  omniclaude: 61
 # The `files` table holds the files that hold such a reader or writer, with their line counts (run the
 # census node with --per-file): a file with no row, or with more lines than its row, fails the census.
 # A row is only ever lowered, and a file is only ever dropped.
@@ -16,7 +16,6 @@ files:
     plugins/onex/hooks/lib/lane_liveness.py: 2
     plugins/onex/hooks/tests/test_ticket_route_gate.py: 1
     scripts/converge-canonical-clone.sh: 2
-    scripts/hook_canary_ledger_append.sh: 1
     scripts/hooks/pre-push-branch-claim: 1
     scripts/install-hook-process-canary.sh: 3
     scripts/lane_identity.py: 1
@@ -32,7 +31,7 @@ files:
     src/omniclaude/nodes/node_hook_refusal_record_effect/handlers/handler_hook_refusal_record.py: 1
     src/omniclaude/nodes/node_hook_refusal_record_effect/models/model_subagent_lane_request.py: 1
     tests/conftest.py: 1
-    tests/handlers/test_ledger_write_guard_omn19513.py: 4
+    tests/handlers/test_ledger_write_guard_omn19513.py: 1
     tests/hooks/fixtures/git_admission_parity_golden.json: 1
     tests/hooks/fixtures/workflow_model_guard/passing_pr-backlog-drain-wf_aeb1c3c7-41a.js: 1
     tests/hooks/test_canonical_clone_sync.py: 1
@@ -68,4 +67,4 @@ files:
     tests/unit/hooks/test_prose_command_substitution_guard_omn18750.py: 2
     tests/unit/nodes/node_git_effect/test_handler_git_subprocess.py: 2
     tests/unit/nodes/node_validate_skills_compute/test_handler_whole_file_hygiene_omn22273.py: 1
-    tests/unit/scripts/test_hook_canary_ledger_append.py: 5
+    tests/unit/scripts/test_hook_canary_ledger_append.py: 2
