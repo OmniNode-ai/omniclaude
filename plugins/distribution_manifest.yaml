@@ -902,6 +902,14 @@ components:
   path: plugins/onex/skills/resume_session/SKILL.md
   backing_nodes: []
   rationale: inventory class=stub_scaffold (stub/placeholder surface).
+- id: retro
+  kind: skill
+  exposure: beta
+  owning_package: onex-skills-beta
+  surface_class: pure_skill
+  path: plugins/onex/skills/retro/SKILL.md
+  backing_nodes: []
+  rationale: class=pure_skill (bootstrap methodology skill adopted under OMN-26381 from an MIT-licensed source; it calls friction-record, friction_triage and the ticket node and holds no friction format or threshold of its own); replaced by a node-backed skill when a node reads a session's sources and writes the findings, not yet ticketed.
 - id: rewind
   kind: skill
   exposure: beta
