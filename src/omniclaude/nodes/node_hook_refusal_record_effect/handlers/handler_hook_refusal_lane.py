@@ -427,7 +427,7 @@ def _claim_rows(env: Mapping[str, str]) -> list[str]:
     argv = [python, "-m", READER_MODULE, "--reader", READER, *READ_ARGS.split()]
     try:
         done = subprocess.run(
-            argv, capture_output=True, text=True, env=dict(env), timeout=60, check=False
+            argv, capture_output=True, text=True, env=env, timeout=150, check=False
         )
     except (OSError, subprocess.SubprocessError):
         return []
