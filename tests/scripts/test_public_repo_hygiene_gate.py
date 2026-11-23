@@ -756,20 +756,16 @@ def test_stale_visibility_cache_row_goes_through_the_ledger_writer(
     tool = tmp_path / "append_tool.py"
     tool.write_text(
         "import sys, pathlib\n"
-        f"pathlib.Path({str(seen)!r}).write_text('\\n'.join(sys.argv[1:]))\n",
+        f"pathlib.Path({str(seen)!r}).write_text('\\n'.join(sys.argv[1:]) + '\\n' + sys.stdin.read())\n",
         encoding="utf-8",
     )
-    ledger = tmp_path / "ledger.md"
-    ledger.write_text("", encoding="utf-8")
-    monkeypatch.setenv("ONEX_LEDGER_PATH", str(ledger))
     monkeypatch.setenv("ONEX_LEDGER_APPEND_TOOL", str(tool))
     monkeypatch.setenv("ONEX_STATE_DIR", str(tmp_path / "state"))
     root = _make_repo(tmp_path / "r", {"src/x.py": "x = 1\n"})
     _run(root, stale_vocab)
     argv = seen.read_text(encoding="utf-8").split("\n")
-    assert argv[0] == str(ledger)
-    assert argv[argv.index("--append") + 1].split(" | ")[1] == "FRICTION"
-    assert ledger.read_text(encoding="utf-8") == ""
+    assert argv[0] == "append-rows" and argv[-3] == "-"
+    assert argv[-2].split(" | ")[1] == "FRICTION"
 
 
 def test_stale_visibility_cache_row_retries_after_a_failed_write(
@@ -779,9 +775,6 @@ def test_stale_visibility_cache_row_retries_after_a_failed_write(
     episode marker is written only after the row is."""
     tool = tmp_path / "append_tool.py"
     tool.write_text("import sys\nsys.exit(3)\n", encoding="utf-8")
-    ledger = tmp_path / "ledger.md"
-    ledger.write_text("", encoding="utf-8")
-    monkeypatch.setenv("ONEX_LEDGER_PATH", str(ledger))
     monkeypatch.setenv("ONEX_LEDGER_APPEND_TOOL", str(tool))
     monkeypatch.setenv("ONEX_STATE_DIR", str(tmp_path / "state"))
     root = _make_repo(tmp_path / "r", {"src/x.py": "x = 1\n"})

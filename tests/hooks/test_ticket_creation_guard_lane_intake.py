@@ -339,7 +339,11 @@ def _workflow_subagent(
         )
     ledger = tmp_path / "ROLLING_WORK_LEDGER.md"
     ledger.write_text("".join(f"{row}\n" for row in ledger_rows), encoding="utf-8")
-    env = {"ONEX_LEDGER_PATH": str(ledger)}
+    # the open claims are answered by the work-ledger reader node: a stand-in serving the rows
+    reader = tmp_path / "reader-python"
+    reader.write_text(f'#!/bin/sh\ncat "{ledger}"\n', encoding="utf-8")
+    reader.chmod(0o755)
+    env = {"ONEX_LEDGER_READER_PYTHON": str(reader)}
     payload = {"session_id": _SESSION, "transcript_path": str(transcript)}
     return env, payload
 

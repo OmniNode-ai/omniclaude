@@ -7,21 +7,22 @@ exist, and the work that fixes the real defect then matches no criterion, so the
 ticket cannot close on its own evidence (81 of 1,122 terminal rows in 7 days,
 7.2 %, reported a falsified premise). A create whose title or labels read as a
 defect must therefore carry a ``Diagnosis:`` line, a line of its own, that
-resolves to a durable artifact: a ledger line citation, a pull request or a
+resolves to a durable artifact: a ledger row stamp, a pull request or a
 ``file:line``.
 
 The vocabulary and the citation forms are ``ticket_creation_policy.json``'s
 ``defect_diagnosis`` object; this module spells none of them. Ledger citations
-are resolved against the rolling ledger and its rolled archive; a pull request
-and a ``file:line`` are checked for shape only, because this hook runs without
-GitHub or repository access.
+are a bare UTC row stamp, resolved through the work-ledger reader node (OMN-26567;
+no ledger file is opened); a pull request and a ``file:line`` are checked for
+shape only, because this hook runs without GitHub or repository access.
 
 Lifted out of ``plugins/onex/hooks/lib/ticket_creation_guard.py`` so the guard
 script, a baselined mod file that may only shrink under the canonical-file-shape
 ratchet, can take the rule without growing. The guard loads this module by path
 and runs it under a bare interpreter with no ``omniclaude`` package, so it
 imports the standard library only. The decisions are pure functions of what they
-are handed; the filesystem is touched only by :func:`ledger_line_lookup`.
+are handed; the reader node is reached only through the seam :func:`ledger_row_lookup`
+binds.
 """
 
 from __future__ import annotations
@@ -34,9 +35,9 @@ from typing import NamedTuple
 #: ``resolution`` values a citation form may declare.
 _RESOLUTIONS = frozenset({"ledger", "shape"})
 
-#: The resolved path and line a ledger citation names, answering whether that
-#: line exists and is not blank. ``None`` seam means no ledger is readable.
-LedgerLineLookup = Callable[[str, int], bool]
+#: The stamp a ledger citation names, answering whether the reader node returns
+#: its row. A ``None`` seam means no ledger is readable.
+LedgerRowLookup = Callable[[str], bool]
 
 
 class CitationForm(NamedTuple):
@@ -123,10 +124,9 @@ def load_policy(raw: object, source: Path, error: type[Exception]) -> DiagnosisP
         pattern = _pattern(
             entry.get("pattern"), f"citation form {form_id!r} pattern", source, error
         )
-        if resolution == "ledger" and not {"path", "line"} <= set(pattern.groupindex):
+        if resolution == "ledger" and "stamp" not in pattern.groupindex:
             raise error(
-                f"{source}: ledger citation form {form_id!r} must declare 'path' "
-                "and 'line' groups"
+                f"{source}: ledger citation form {form_id!r} must declare a 'stamp' group"
             )
         forms.append(CitationForm(form_id, pattern, example, resolution))
     return DiagnosisPolicy(
@@ -176,7 +176,7 @@ def _citations(description: str, policy: DiagnosisPolicy) -> list[str]:
 
 
 def _resolves(
-    citation: str, policy: DiagnosisPolicy, ledger: LedgerLineLookup | None
+    citation: str, policy: DiagnosisPolicy, ledger: LedgerRowLookup | None
 ) -> bool:
     for form in policy.forms:
         match = form.pattern.match(citation)
@@ -184,9 +184,7 @@ def _resolves(
             continue
         if form.resolution == "shape":
             return True
-        return ledger is not None and ledger(
-            match.group("path"), int(match.group("line"))
-        )
+        return ledger is not None and ledger(match.group("stamp"))
     return False
 
 
@@ -199,7 +197,7 @@ def findings(
     title: str,
     description: str,
     policy: DiagnosisPolicy,
-    ledger: LedgerLineLookup | None,
+    ledger: LedgerRowLookup | None,
 ) -> list[dict[str, str]]:
     """Rule 15 for one create, as ``{code, field, reason, fix}`` dicts."""
     signals = defect_signals(title, tool_input, policy)
@@ -236,37 +234,17 @@ def findings(
             ),
             "fix": (
                 "cite an artifact that exists, spelled as one of "
-                f"{_spellings(policy)}; a ledger citation must name a line that "
-                "is present in the rolling ledger or its archive"
+                f"{_spellings(policy)}; a ledger citation must name the stamp of a row "
+                "the work-ledger reader node returns"
             ),
         }
     ]
 
 
-def ledger_line_lookup(ledger: Path | None) -> LedgerLineLookup:
-    """Bind a ledger citation to the rolling ledger and its rolled archive.
+def ledger_row_lookup(rows: Callable[[str], list[str]]) -> LedgerRowLookup:
+    """Bind a ledger citation to the rows the work-ledger reader node returns.
 
-    A cited path resolves by file name: the live ledger itself, else the same
-    name under its ``archive`` directory. Symlinks are never followed, and an
-    unreadable file resolves nothing, so an unreadable ledger admits nothing.
+    A stamp resolves when the reader returns a row for it. A reader that did not
+    answer returns no rows, so it admits nothing.
     """
-
-    def lookup(path: str, line: int) -> bool:
-        if ledger is None or line < 1:
-            return False
-        name = Path(path).name
-        candidates = [ledger] if name == ledger.name else []
-        archive = ledger.parent / "archive"
-        if archive.is_dir() and not archive.is_symlink():
-            candidates.append(archive / name)
-        for candidate in candidates:
-            if candidate.is_symlink() or not candidate.is_file():
-                continue
-            try:
-                lines = candidate.read_text(encoding="utf-8").splitlines()
-            except OSError:
-                continue
-            return line <= len(lines) and bool(lines[line - 1].strip())
-        return False
-
-    return lookup
+    return lambda stamp: bool(rows(stamp))
