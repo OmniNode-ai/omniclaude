@@ -19,7 +19,7 @@ The non-negotiable regression proofs, taken straight from friction report
   internal error — it blocks on a corroborated wrong claim, never on a defect.
 
 Every filesystem source is built in a tmp_path fixture, so these are hermetic:
-no real ``~/.claude`` and no real ledger are read.
+no real ``~/.claude`` and no real ledger are read: the ledger rows come from a fake reader node.
 """
 
 from __future__ import annotations
@@ -92,16 +92,35 @@ def _write_transcript(root: Path, lane: str, age_s: float) -> Path:
     return path
 
 
-def _write_ledger(tmp_path: Path, rows: list[tuple[float, str, str]]) -> Path:
-    """rows: (age_seconds, lane, kind)."""
-    path = tmp_path / "ROLLING_WORK_LEDGER.md"
-    lines = ["# Rolling Work Ledger", ""]
+def _write_rows(tmp_path: Path, rows: list[tuple[float, str, str]]) -> Path:
+    """rows: (age_seconds, lane, kind). The rows the fake reader node answers (OMN-26527)."""
+    path = tmp_path / "rows.txt"
+    lines = []
     for age_s, lane, kind in rows:
         stamp = time.gmtime(time.time() - age_s)
         ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", stamp)
-        lines.append(f"{ts} | {lane} | OMN-16432 | {kind} | synthetic row")
-    path.write_text("\n".join(lines) + "\n")
+        lines.append(f"{ts} | {kind} | lane={lane} | ticket=OMN-16432 | synthetic row")
+    path.write_text("\n".join(lines) + ("\n" if lines else ""))
     return path
+
+
+@pytest.fixture(autouse=True)
+def reader_bus(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """The work-ledger reader node's interpreter, faked: records its argv, cats ``rows.txt``.
+
+    No ledger file exists and the path variable is unset, so a probe that opened a file would read
+    nothing; every ledger row a test sees came through this fake.
+    """
+    log = tmp_path / "reader.log"
+    reader = tmp_path / "reader-python"
+    reader.write_text(
+        f"#!/bin/sh\nprintf '%s\\n' \"$*\" >> {log}\n"
+        f"cat {tmp_path}/rows.txt 2>/dev/null\nexit 0\n"
+    )
+    reader.chmod(0o755)
+    monkeypatch.setenv("ONEX_LEDGER_READER_PYTHON", str(reader))
+    monkeypatch.delenv("ONEX_LEDGER" + "_PATH", raising=False)
+    return log
 
 
 @pytest.fixture
@@ -122,9 +141,9 @@ def test_fresh_transcript_is_alive(claude_root: Path, tmp_path: Path) -> None:
         claude_root, {"supersede-binding-fix": f"supersede-binding-fix@{TEAM}"}
     )
     _write_transcript(claude_root, "supersede-binding-fix", age_s=120)
-    ledger = _write_ledger(tmp_path, [])
+    _write_rows(tmp_path, [])
 
-    verdict = liveness.probe("supersede-binding-fix", root=claude_root, ledger=ledger)
+    verdict = liveness.probe("supersede-binding-fix", root=claude_root)
 
     assert verdict.state == liveness.ALIVE
     assert verdict.takeover_permitted is False
@@ -137,9 +156,9 @@ def test_stale_transcript_but_fresh_ledger_row_is_alive(
     """Independent sources: a lane grinding on one long tool call is alive."""
     _write_registry(claude_root, {"occ-6118-close": f"occ-6118-close@{TEAM}"})
     _write_transcript(claude_root, "occ-6118-close", age_s=5 * 3600)
-    ledger = _write_ledger(tmp_path, [(300, "occ-6118-close", "CLAIM")])
+    _write_rows(tmp_path, [(300, "occ-6118-close", "CLAIM")])
 
-    verdict = liveness.probe("occ-6118-close", root=claude_root, ledger=ledger)
+    verdict = liveness.probe("occ-6118-close", root=claude_root)
 
     assert verdict.state == liveness.ALIVE
 
@@ -148,9 +167,9 @@ def test_stale_transcript_but_fresh_ledger_row_is_alive(
 def test_all_sources_stale_is_dead(claude_root: Path, tmp_path: Path) -> None:
     _write_registry(claude_root, {"occ-6118-close": f"occ-6118-close@{TEAM}"})
     _write_transcript(claude_root, "occ-6118-close", age_s=6 * 3600)
-    ledger = _write_ledger(tmp_path, [(7 * 3600, "occ-6118-close", "CLAIM")])
+    _write_rows(tmp_path, [(7 * 3600, "occ-6118-close", "CLAIM")])
 
-    verdict = liveness.probe("occ-6118-close", root=claude_root, ledger=ledger)
+    verdict = liveness.probe("occ-6118-close", root=claude_root)
 
     assert verdict.state == liveness.DEAD
     assert verdict.takeover_permitted is True
@@ -165,9 +184,9 @@ def test_dead_reason_does_not_overclaim_an_absent_ledger_row(
     the ledger" — those are an absent source and an observation, respectively."""
     _write_registry(claude_root, {"forkci-ticket": f"forkci-ticket@{TEAM}"})
     _write_transcript(claude_root, "forkci-ticket", age_s=6 * 3600)
-    ledger = _write_ledger(tmp_path, [])
+    _write_rows(tmp_path, [])
 
-    verdict = liveness.probe("forkci-ticket", root=claude_root, ledger=ledger)
+    verdict = liveness.probe("forkci-ticket", root=claude_root)
 
     assert verdict.state == liveness.DEAD
     assert "no ledger row at all" in verdict.reason
@@ -181,9 +200,9 @@ def test_recent_ledger_row_rescues_a_stale_transcript_from_dead(
     """The ledger can only ever rescue a lane, never condemn it."""
     _write_registry(claude_root, {"node-ci-track": f"node-ci-track@{TEAM}"})
     _write_transcript(claude_root, "node-ci-track", age_s=6 * 3600)
-    ledger = _write_ledger(tmp_path, [(70 * 60, "node-ci-track", "CLAIM")])
+    _write_rows(tmp_path, [(70 * 60, "node-ci-track", "CLAIM")])
 
-    verdict = liveness.probe("node-ci-track", root=claude_root, ledger=ledger)
+    verdict = liveness.probe("node-ci-track", root=claude_root)
 
     assert verdict.state == liveness.UNREACHABLE
 
@@ -201,9 +220,9 @@ def test_terminal_row_alone_cannot_condemn_when_transcripts_are_unreadable(
     """
     _write_registry(claude_root, {"wave2-closeout": f"wave2-closeout@{TEAM}"})
     # No projects/ tree at all -> the transcript source cannot be consulted.
-    ledger = _write_ledger(tmp_path, [(3 * 3600, "wave2-closeout", "TERMINAL")])
+    _write_rows(tmp_path, [(3 * 3600, "wave2-closeout", "TERMINAL")])
 
-    verdict = liveness.probe("wave2-closeout", root=claude_root, ledger=ledger)
+    verdict = liveness.probe("wave2-closeout", root=claude_root)
 
     assert verdict.state == liveness.UNREACHABLE
     assert verdict.evidence.transcript_source_available is False
@@ -214,9 +233,9 @@ def test_self_declared_terminal_row_is_dead(claude_root: Path, tmp_path: Path) -
     """A lane's own TERMINAL row is the one clean, unambiguous death."""
     _write_registry(claude_root, {"wave2-closeout": f"wave2-closeout@{TEAM}"})
     _write_transcript(claude_root, "wave2-closeout", age_s=4 * 3600)
-    ledger = _write_ledger(tmp_path, [(3 * 3600, "wave2-closeout", "TERMINAL")])
+    _write_rows(tmp_path, [(3 * 3600, "wave2-closeout", "TERMINAL")])
 
-    verdict = liveness.probe("wave2-closeout", root=claude_root, ledger=ledger)
+    verdict = liveness.probe("wave2-closeout", root=claude_root)
 
     assert verdict.state == liveness.DEAD
 
@@ -228,9 +247,9 @@ def test_ambiguous_band_is_unreachable_not_dead(
     """Between the alive and dead windows the answer is 'I do not know'."""
     _write_registry(claude_root, {"rds-cutover-exec-1": f"rds-cutover-exec-1@{TEAM}"})
     _write_transcript(claude_root, "rds-cutover-exec-1", age_s=60 * 60)
-    ledger = _write_ledger(tmp_path, [])
+    _write_rows(tmp_path, [])
 
-    verdict = liveness.probe("rds-cutover-exec-1", root=claude_root, ledger=ledger)
+    verdict = liveness.probe("rds-cutover-exec-1", root=claude_root)
 
     assert verdict.state == liveness.UNREACHABLE
     assert verdict.takeover_permitted is False
@@ -243,11 +262,9 @@ def test_no_transcript_is_unreachable_not_dead(
     """Absence of evidence is not evidence of death — the whole F-10 bug."""
     _write_registry(claude_root, {"omnibase-infra-migrate-fix-1": "x@" + TEAM})
     (claude_root / "projects" / PROJECT / SESSION / "subagents").mkdir(parents=True)
-    ledger = _write_ledger(tmp_path, [])
+    _write_rows(tmp_path, [])
 
-    verdict = liveness.probe(
-        "omnibase-infra-migrate-fix-1", root=claude_root, ledger=ledger
-    )
+    verdict = liveness.probe("omnibase-infra-migrate-fix-1", root=claude_root)
 
     assert verdict.state == liveness.UNREACHABLE
 
@@ -259,9 +276,9 @@ def test_unregistered_lane_is_unreachable_not_dead(
     """Cross-session lanes are absent from this session's registry, and that is
     exactly the 'not addressable this session' case that was read as death."""
     _write_registry(claude_root, {"other-lane": f"other-lane@{TEAM}"})
-    ledger = _write_ledger(tmp_path, [])
+    _write_rows(tmp_path, [])
 
-    verdict = liveness.probe("ghost-lane", root=claude_root, ledger=ledger)
+    verdict = liveness.probe("ghost-lane", root=claude_root)
 
     assert verdict.state == liveness.UNREACHABLE
     assert verdict.evidence.registered is False
@@ -270,7 +287,7 @@ def test_unregistered_lane_is_unreachable_not_dead(
 @pytest.mark.unit
 def test_missing_evidence_roots_are_unreachable_not_dead(tmp_path: Path) -> None:
     """A host with no ~/.claude at all must never yield DEAD."""
-    verdict = liveness.probe("anything", root=tmp_path / "absent", ledger=None)
+    verdict = liveness.probe("anything", root=tmp_path / "absent")
 
     assert verdict.state == liveness.UNREACHABLE
 
@@ -299,7 +316,7 @@ def test_probe_signature_admits_no_reachability_inputs() -> None:
     assert not (params & forbidden), (
         f"reachability leaked into probe(): {params & forbidden}"
     )
-    assert params == {"lane", "root", "ledger", "alive_window_s", "dead_window_s"}
+    assert params == {"lane", "root", "alive_window_s", "dead_window_s"}
 
 
 # --------------------------------------------------------------------------- #
@@ -415,10 +432,9 @@ def test_f10_incident_shape_is_blocked_end_to_end_against_real_evidence(
         },
     )
     _write_transcript(claude_root, "supersede-binding-fix", age_s=90)  # mid-push
-    ledger = _write_ledger(tmp_path, [(4 * 3600, "supersede-binding-fix", "CLAIM")])
+    _write_rows(tmp_path, [(4 * 3600, "supersede-binding-fix", "CLAIM")])
 
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(claude_root))
-    monkeypatch.setenv("ONEX_LEDGER_PATH", str(ledger))
 
     decision = guard.decide(_call("build-drive-closeout", F10_MESSAGE))
 

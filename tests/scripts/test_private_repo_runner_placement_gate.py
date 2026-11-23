@@ -1671,9 +1671,9 @@ def _run_eligible(
         "[]",
         "--hosted-rulings",
         str(rulings),
-        # An empty value disables the ledger read, so a lane's own
-        # ONEX_LEDGER_PATH never decides a fixture's verdict.
-        "--ledger",
+        # An empty value disables the ledger read, so a lane's own reader node
+        # never decides a fixture's verdict.
+        "--ledger-reader",
         str(ledger) if ledger else "",
     ]
     return _fixture_call(lambda: module.main(argv))
@@ -1734,7 +1734,16 @@ def test_an_entry_naming_another_repository_is_refused(tmp_path: Path) -> None:
     assert _run_eligible(module, root, tmp_path, _rulings_file(tmp_path)) == 2
 
 
-def test_the_ruling_must_be_on_the_ledger_when_a_ledger_is_readable(
+def _fake_reader(path: Path, rows: str, exit_code: int = 0) -> Path:
+    """The work-ledger reader node's interpreter, faked: it answers ``rows`` to the point read."""
+    path.write_text(
+        f"#!/bin/sh\ncat <<'ROWS'\n{rows}ROWS\nexit {exit_code}\n", encoding="utf-8"
+    )
+    path.chmod(0o755)
+    return path
+
+
+def test_the_ruling_must_be_on_the_ledger_when_a_reader_is_given(
     tmp_path: Path,
 ) -> None:
     module = _module()
@@ -1742,15 +1751,20 @@ def test_the_ruling_must_be_on_the_ledger_when_a_ledger_is_readable(
     _declare(root, ("ci.yml", "lint", RULING_TS))
     rulings = _rulings_file(tmp_path)
 
-    ledger = tmp_path / "ledger" / "ROLLING_WORK_LEDGER.md"
-    ledger.parent.mkdir()
-    ledger.write_text("2026-10-16T17:44:31Z | STATUS | lane=x | not a ruling\n")
-    assert _run_eligible(module, root, tmp_path, rulings, ledger=ledger) == 2
+    # The reader node answers a row that is not the ruling: refused.
+    other = _fake_reader(
+        tmp_path / "reader-other",
+        "2026-10-16T17:44:31Z | STATUS | lane=x | not a ruling\n",
+    )
+    assert _run_eligible(module, root, tmp_path, rulings, ledger=other) == 2
 
-    # A rolled ledger keeps the row in archive/, which is read too.
-    (ledger.parent / "archive").mkdir()
-    (ledger.parent / "archive" / "ROLLING_WORK_LEDGER_roll.md").write_text(RULING_ROW)
-    assert _run_eligible(module, root, tmp_path, rulings, ledger=ledger) == 0
+    # It answers the RULING row, at any age: accepted.
+    holds = _fake_reader(tmp_path / "reader-holds", RULING_ROW)
+    assert _run_eligible(module, root, tmp_path, rulings, ledger=holds) == 0
+
+    # A reader that did not answer is a gate that did not run, never a pass.
+    down = _fake_reader(tmp_path / "reader-down", RULING_ROW, exit_code=69)
+    assert _run_eligible(module, root, tmp_path, rulings, ledger=down) == 2
 
 
 def test_a_listed_job_on_a_non_linux_hosted_image_still_fails(
@@ -2285,7 +2299,7 @@ def _every_branch_eligible(
         "dev",
         "--hosted-rulings",
         str(rulings),
-        "--ledger",
+        "--ledger-reader",
         "",
     ]
     return _fixture_call(lambda: module.main(argv))

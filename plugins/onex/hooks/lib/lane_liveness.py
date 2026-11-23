@@ -54,8 +54,8 @@ Evidence sources (all local filesystem, no network, no message send)
 2. ``~/.claude/projects/<project>/<session>/subagents/agent-a<lane>-<hex>.jsonl``
    — the lane's own transcript. Its mtime is a per-lane heartbeat written by
    the lane's own activity, which no other lane can forge or suppress.
-3. ``docs/tracking/ROLLING_WORK_LEDGER.md`` — ``CLAIM``/``TERMINAL`` rows keyed
-   by lane name, the durable coordination record.
+3. The work-ledger reader node's rows of the lane (OMN-26527) — ``CLAIM``/``TERMINAL``
+   rows keyed by lane name, the durable coordination record.
 
 Sources 2 and 3 are independent: a lane that is mid-push (writing transcript
 turns) but has not appended a ledger row in an hour is still ALIVE, which is
@@ -68,6 +68,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -216,21 +217,14 @@ def claude_home() -> Path:
     return Path.home() / ".claude"
 
 
-def ledger_path() -> Path | None:
-    """The rolling work ledger, resolved from ``OMNI_HOME``.
-
-    Fail-soft (``None``) rather than raising: a missing ledger must degrade the
-    verdict to UNREACHABLE, never crash the guard that calls this.
-    """
-    override = os.environ.get("ONEX_LEDGER_PATH")
-    if override:
-        p = Path(override)
-        return p if p.is_file() else None
-    omni_home = os.environ.get("OMNI_HOME")
-    if not omni_home:
-        return None
-    p = Path(omni_home) / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md"
-    return p if p.is_file() else None
+#: The work-ledger reader node's name for this read (OMN-26527) and the window it reads: the
+#: rows of ONE lane in the last six hours. A lane whose newest row is older reads as "no row".
+READER = "lane-liveness"
+READER_MODULE = "omnimarket.nodes.node_work_ledger_reader_effect"
+READ_WINDOW_HOURS = 6
+#: The guard calls this on every SendMessage; the reader node can answer slowly, so the read
+#: is bounded. A read that did not answer is "ledger unavailable", which resolves to UNREACHABLE.
+READ_TIMEOUT_S = 25
 
 
 # --------------------------------------------------------------------------
@@ -363,34 +357,42 @@ def find_transcript(lane: str, root: Path | None = None) -> tuple[Path | None, b
 # --------------------------------------------------------------------------
 
 
-def last_ledger_row(
-    lane: str, ledger: Path | None = None
-) -> tuple[float | None, str | None]:
+def _lane_rows(lane: str) -> list[str]:
+    """The lane's rows from the work-ledger reader node; ``[]`` when it did not answer."""
+    home = os.environ.get("OMNI_HOME", "")
+    python = (
+        os.environ.get("ONEX_LEDGER_READER_PYTHON")
+        or f"{home}/.onex-dispatch-venv/bin/python"
+    )
+    args = f"-m {READER_MODULE} --reader {READER} --query rows --window-hours {READ_WINDOW_HOURS}"
+    try:
+        done = subprocess.run(
+            [python, *args.split(), "--row-lane", lane],
+            capture_output=True,
+            text=True,
+            timeout=READ_TIMEOUT_S,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    return done.stdout.splitlines() if done.returncode in (0, 1) else []
+
+
+def last_ledger_row(lane: str) -> tuple[float | None, str | None]:
     """Age in seconds of the newest ledger row for ``lane``, and its kind.
 
-    Rows look like::
-
-        2026-08-24T12:22:00Z | wave2-defect-fix | OMN-16459 | CLAIM | ...
-
-    Returns ``(None, None)`` when the ledger is unavailable or has no row for
-    the lane. Callers must not read that as death.
+    Rows look like ``2026-08-24T12:22:00Z | CLAIM | lane=<lane> | ...`` and come from the
+    work-ledger reader node, never from the file (OMN-26527). Returns ``(None, None)`` when the
+    node did not answer or the lane has no row in its window. Callers must not read that as death.
     """
-    path = ledger if ledger is not None else ledger_path()
-    if path is None or not path.is_file():
-        return None, None
-    try:
-        text = path.read_text(errors="replace")
-    except OSError:
-        return None, None
-
     newest_ts: datetime | None = None
     newest_kind: str | None = None
-    for line in text.splitlines():
+    for line in _lane_rows(lane):
         ts_match = _LEDGER_TS_RE.match(line)
         if not ts_match:
             continue
         fields = [f.strip() for f in line.split("|")]
-        if len(fields) < 2 or fields[1] != lane:
+        if len(fields) < 2 or f"lane={lane}" not in fields:
             continue
         try:
             stamp = datetime.strptime(
@@ -400,7 +402,7 @@ def last_ledger_row(
             continue
         if newest_ts is None or stamp > newest_ts:
             newest_ts = stamp
-            newest_kind = fields[3] if len(fields) > 3 else None
+            newest_kind = fields[1]
     if newest_ts is None:
         return None, None
     age = (datetime.now(UTC) - newest_ts).total_seconds()
@@ -416,7 +418,6 @@ def probe(
     lane: str,
     *,
     root: Path | None = None,
-    ledger: Path | None = None,
     alive_window_s: int = DEFAULT_ALIVE_WINDOW_S,
     dead_window_s: int = DEFAULT_DEAD_WINDOW_S,
 ) -> Verdict:
@@ -453,7 +454,7 @@ def probe(
     else:
         evidence.sources_unavailable.append("transcript (no file for this lane)")
 
-    ledger_age, ledger_kind = last_ledger_row(lane, ledger)
+    ledger_age, ledger_kind = last_ledger_row(lane)
     if ledger_age is not None:
         evidence.ledger_age_s = ledger_age
         evidence.ledger_kind = ledger_kind

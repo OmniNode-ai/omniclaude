@@ -44,7 +44,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import importlib.util
 import json
 import os
 import re
@@ -57,7 +56,6 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 __all__ = [
     "LANE_TRAILER",
@@ -820,38 +818,78 @@ def worktree_dirs(worktrees_root: Path) -> list[tuple[Path, str]]:
     return found
 
 
-def claim_holders(ledger: Path, ledger_name: str, claim_index: Any) -> dict[str, str]:
-    """Ticket -> LIVE holder lane, resolved by the authoritative claim index.
+#: The work-ledger reader node's name for the backfill's read (OMN-26527) and its window: the
+#: claims still open whose holder has written a row in the last 12 hours, the staleness the claim
+#: index applied to the file.
+CLAIM_READER = "lane-identity-backfill"
+CLAIM_READER_MODULE = "omnimarket.nodes.node_work_ledger_reader_effect"
+CLAIM_WINDOW_HOURS = 12
+CLAIM_READ_TIMEOUT_S = 150
+_OPEN_CLAIM_RE = re.compile(
+    r"^OPEN-CLAIM lane=(?P<lane>\S+) .*?\bticket=(?P<ticket>\S+) .*?\bnewest-row=(?P<newest>\S+)"
+)
 
-    ONE RESOLUTION, NOT A SECOND PARSER. The claim store is the ledger and the
-    index that replays it is the only thing allowed to say who holds a ticket
-    (OMN-18259 section 4). A backfill that scanned CLAIM rows with its own
-    regular expression would be a second reader of the same store, and the two
-    would disagree the first time either moved -- which is the whole argument
-    the design makes against a second store.
 
-    Using the index also makes the backfill honest about STALENESS. A ticket
-    whose holder has written nothing for the staleness window has no live
-    holder, so its worktree stays unregistered rather than being stamped with
-    the name of a lane that stopped days ago. A trailer naming a dead lane is
-    a wrong trailer, and a wrong trailer is the one outcome ruled out.
+class ClaimStoreUnreadable(RuntimeError):
+    """The work-ledger reader node did not answer the open-claims read."""
 
-    It takes the ledger's PATH rather than its text because the store is not
-    one file: the ledger rolls daily and the rows move into
-    `<ledger dir>/archive/` (OMN-18791). A backfill blind to those rolls leaves
-    a live holder's worktree unregistered, and an unregistered worktree is
-    silent to the pre-push hook -- so the resolution's false negative
-    propagates into the arming.
+
+def claim_holders(environ: dict[str, str] | None = None) -> dict[str, str]:
+    """Ticket -> LIVE holder lane, answered by the work-ledger reader node's open claims.
+
+    ONE RESOLUTION, NOT A SECOND PARSER: the reader node replays the claim store (a CLAIM no later
+    TERMINAL closed) and names each claim's newest row, so a ticket whose holder wrote nothing for
+    the window has no live holder and its worktree stays unregistered rather than being stamped
+    with the name of a lane that stopped. A ticket two lanes hold is left unresolved too.
+
+    Raises :class:`ClaimStoreUnreadable` when the node did not answer, never an empty answer: no
+    holders reads exactly like a clean bill of health, and the file is never read in its place.
     """
-    now = datetime.now(UTC)
-    sources = claim_index.window_sources(ledger, ledger_name, now=now)
-    index = claim_index.build_index_from_sources(sources, now=now)
-    holders: dict[str, str] = {}
-    for ticket in index.get("tickets", {}):
-        held = claim_index.holder(index, ticket)
-        if held is not None and valid_lane(getattr(held, "lane", "")):
-            holders[ticket] = held.lane
-    return holders
+    env = dict(os.environ if environ is None else environ)
+    python = env.get("ONEX_LEDGER_READER_PYTHON", "").strip()
+    home = env.get("OMNI_HOME", "").strip()
+    if (
+        not python
+        and home
+        and os.access(Path(home, ".onex-dispatch-venv/bin/python"), os.X_OK)
+    ):
+        python = str(Path(home, ".onex-dispatch-venv/bin/python"))
+    if not python:
+        raise ClaimStoreUnreadable("no interpreter for the work-ledger reader node")
+    argv = [python, "-m", CLAIM_READER_MODULE, "--reader", CLAIM_READER]
+    argv += ["--query", "open-claims", "--window-hours", str(CLAIM_WINDOW_HOURS)]
+    try:
+        done = subprocess.run(
+            argv,
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=CLAIM_READ_TIMEOUT_S,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ClaimStoreUnreadable(str(exc)) from exc
+    if done.returncode not in (0, 1):
+        raise ClaimStoreUnreadable(f"the reader node exited {done.returncode}")
+    cutoff = datetime.now(UTC).timestamp() - CLAIM_WINDOW_HOURS * 3600
+    lanes: dict[str, set[str]] = {}
+    for line in done.stdout.splitlines():
+        match = _OPEN_CLAIM_RE.match(line)
+        if match is None or not valid_lane(match["lane"]):
+            continue
+        try:
+            newest = datetime.strptime(match["newest"], "%Y-%m-%dT%H:%M:%SZ").replace(
+                tzinfo=UTC
+            )
+        except ValueError:
+            continue
+        if newest.timestamp() < cutoff:
+            continue
+        for ticket in re.findall(r"OMN-\d+", match["ticket"]):
+            lanes.setdefault(ticket, set()).add(match["lane"])
+    return {
+        ticket: next(iter(held)) for ticket, held in lanes.items() if len(held) == 1
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -1228,11 +1266,6 @@ def main(argv: list[str] | None = None) -> int:
         "--execute", action="store_true", help="apply; default is a dry run"
     )
     p_rec.add_argument("--workspace-root", default=None)
-    p_rec.add_argument(
-        "--ledger",
-        default=None,
-        help="claim store to backfill registrations from; defaults to the workspace ledger",
-    )
 
     args = parser.parse_args(argv)
 
@@ -1692,58 +1725,12 @@ def _reconcile(args: argparse.Namespace) -> int:
     # 3. Backfill registrations for worktrees whose holder the ledger resolves.
     # The same claim store the pre-push hook resolves, resolved the same way, so
     # a backfill and a refusal can never be reading two different stores.
-    ledger = Path(
-        args.ledger
-        or os.environ.get("ONEX_BRANCH_CLAIM_LEDGER")
-        or root / "docs/tracking/ROLLING_WORK_LEDGER.md"
-    )
-    if not ledger.is_file():
-        print(
-            f"lane_identity: cannot read the claim store {ledger}",
-            file=sys.stderr,
-        )
-        return 2
-
-    # The vendored claim index is loaded from its sibling path, with importlib,
-    # exactly as the pre-push hook's resolution loads it -- not through
-    # `scripts.branch_claim`, which is only importable when this file is imported
-    # as part of a package and is not when it is run as a script, which is how
-    # every hook and every lane invokes it.
-    index_path = Path(__file__).resolve().with_name("claim_index.py")
     try:
-        spec = importlib.util.spec_from_file_location("onex_claim_index", index_path)
-        if spec is None or spec.loader is None:
-            raise ImportError(f"no loader for {index_path}")
-        claim_index = importlib.util.module_from_spec(spec)
-        # Registered BEFORE execution. `claim_index` declares frozen
-        # dataclasses, and `dataclasses` resolves each class's own module out of
-        # `sys.modules` while processing it; a module absent from that table
-        # raises an AttributeError from inside the standard library that reads
-        # like a defect in the claim index rather than in how it was loaded.
-        sys.modules[spec.name] = claim_index
-        spec.loader.exec_module(claim_index)
-    except (OSError, ImportError, SyntaxError) as exc:
-        # FAIL CLOSED ON THE BACKFILL, not on the install. The hooks above are
-        # already armed and stamping is safe without any registration; what
-        # cannot proceed is deciding who holds a ticket without the module that
-        # decides who a holder is. Reported, never substituted with a second,
-        # weaker parser -- two readers of one claim store is the drift the
-        # design of record rules out.
-        print(
-            f"lane_identity: the claim index module at {index_path} did not load "
-            f"({exc}), so NO worktree was backfilled. The hooks above are installed; "
-            f"register a worktree with `register --lane <slug> --ticket OMN-XXXX`.",
-            file=sys.stderr,
-        )
-        return 1 if failures else 0
-
-    try:
-        holders = claim_holders(ledger, ledger.name, claim_index)
-    except (OSError, claim_index.ClaimStoreIncomplete) as exc:
-        # The store named one of its own files and it could not be read.
-        # Reported, never substituted with the readable half: a partial store
-        # resolves a live holder as absent, and an absent holder leaves the
-        # worktree unregistered and therefore silent (OMN-18791).
+        holders = claim_holders()
+    except ClaimStoreUnreadable as exc:
+        # The node did not answer. Reported, never substituted with a file read or an empty
+        # answer: no holders leaves every worktree unregistered and therefore silent to the
+        # pre-push hook (OMN-18791).
         print(
             f"lane_identity: the claim store could not be resolved ({exc}), so NO "
             "worktree was backfilled. The hooks above are installed.",
@@ -1768,7 +1755,7 @@ def _reconcile(args: argparse.Namespace) -> int:
             register(base, worktree, lane=lane, ticket=ticket)
 
     print(
-        f"lane_identity: {verb}register {registered} worktree(s) from {ledger.name}; "
+        f"lane_identity: {verb}register {registered} worktree(s) from the claim store; "
         f"{skipped} left unregistered (no single claim holder resolves)"
     )
     if failures:
