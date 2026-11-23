@@ -842,9 +842,12 @@ def test_the_repair_arms_the_registry_root_and_a_fresh_status_reads_it_back(
     """AC2: `reconcile --execute` installs into the root, and the proof is a
     second status read rather than the installer's own exit code."""
     monkeypatch.setenv(li.WORKSPACE_ENV, str(workspace))
-    ledger = workspace / "docs" / "tracking" / "ROLLING_WORK_LEDGER.md"
-    ledger.parent.mkdir(parents=True)
-    ledger.write_text("# ledger\n", encoding="utf-8")
+    reader = (
+        workspace / "reader-python"
+    )  # the work-ledger reader node, answering no claims
+    reader.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    reader.chmod(0o755)
+    monkeypatch.setenv("ONEX_LEDGER_READER_PYTHON", str(reader))
 
     assert (
         li.main(

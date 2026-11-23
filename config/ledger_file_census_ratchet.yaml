@@ -1,7 +1,7 @@
 # The shrink-only count of files in this repository that read or write the ledger file.
 # A repository whose count rises above its row fails the hook; a row is only ever lowered.
 ratchet:
-  omniclaude: 51
+  omniclaude: 45
 # The `files` table holds the files that hold such a reader or writer, with their line counts (run the
 # census node with --per-file): a file with no row, or with more lines than its row, fails the census.
 # A row is only ever lowered, and a file is only ever dropped.
@@ -11,14 +11,11 @@ files:
     config/public_repo_hygiene_scrub_map.yaml: 1
     plugins/onex/hooks/config/credential_rotation_policy.json: 1
     plugins/onex/hooks/lib/credential_rotation_guard.py: 1
-    plugins/onex/hooks/lib/lane_liveness.py: 2
     plugins/onex/hooks/tests/test_ticket_route_gate.py: 1
     scripts/converge-canonical-clone.sh: 2
     scripts/hooks/pre-push-branch-claim: 1
     scripts/install-hook-process-canary.sh: 3
-    scripts/lane_identity.py: 1
     scripts/launchd/ai.omninode.hook-process-canary.plist: 1
-    scripts/private_repo_runner_placement_gate.py: 2
     scripts/worktree_auto_prune.py: 2
     src/omniclaude/nodes/node_git_effect/git_admission_policy.json: 2
     src/omniclaude/nodes/node_git_effect/handlers/handler_git_admission.py: 2
@@ -33,7 +30,6 @@ files:
     tests/hooks/test_git_admission_parity.py: 1
     tests/hooks/test_git_fetch_guard.py: 2
     tests/hooks/test_hook_emit_alarm_delivery_omn20109.py: 3
-    tests/hooks/test_lane_liveness_guard.py: 2
     tests/hooks/test_ledger_ruling_reread.py: 12
     tests/hooks/test_refusal_recorder_delivery_omn20883.py: 2
     tests/hooks/test_refusal_row_lane_github_read_omn21020.py: 1
@@ -49,8 +45,6 @@ files:
     tests/scripts/test_converge_canonical_clone.py: 5
     tests/scripts/test_gh_shim_refusal_row_omn21020.py: 1
     tests/scripts/test_install_canonical_clone_guard.py: 1
-    tests/scripts/test_lane_identity.py: 1
-    tests/scripts/test_private_repo_runner_placement_gate.py: 1
     tests/scripts/test_private_repo_runner_placement_lane_omn20141.py: 1
     tests/scripts/test_private_repo_runner_placement_local_sources_omn20074.py: 1
     tests/scripts/test_public_repo_hygiene_gate.py: 1

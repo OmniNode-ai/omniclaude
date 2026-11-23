@@ -1,0 +1,74 @@
+schema_version: "1.0.0"
+ticket_id: OMN-26527
+title: The omniclaude lane liveness, lane identity, branch claim hook, worktree prune, runner placement gate and git admission readers read the ledger only through the bus
+summary: >-
+  Second slice of the omniclaude group of the ledger-file census: three of the six readers named by the
+  ticket move onto the work-ledger reader node (lane liveness, the lane identity backfill and the private
+  repository runner placement gate). The branch claim pre-push hook, the worktree prune script and the git
+  admission ruling re-read stay on the file and are listed in the pull request body with the reason each
+  stays, so this change does not close the ticket.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn26527-bus-only
+    statement: The moved omniclaude runtime readers read the work ledger only through the work-ledger reader node.
+    acceptance:
+      - id: AC1
+        statement: >-
+          AC1: the census node, run over the omniclaude worktree, lists none of the six files named in the description as a runtime hit -- falsifier: the census node run with --packaged-overlay --register omniclaude --directory omniclaude=<worktree> --verbose, grep of the six paths, run first on origin/dev as the positive control
+      - id: AC2
+        statement: >-
+          AC2: a test run with the ledger path variable unset and no ledger file on disk shows each moved reader calling the work-ledger reader node and never opening the file -- falsifier: uv run pytest tests/test_runtime_readers_ledger_bus.py -q, failing on the merge base
+      - id: AC3
+        statement: >-
+          AC3: no script or handler of the six files carries the ledger path variable or the ledger file name as a path to read -- falsifier: uv run pytest tests/test_runtime_readers_ledger_bus.py -k no_file_path -q, failing on the merge base
+evidence_requirements:
+  - kind: tests
+    description: The reader bus tests pass at the head and fail at the merge base.
+    command: uv run pytest tests/test_runtime_readers_ledger_bus.py -q
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+  - id: dod-omn26527-ac2-bus-calls
+    description: >-
+      Each moved reader (lane liveness, the lane identity backfill, the runner placement gate's ruling check) calls
+      the fake reader node with the path variable unset and no ledger file on disk; at the merge base this
+      test file does not exist and the old code opens the file.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC2
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/test_runtime_readers_ledger_bus.py -q
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn26527-ac3-no-file-path
+    description: >-
+      The three moved files name neither the ledger path variable nor the ledger file name; at the merge base each
+      of these checks fails.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC3
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/test_runtime_readers_ledger_bus.py -k no_file_path -q
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn26527-ac1-census-ratchet
+    description: >-
+      The census ratchet table no longer lists the three moved runtime files; at the merge base it lists all three.
+      The three files not moved by this change are still listed.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC1
+    checks:
+      - check_type: command
+        check_value: >-
+          ! grep -Fq 'plugins/onex/hooks/lib/lane_liveness.py' config/ledger_file_census_ratchet.yaml
+          && ! grep -Fq 'scripts/lane_identity.py' config/ledger_file_census_ratchet.yaml
+          && ! grep -Fq 'scripts/private_repo_runner_placement_gate.py' config/ledger_file_census_ratchet.yaml
+        cwd: ${OMNI_HOME}/omniclaude

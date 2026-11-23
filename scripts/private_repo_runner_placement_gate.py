@@ -1524,35 +1524,40 @@ def load_hosted_rulings(path: Path) -> dict[str, HostedRuling]:
     return rulings
 
 
-def _ledger_files(ledger: Path) -> list[Path]:
-    """The live ledger plus the rolls it spilled into, beside it in archive/."""
-    if not ledger.is_file():
+#: The work-ledger reader node's name for the point read of one RULING row (OMN-26527): every
+#: RULING row stamped exactly at the cited timestamp, at any age.
+#: The reader name is ``placement-gate-ruling``: the argument after the script below.
+_ROW_AT_SCRIPT = (
+    "import sys, datetime as d; from omnimarket.nodes.node_work_ledger_reader_effect.adapters.rows_read "
+    "import read_row_at as r; print('\\n'.join(r(sys.argv[1], d.datetime.strptime(sys.argv[2], "
+    "'%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=d.UTC), 'RULING')))"
+)
+
+
+def _ruling_on_ledger(ruling: HostedRuling, reader: str) -> bool:
+    """Whether the reader node holds the cited RULING row; a read it did not answer is a GateError."""
+    argv = [reader, "-c", _ROW_AT_SCRIPT, "placement-gate-ruling", ruling.ts]
+    try:
+        done = subprocess.run(argv, capture_output=True, timeout=150, check=True)
+    except (OSError, subprocess.SubprocessError) as error:
         raise GateError(
-            f"the ledger {ledger} does not exist, so the ruling a hosted-eligible "
-            "job cites cannot be confirmed on it. Pass --ledger '' to judge "
+            f"the work-ledger reader node did not answer ({error}), so the ruling a "
+            "hosted-eligible job cites cannot be confirmed. Pass --ledger-reader '' to judge "
             "against the registry alone. THE GATE DID NOT RUN."
-        )
-    return [ledger, *sorted((ledger.parent / "archive").glob("*.md"))]
-
-
-def _ruling_on_ledger(ruling: HostedRuling, files: list[Path]) -> bool:
-    prefix = f"{ruling.ts} | RULING |"
-    cells = (f"lane={ruling.lane}", f"ticket={ruling.ticket}")
-    for path in files:
-        with path.open(encoding="utf-8", errors="replace") as handle:
-            for line in handle:
-                if line.startswith(prefix):
-                    row = {cell.strip() for cell in line.split("|")}
-                    if all(cell in row for cell in cells):
-                        return True
-    return False
+        ) from error
+    cells = {f"lane={ruling.lane}", f"ticket={ruling.ticket}"}
+    return any(
+        line.startswith(f"{ruling.ts} | RULING |")
+        and cells <= {cell.strip() for cell in line.split("|")}
+        for line in done.stdout.decode().splitlines()
+    )
 
 
 def load_eligible(
     repo_root: Path,
     slug: str,
     rulings: dict[str, HostedRuling],
-    ledger: Path | None,
+    reader: str | None,
 ) -> dict[tuple[str, str], HostedRuling]:
     """{(workflow file, job id): ruling} declared by this tree, every entry checked.
 
@@ -1568,7 +1573,6 @@ def load_eligible(
     entries = document.get("jobs")
     if not isinstance(entries, list):
         raise GateError(f"{ELIGIBLE_FILE} has no `jobs` list. THE GATE DID NOT RUN.")
-    ledger_files = _ledger_files(ledger) if ledger is not None else None
     eligible: dict[tuple[str, str], HostedRuling] = {}
     for entry in entries:
         fields = entry if isinstance(entry, dict) else {}
@@ -1599,10 +1603,10 @@ def load_eligible(
                 f"{where} cites ruling {ts}, whose scope does not include "
                 f"{slug} (sha256 {repo_hash(slug)}). THE GATE DID NOT RUN."
             )
-        if ledger_files is not None and not _ruling_on_ledger(ruling, ledger_files):
+        if reader and not _ruling_on_ledger(ruling, reader):
             raise GateError(
                 f"{where} cites ruling {ts} (lane={ruling.lane}, "
-                f"ticket={ruling.ticket}), and the ledger {ledger} carries no "
+                f"ticket={ruling.ticket}), and the work ledger carries no "
                 "such RULING row. THE GATE DID NOT RUN."
             )
         if (workflow, job) in eligible:
@@ -2219,7 +2223,7 @@ def scan(
     matrix: list[str] | None = None,
     refs: RefNames | None = None,
     rulings_path: Path = DEFAULT_HOSTED_RULINGS,
-    ledger: Path | None = None,
+    reader: str | None = None,
     accepted: list[str] | None = None,
 ) -> list[Finding]:
     called = CalledWorkflows(repo_root) if called is None else called
@@ -2245,7 +2249,7 @@ def scan(
     # The registry is read only when this tree declares something, so a
     # repository with no declaration never depends on it.
     eligible = (
-        load_eligible(repo_root, slug, load_hosted_rulings(rulings_path), ledger)
+        load_eligible(repo_root, slug, load_hosted_rulings(rulings_path), reader)
         if (repo_root / ELIGIBLE_FILE).is_file()
         else {}
     )
@@ -2570,7 +2574,7 @@ def scan_every_workflow_branch(
     refs: RefNames,
     judged: list[str],
     rulings_path: Path = DEFAULT_HOSTED_RULINGS,
-    ledger: Path | None = None,
+    reader: str | None = None,
     accepted: list[str] | None = None,
 ) -> list[Finding]:
     """Judge the workflow tree of every OTHER branch that runs workflows.
@@ -2616,7 +2620,7 @@ def scan_every_workflow_branch(
                 matrix,
                 refs,
                 rulings_path,
-                ledger,
+                reader,
                 branch_accepted,
             )
             if accepted is not None:
@@ -2808,13 +2812,12 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
-        "--ledger",
+        "--ledger-reader",
         default=None,
         help=(
-            "the rolling work ledger on which each cited ruling must ALSO be "
-            "found as a RULING row (its archive/ rolls are read too). Defaults "
-            "to $ONEX_LEDGER_PATH outside GitHub Actions; an empty value "
-            "judges against the registry alone."
+            "the interpreter of the work-ledger reader node, which must ALSO find each cited "
+            "ruling as a RULING row. Defaults to $ONEX_LEDGER_READER_PYTHON outside GitHub "
+            "Actions; an empty value judges against the registry alone."
         ),
     )
     args = parser.parse_args(argv)
@@ -2870,10 +2873,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     rulings_path = args.hosted_rulings or DEFAULT_HOSTED_RULINGS
-    ledger_arg = args.ledger
-    if ledger_arg is None and os.environ.get("GITHUB_ACTIONS") != "true":
-        ledger_arg = os.environ.get("ONEX_LEDGER_PATH", "")
-    ledger = Path(ledger_arg) if ledger_arg else None
+    reader = args.ledger_reader
+    if reader is None and os.environ.get("GITHUB_ACTIONS") != "true":
+        reader = os.environ.get("ONEX_LEDGER_READER_PYTHON", "")
     accepted: list[str] = []
 
     snapshot_path = (
@@ -2928,7 +2930,7 @@ def main(argv: list[str] | None = None) -> int:
             matrix,
             refs,
             rulings_path,
-            ledger,
+            reader,
             accepted,
         )
         judged: list[str] = []
@@ -2953,7 +2955,7 @@ def main(argv: list[str] | None = None) -> int:
                     refs,
                     judged,
                     rulings_path,
-                    ledger,
+                    reader,
                     accepted,
                 )
             )
