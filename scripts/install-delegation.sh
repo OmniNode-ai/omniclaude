@@ -64,15 +64,11 @@ PYTHON_BIN=""
 ENDPOINT_URL=""
 SKIP_PIP=false
 SKIP_SMOKE=false
-# Run state: what this run moved or copied aside so a run that stops before
-# Claude's installer succeeds can put it back (restore_run_state).
-SETTINGS_SNAPSHOT=""
-SETTINGS_EXISTED=false
-SETTINGS_SAVED=false
+# Run state: the folder this run moved its owned paths and settings into, so a
+# run that stops before Claude's installer succeeds can put them back. The
+# handler (native_plugin snapshot|restore|recover) owns its layout.
 TREE_SNAPSHOT=""
-RUN_BACKUP=""
-# The paths under INSTALL_ROOT a run replaces: the hook config (or native
-# marker), the plugin tree, the old flat copy and the marketplace metadata.
+# The paths under INSTALL_ROOT a run replaces (the handler's RUN_OWNED_PATHS).
 RUN_OWNED_PATHS=(hooks-delegation.json plugin hook-scripts .claude-plugin)
 # A signal held while Claude's installer runs (hold_signals), as an exit status.
 PENDING_SIGNAL_STATUS=""
@@ -419,7 +415,7 @@ PY
 native_plugin() {
   PYTHONPATH="${REPO_ROOT}/src${PYTHONPATH:+:$PYTHONPATH}" "${PYTHON_BIN}" -m \
     omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.container_onboarding_assets \
-    "$1" "${INSTALL_ROOT}" "${CLAUDE_SETTINGS}" "${PYTHON_BIN}"
+    "$1" "${INSTALL_ROOT}" "${CLAUDE_SETTINGS}" "${PYTHON_BIN}" "${@:2}"
 }
 
 install_hook_config() {
@@ -436,7 +432,9 @@ install_hook_config() {
   # mode.sh and repo_guard.sh by relative path, and run the routing runner and
   # cost_accounting from hooks/lib (OMN-22498). A fresh copy each run keeps a
   # re-install from mixing two versions.
-  snapshot_install_tree
+  # Move this run's owned paths aside first; the last line is the folder.
+  TREE_SNAPSHOT="$(native_plugin snapshot)"
+  TREE_SNAPSHOT="${TREE_SNAPSHOT##*$'\n'}"
   mkdir -p "${INSTALL_PLUGIN_ROOT}"
   cp -R "${SOURCE_HOOK_SCRIPTS%/hooks/scripts}/hooks" "${SOURCE_HOOK_SCRIPTS%/hooks/scripts}/lib" "${INSTALL_PLUGIN_ROOT}/"
   rm -rf "${INSTALL_PLUGIN_ROOT}/hooks/tests" && find "${INSTALL_PLUGIN_ROOT}" -type d -name __pycache__ -prune -exec rm -rf {} +
@@ -444,62 +442,13 @@ install_hook_config() {
   log_ok "wrote ${INSTALL_HOOKS_JSON}"
 }
 
-# Move this run's owned paths aside (same filesystem, so mv), so a run that
-# stops before Claude's installer succeeds can put the tree back as it was.
-# The folder is the whole run state on disk, so a run killed outright, even
-# part way through a restore, can be put back by the next one
-# (recover_stale_run_state): .claude-settings names the profile this run
-# edits, each owned path is either moved in or marked .absent.<name>,
-# .settings.saved or .settings.absent is settings.json before this run, and
-# .run-backup names the pre-install backup this run made.
-snapshot_install_tree() {
-  TREE_SNAPSHOT="$(mktemp -d "${CLAUDE_SETTINGS_BACKUP_DIR}/install-tree.run.XXXXXX")"
-  printf '%s\n' "${CLAUDE_SETTINGS}" > "${TREE_SNAPSHOT}/.claude-settings"
-  local name
-  for name in "${RUN_OWNED_PATHS[@]}"; do
-    if [[ -e "${INSTALL_ROOT}/${name}" || -L "${INSTALL_ROOT}/${name}" ]]; then
-      mv "${INSTALL_ROOT}/${name}" "${TREE_SNAPSHOT}/${name}"
-    else
-      : > "${TREE_SNAPSHOT}/.absent.${name}"
-    fi
-  done
-}
-
-# Put back what this run replaced: the owned install paths, settings.json and,
-# when this run made it, the pre-install settings backup no manifest will name.
-# Safe to call twice and from the EXIT trap at any point of the run.
+# Put back what this run replaced (the handler reads it all from the run's
+# snapshot folder). Safe to call twice and from the EXIT trap at any point.
 restore_run_state() {
-  local name
-  # Settings first: the settings snapshot lives in the tree snapshot folder.
-  if [[ -n "${SETTINGS_SNAPSHOT}" ]]; then
-    if "${SETTINGS_SAVED}"; then
-      if "${SETTINGS_EXISTED}"; then
-        cp "${SETTINGS_SNAPSHOT}" "${CLAUDE_SETTINGS}"
-      else
-        rm -f "${CLAUDE_SETTINGS}"
-      fi
-    fi
-    rm -f "${SETTINGS_SNAPSHOT}"
-  fi
   if [[ -n "${TREE_SNAPSHOT}" ]]; then
-    for name in "${RUN_OWNED_PATHS[@]}"; do
-      if [[ -e "${TREE_SNAPSHOT}/${name}" || -L "${TREE_SNAPSHOT}/${name}" ]]; then
-        rm -rf "${INSTALL_ROOT:?}/${name}"
-        mv "${TREE_SNAPSHOT}/${name}" "${INSTALL_ROOT}/${name}"
-      elif [[ -e "${TREE_SNAPSHOT}/.absent.${name}" ]]; then
-        # Absent before this run: whatever is there now is this run's.
-        rm -rf "${INSTALL_ROOT:?}/${name}"
-        rm -f "${TREE_SNAPSHOT}/.absent.${name}"
-      fi
-      # Otherwise it is already back, or the snapshot never reached it.
-    done
-    rm -rf "${TREE_SNAPSHOT}"
-  fi
-  if [[ -n "${RUN_BACKUP}" ]]; then
-    rm -f "${RUN_BACKUP}"
+    native_plugin restore "${TREE_SNAPSHOT}"
   fi
   TREE_SNAPSHOT=""
-  SETTINGS_SNAPSHOT=""; SETTINGS_SAVED=false; RUN_BACKUP=""
 }
 
 # Claude's installer succeeded: this run's changes stand. The snapshot folder
@@ -513,16 +462,13 @@ commit_run_state() {
     rm -rf "${committed}"
   fi
   TREE_SNAPSHOT=""
-  SETTINGS_SNAPSHOT=""; SETTINGS_SAVED=false; RUN_BACKUP=""
 }
 
 # A run killed outright (SIGKILL, power loss) runs no trap and leaves its
-# install-tree.run.* folder in backups/ with the tree moved aside and the old
-# rows already gone. Put that before-state back before this run snapshots
-# anything, or this run would save the half-installed state as its own
-# before-state and orphan the old snapshot (OMN-23413 review).
+# install-tree.run.* folder in backups/. Its before-state is put back before
+# this run snapshots anything (OMN-23413 review).
 recover_stale_run_state() {
-  local run settings="${CLAUDE_SETTINGS}"
+  local run
   if ! "${DRY_RUN}"; then
     for run in "${CLAUDE_SETTINGS_BACKUP_DIR}"/install-tree.done.*; do
       if [[ -d "${run}" && ! -L "${run}" ]]; then
@@ -530,34 +476,10 @@ recover_stale_run_state() {
       fi
     done
   fi
-  for run in "${CLAUDE_SETTINGS_BACKUP_DIR}"/install-tree.run.*; do
-    [[ -d "${run}" && ! -L "${run}" ]] || continue
-    if "${DRY_RUN}"; then
-      log_dry "would restore a stale run snapshot left by an interrupted run: ${run}"
-      continue
-    fi
-    TREE_SNAPSHOT="${run}"
-    SETTINGS_SNAPSHOT=""; SETTINGS_SAVED=false; SETTINGS_EXISTED=false
-    if [[ -f "${run}/.settings.saved" ]]; then
-      SETTINGS_SNAPSHOT="${run}/.settings.saved"; SETTINGS_SAVED=true; SETTINGS_EXISTED=true
-    elif [[ -e "${run}/.settings.absent" ]]; then
-      SETTINGS_SNAPSHOT="${run}/.settings.absent"; SETTINGS_SAVED=true
-    fi
-    # Write settings back to the profile that run edited, not this run's.
-    CLAUDE_SETTINGS="${settings}"
-    if [[ -f "${run}/.claude-settings" ]]; then
-      CLAUDE_SETTINGS="$(<"${run}/.claude-settings")"
-    fi
-    RUN_BACKUP=""
-    if [[ -f "${run}/.run-backup" ]]; then
-      RUN_BACKUP="$(<"${run}/.run-backup")"
-      # Only ever a backup this installer names; never a path from elsewhere.
-      [[ "${RUN_BACKUP%/*}" == "${CLAUDE_SETTINGS_BACKUP_DIR}" && "${RUN_BACKUP##*/}" == settings.json.*.bak ]] || RUN_BACKUP=""
-    fi
-    restore_run_state
-    log_warn "restored a stale run snapshot left by an interrupted run (${run}): ${CLAUDE_SETTINGS} and the delegation files in ${INSTALL_ROOT} are back to their state before that run."
-    CLAUDE_SETTINGS="${settings}"
-  done
+  if compgen -G "${CLAUDE_SETTINGS_BACKUP_DIR}/install-tree.run.*" >/dev/null; then
+    resolve_python
+    native_plugin recover "$("${DRY_RUN}" && echo dry || true)"
+  fi
 }
 
 # bash runs a trap only after the foreground command exits, so a signal sent
@@ -587,7 +509,7 @@ exit_on_signals() {
 # Any exit before commit_run_state (an error under set -e, a signal) restores.
 on_install_exit() {
   local status=$?
-  if [[ -n "${TREE_SNAPSHOT}${SETTINGS_SNAPSHOT}" ]]; then
+  if [[ -n "${TREE_SNAPSHOT}" ]]; then
     restore_run_state
     log_err "install stopped (exit ${status}) before Claude's plugin installer finished; ${CLAUDE_SETTINGS} and the delegation files in ${INSTALL_ROOT} (hooks-delegation.json, plugin/, .claude-plugin/) are restored to their state before this run."
   fi
@@ -619,105 +541,16 @@ install_native_plugin() {
 
 merge_user_settings() {
   log_step "merge delegation hooks into ${CLAUDE_SETTINGS}"
-  # PRE_INSTALL_BACKUP holds the backup that captures state from BEFORE this
-  # install ever ran. We only create it once — on the first --apply — and
-  # subsequent runs (idempotent re-installs) do not overwrite it. The rollback
-  # manifest below records this path so --uninstall can always reach the true
-  # pre-install state.
-  PRE_INSTALL_BACKUP=""
-  if [[ -f "${ROLLBACK_MANIFEST}" ]]; then
-    # Read prior backup path from manifest to preserve it.
-    PRE_INSTALL_BACKUP="$("${PYTHON_BIN}" - "${ROLLBACK_MANIFEST}" <<'PY' 2>/dev/null || echo ""
-import json, pathlib, sys
-try:
-    m = json.loads(pathlib.Path(sys.argv[1]).read_text())
-    print(m.get("settings_backup") or "")
-except Exception:
-    print("")
-PY
-)"
-  fi
-  local backup_path="${PRE_INSTALL_BACKUP}"
-  if [[ -z "${backup_path}" && -f "${CLAUDE_SETTINGS}" ]]; then
-    backup_path="${CLAUDE_SETTINGS_BACKUP_DIR}/settings.json.$(date +%Y%m%dT%H%M%S).bak"
-  fi
-
   if "${DRY_RUN}"; then
-    if [[ -n "${backup_path}" && -z "${PRE_INSTALL_BACKUP}" ]]; then
-      log_dry "would back up existing settings → ${backup_path}"
-    elif [[ -n "${PRE_INSTALL_BACKUP}" ]]; then
-      log_dry "would reuse pre-install backup at ${PRE_INSTALL_BACKUP}"
-    else
-      log_dry "would create new settings.json (none exists)"
-    fi
-    log_dry "would merge hooks block from ${INSTALL_HOOKS_JSON} (preserving existing hooks)"
-    PRE_INSTALL_BACKUP="${backup_path}"
+    log_dry "would back up ${CLAUDE_SETTINGS} once (kept across re-installs) and remove owned delegation hook rows, preserving every other hook"
     return 0
   fi
-
-  mkdir -p "$(dirname "${CLAUDE_SETTINGS}")"
-  if [[ -n "${backup_path}" && -z "${PRE_INSTALL_BACKUP}" && -f "${CLAUDE_SETTINGS}" ]]; then
-    printf '%s\n' "${backup_path}" > "${TREE_SNAPSHOT}/.run-backup"
-    cp "${CLAUDE_SETTINGS}" "${backup_path}"
-    RUN_BACKUP="${backup_path}"
-    log_info "backed up existing settings → ${backup_path}"
-    PRE_INSTALL_BACKUP="${backup_path}"
-  fi
-  # This run's own before-state (the backup above is the first install's), so
-  # install_native_plugin can restore it exactly if Claude's installer fails.
-  # Kept in the run's snapshot folder under a name that appears only once it
-  # is whole, so a later run never restores a half-written copy.
-  SETTINGS_EXISTED=false
-  if [[ -f "${CLAUDE_SETTINGS}" ]]; then
-    cp "${CLAUDE_SETTINGS}" "${TREE_SNAPSHOT}/.settings.part"
-    mv "${TREE_SNAPSHOT}/.settings.part" "${TREE_SNAPSHOT}/.settings.saved"
-    SETTINGS_SNAPSHOT="${TREE_SNAPSHOT}/.settings.saved"
-    SETTINGS_EXISTED=true
-  else
-    : > "${TREE_SNAPSHOT}/.settings.absent"
-    SETTINGS_SNAPSHOT="${TREE_SNAPSHOT}/.settings.absent"
-  fi
-  # Only now does the snapshot hold the before-state a restore may write back.
-  SETTINGS_SAVED=true
-
-  "${PYTHON_BIN}" - "${CLAUDE_SETTINGS}" "${INSTALL_HOOKS_JSON}" "${INSTALL_ROOT}" <<'PY'
-import json, pathlib, sys
-settings_path = pathlib.Path(sys.argv[1])
-if not settings_path.exists():
-    sys.exit(0)
-settings = json.loads(settings_path.read_text(encoding="utf-8"))
-if "hooks" not in settings:
-    sys.exit(0)
-
-# Remove earlier owned command hooks; the native plugin is registered by the
-# vendor CLI. Preserve every unrelated hook and setting: the file is written
-# only when an owned row was removed, and "hooks" itself is never added or
-# dropped, so settings holding nothing of ours stay byte for byte the same.
-existing = settings["hooks"]
-removed = False
-for event in list(existing):
-    groups, changed = [], False
-    for g in existing[event]:
-        kept = [h for h in g.get("hooks", []) if f"{sys.argv[3]}/" not in (h.get("command") or "")]
-        if len(kept) != len(g.get("hooks", [])):
-            changed = True
-            if not kept:
-                continue
-        groups.append({**g, "hooks": kept})
-    if changed:
-        removed = True
-        existing[event] = groups
-        if not groups:
-            existing.pop(event)
-
-# A whitespace-preserving JSON rewrite is not attempted: when an owned row is
-# removed only the formatting changes (two-space indent). Values, non-ASCII
-# included, are written as they were read, never escaped.
-if removed:
-    settings_path.write_text(
-        json.dumps(settings, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-    )
-PY
+  # The handler backs settings up on the first install only, snapshots them
+  # for this run so a failed Claude install restores them exactly, and drops
+  # the owned classic rows. Its last line is the pre-install backup, which the
+  # rollback manifest keeps so --uninstall reaches the true pre-install state.
+  PRE_INSTALL_BACKUP="$(native_plugin settings "${TREE_SNAPSHOT}")"
+  PRE_INSTALL_BACKUP="${PRE_INSTALL_BACKUP##*$'\n'}"
   log_ok "merged delegation hooks into ${CLAUDE_SETTINGS}"
 }
 
@@ -727,35 +560,7 @@ write_rollback_manifest() {
     log_dry "would record actions for --uninstall in ${ROLLBACK_MANIFEST}"
     return 0
   fi
-  # Use the pre-install backup tracked in merge_user_settings; this stays
-  # stable across idempotent re-runs so --uninstall always restores the true
-  # pre-install state.
-  "${PYTHON_BIN}" - "${ROLLBACK_MANIFEST}" "${INSTALL_ROOT}" "${CLAUDE_SETTINGS}" "${PRE_INSTALL_BACKUP:-}" "${INSTALL_HOOKS_JSON}" <<'PY'
-import json, sys, pathlib, datetime
-manifest_path, install_root, settings_path, backup_path, hooks_json = sys.argv[1:6]
-manifest = pathlib.Path(manifest_path)
-# Preserve created_at from prior manifest if present.
-created_at = datetime.datetime.now(datetime.UTC).isoformat()
-prior_backup = None
-if manifest.exists():
-    try:
-        prior = json.loads(manifest.read_text())
-        created_at = prior.get("created_at", created_at)
-        prior_backup = prior.get("settings_backup")
-    except Exception:
-        pass
-data = {
-    "version": 1,
-    "entrypoint": "native",
-    "created_at": created_at,
-    "install_root": install_root,
-    "claude_settings": settings_path,
-    "settings_backup": (backup_path or prior_backup) or None,
-    "installed_hook_config": hooks_json,
-    "package": "omninode-claude",
-}
-manifest.write_text(json.dumps(data, indent=2) + "\n")
-PY
+  native_plugin manifest "${PRE_INSTALL_BACKUP:-}"
   log_ok "wrote rollback manifest"
 }
 
@@ -809,78 +614,9 @@ uninstall() {
   # installs need the legacy consumer's exact-command rollback API, and they
   # still roll back where omnimarket is not installed (OMN-23413 review).
   if [[ "${native}" != true ]]; then
-    "${PYTHON_BIN}" - "${ROLLBACK_MANIFEST}" "${PAUSE}" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-manifest_path = Path(sys.argv[1])
-pause = sys.argv[2] == "true"
-
-try:
-    from omnimarket.nodes.node_onex_setup_effect.handlers.handler_setup_claude import HandlerSetupClaude
-except ModuleNotFoundError as e:
-    if not (e.name or "").startswith("omnimarket"):
-        raise
-    # Local copy: same exact-command removal the classic installer always did,
-    # kept so a classic install rolls back where omnimarket is not installed.
-    def rollback_hook_registration(manifest_path: Path, preserve_history: bool = False) -> str:
-        """Remove exact installer-owned registrations, optionally retaining history."""
-        manifest = json.loads(manifest_path.read_text())
-        pause = preserve_history
-        backup = manifest.get("settings_backup")
-        settings = manifest.get("claude_settings")
-        hooks_config = manifest.get("installed_hook_config")
-        settings_path = Path(settings) if settings else None
-        if settings_path is None:
-            raise SystemExit("rollback manifest missing claude_settings")
-        if not settings_path.exists():
-            if backup and Path(backup).exists():
-                settings_path.parent.mkdir(parents=True, exist_ok=True)
-                settings_path.write_text(Path(backup).read_text())
-                return f"restored missing {settings} from {backup}"
-            return ""
-        current = json.loads(settings_path.read_text())
-        hook_cfg = {}
-        if hooks_config and Path(hooks_config).exists():
-            hook_cfg = json.loads(Path(hooks_config).read_text()).get("hooks", {})
-        delegation_commands = {
-            hook.get("command")
-            for groups in hook_cfg.values()
-            for group in groups
-            for hook in group.get("hooks", [])
-            if hook.get("command")
-            and not (pause and "--history-only" in hook["command"])
-        }
-        hooks = current.get("hooks", {})
-        for event in list(hooks):
-            filtered_groups = []
-            for group in hooks.get(event, []):
-                filtered_hooks = [
-                    hook
-                    for hook in group.get("hooks", [])
-                    if hook.get("command") not in delegation_commands
-                ]
-                if filtered_hooks:
-                    filtered_groups.append({**group, "hooks": filtered_hooks})
-            if filtered_groups:
-                hooks[event] = filtered_groups
-            else:
-                hooks.pop(event, None)
-        if hooks:
-            current["hooks"] = hooks
-        else:
-            current.pop("hooks", None)
-        if current:
-            settings_path.write_text(json.dumps(current, indent=2) + "\n")
-            return f"removed delegation hooks from {settings}"
-        settings_path.unlink()
-        return f"removed {settings} after clearing installer-managed hooks"
-
-    print(rollback_hook_registration(manifest_path, pause))
-else:
-    print(HandlerSetupClaude.rollback_hook_registration(manifest_path, pause))
-PY
+    # omnimarket's rollback API where it is installed, the handler's exact-command
+    # copy where it is not; a pause keeps the pending-history helper.
+    native_plugin classic-remove "${PAUSE}"
   fi
   if "${PAUSE}" && [[ "${native}" != true ]]; then
     log_ok "delegation paused; pending-history hook retained"

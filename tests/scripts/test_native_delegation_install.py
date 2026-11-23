@@ -332,6 +332,11 @@ def test_removing_an_owned_row_keeps_non_ascii_values_as_written(
     )
 
 
+# Needs the real Claude Code CLI, an external tool CI's split runners do not
+# carry, so it is an integration test ("not integration" deselects it there)
+# rather than a skip the Skip Count Ratchet counts; it still skips, saying so,
+# on an integration run without the CLI.
+@pytest.mark.integration
 @pytest.mark.parametrize("legacy", [False, True])
 @pytest.mark.parametrize("already_removed", [False, True])
 def test_native_install_upgrade_repeat_and_off(

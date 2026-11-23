@@ -35,20 +35,25 @@ def build_onboarding_assets_container() -> ModelONEXContainer:
 
 
 if __name__ == "__main__":
+    fields: tuple[str, ...] = (
+        "operation",
+        "install_root",
+        "claude_settings",
+        "python_bin",
+    )
+    if len(sys.argv) == 6:
+        fields += ("argument",)
     request = ModelNativeDelegationRequest.model_validate(
-        dict(
-            zip(
-                ("operation", "install_root", "claude_settings", "python_bin"),
-                sys.argv[1:],
-                strict=True,
-            )
-        )
+        dict(zip(fields, sys.argv[1:], strict=True))
     )
     container = build_onboarding_assets_container()
     try:
         handler = container.get_service(HandlerNativeDelegation)
         result = handler.handle(request)
+        # The installer reads the last stdout line as the step's answer.
         if request.operation == "remove":
             sys.stdout.write(str(result.native).lower() + "\n")
+        elif request.operation in ("snapshot", "settings", "classic-remove"):
+            sys.stdout.write(result.output + "\n")
     finally:
         container.close()

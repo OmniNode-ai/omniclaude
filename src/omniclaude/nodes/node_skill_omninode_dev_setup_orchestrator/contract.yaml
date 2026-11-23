@@ -199,3 +199,10 @@ handler_routing:
       description: "Read model configuration and atomically place a registered local URL on its delegation ladder"
   execution_mode: "single"
   max_timeout_seconds: 30
+
+descriptor:
+  # OMN-23413: HandlerNativeDelegation runs `claude plugin` to manage the native
+  # delegation plugin's registration; it sends no prompt and makes no model call
+  # (canonical-inference gate, model-cli-shellout carve-out, as omnimarket's
+  # node_onex_setup_effect declares for the same plugin management).
+  agent_invocation: true
