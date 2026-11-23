@@ -119,6 +119,42 @@ def test_lane_liveness_without_an_answer_reads_no_row_never_the_file(
     assert bus.ledger_files() == []
 
 
+#: The slowest of nine reads of the `lane-liveness` reader from a lab host on 2026-11-23
+#: (OMN-26527): 7.1 s to 42.2 s, the slowest being a lane with no row in the window. The reader's
+#: own elapsed time equals the wall time; the python start is 0.8 s, so the time is the answerer's.
+SLOWEST_MEASURED_READ_S = 42.2
+#: A hook may wait this long for one probe at most; the bound must stay under it.
+HOOK_WAIT_CEILING_S = 60
+
+
+def test_lane_liveness_read_bound_outlasts_the_measured_reader(
+    bus: Bus, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A live lane reads ALIVE when the reader answers as slowly as it was measured to."""
+    module = load(LIVENESS)
+    bus.answer(f"{stamp(60)} | STATUS | lane=lane-a | ticket=OMN-26527 | working")
+    real_run = module.subprocess.run
+
+    def slow_reader(argv: list[str], **kwargs: object) -> object:
+        timeout = kwargs["timeout"]
+        assert isinstance(timeout, int | float)
+        if timeout < SLOWEST_MEASURED_READ_S:
+            raise module.subprocess.TimeoutExpired(argv, timeout)
+        return real_run(argv, **kwargs)
+
+    monkeypatch.setattr(module.subprocess, "run", slow_reader)
+    age, kind = module.last_ledger_row("lane-a")
+    assert kind == "STATUS" and age is not None and age < 120
+    verdict = module.probe("lane-a", root=tmp_path / "no-claude-root")
+    assert verdict.state == module.ALIVE
+
+
+def test_lane_liveness_read_bound_stays_under_what_a_hook_may_wait() -> None:
+    assert (
+        SLOWEST_MEASURED_READ_S < load(LIVENESS).READ_TIMEOUT_S <= HOOK_WAIT_CEILING_S
+    )
+
+
 def test_lane_identity_backfill_reads_open_claims_from_the_reader_node(
     bus: Bus,
 ) -> None:
