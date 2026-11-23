@@ -289,12 +289,17 @@
     "  is untouched.",
     "",
     "defect_diagnosis.citation_forms -- the durable artifacts a citation may be,",
-    "  tried in order. A ledger citation is RESOLVED: the cited line must exist",
-    "  and be non-blank in the rolling ledger or its archive, else the create is",
-    "  refused and the refusal names the citation it could not resolve. A pull",
+    "  tried in order. A ledger citation is a bare UTC row stamp (the first cell",
+    "  of the row, as rule 9's 'Criterion-edit ruling:' line cites one) and is",
+    "  RESOLVED through the work-ledger reader node under the reader name",
+    "  ticket-diagnosis (OMN-26567): the reader must return a row for the stamp,",
+    "  else the create is refused and the refusal names the citation it could",
+    "  not resolve. A reader that does not answer resolves nothing. A pull",
     "  request and a file:line are checked for SHAPE only, because this hook",
     "  runs without GitHub or repository access; that is the stated limit of the",
-    "  rule, not a hole it opened.",
+    "  rule, not a hole it opened. The file:line form refuses a file whose name",
+    "  holds LEDGER: a line number into a ledger file names nothing once the",
+    "  ledger is on the bus, so the old ledger line citation is no form at all.",
     "",
     "  Declared here rather than in gate_binding_grammar.json: that file is a",
     "  byte-pinned copy of omnibase_infra's contract, so a new key there is a",
@@ -466,9 +471,9 @@
     "line_pattern": "^[ \\t]*Diagnosis:[ \\t]*(?P<citation>.*?)[ \\t]*$",
     "citation_forms": [
       {
-        "id": "ledger_line",
-        "pattern": "^(?P<path>[A-Za-z0-9_./-]*ROLLING_WORK_LEDGER[A-Za-z0-9_.-]*\\.md):(?P<line>[1-9][0-9]*)$",
-        "example": "docs/tracking/ROLLING_WORK_LEDGER.md:4120",
+        "id": "ledger_row",
+        "pattern": "^(?P<stamp>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)$",
+        "example": "2026-11-14T14:43:55Z",
         "resolution": "ledger"
       },
       {
@@ -479,7 +484,7 @@
       },
       {
         "id": "file_line",
-        "pattern": "^[A-Za-z0-9_./-]+\\.[A-Za-z0-9]+:[1-9][0-9]*$",
+        "pattern": "^(?![^:]*LEDGER)[A-Za-z0-9_./-]+\\.[A-Za-z0-9]+:[1-9][0-9]*$",
         "example": "plugins/onex/hooks/lib/ticket_creation_guard.py:1078",
         "resolution": "shape"
       }

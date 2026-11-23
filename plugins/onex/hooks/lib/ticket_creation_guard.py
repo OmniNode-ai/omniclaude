@@ -158,8 +158,8 @@ still do so -- and must then re-accept the binding in the same act.
 the update adds a line of its own reading ``Criterion-edit ruling: <timestamp>``
 whose timestamp is the first cell of a RULING row on the rolling ledger naming
 the same ticket and carrying the operator's quoted words. The row is resolved
-from ``ONEX_LEDGER_PATH`` (else ``$OMNI_HOME/docs/tracking/``) and its archive;
-a row that is absent, a MSG, for another ticket or without the operator's
+through the work-ledger reader node (``ticket-ruling``), never the file; a row
+that is absent or unanswered, a MSG, for another ticket or without the operator's
 words refuses, as does a citation the ticket already carries (an approval is
 single use). It is a shape check, not a truth check: it cannot read whether the
 words say yes, nor that they cover this criterion.
@@ -2192,8 +2192,8 @@ def main(argv: list[str] | None = None) -> int:
             policy,
             body_lookup=body_lookup,
             ruling_lookup=ledger.ruling_lookup(_LEDGER_CELL_SEPARATOR),
-            ledger_lines=_handler("handler_defect_diagnosis").ledger_line_lookup(
-                ledger.ledger_path()
+            ledger_lines=_handler("handler_defect_diagnosis").ledger_row_lookup(
+                ledger.diagnosis_lookup(_LEDGER_CELL_SEPARATOR)
             ),
             route="node" if args.node else "raw",
             route_switch=_handler("handler_ticket_route_gate").read_switch(
