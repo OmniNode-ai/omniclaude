@@ -72,15 +72,16 @@ dod_evidence:
         cwd: ${OMNI_HOME}/omniclaude
   - id: dod-omn26508-ac1-census-ratchet
     description: >-
-      The census ratchet row for omniclaude and the per-file table only shrink: the measured baseline is
-      not exceeded and the moved files are dropped from the table.
+      The census ratchet row for omniclaude and the per-file table only shrink: the moved files are dropped
+      from the table and the row equals the table's size, which is at most 55; at the merge base the moved
+      files are still listed and the row is above 55, so the test fails there.
     source: manual
     execution_scope: hosted_and_local
     binds_ac:
       - AC1
     checks:
       - check_type: test_passes
-        check_value: uv run pytest tests/ci/test_ledger_file_census_per_file_table_omn26318.py -q
+        check_value: uv run pytest tests/test_runtime_ledger_bus.py -k census_table -q
         cwd: ${OMNI_HOME}/omniclaude
   - id: dod-omn26508-ac4-lab-install
     description: >-
@@ -97,4 +98,21 @@ dod_evidence:
           set -o pipefail
           python3 "${OMNI_PLUGIN_ROOT:?}/skills/lane-brief/scripts/lane_brief.py" grep --tail 100000 'installed=' \
             | grep -F ' | STATUS | ' | grep -F 'ticket=OMN-26508' | grep -E 'installed=[A-Za-z0-9._-]+:[0-9a-f]{40}' | grep -F 'observed=' | tail -1
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn26508-hosted-source-deploy-readback
+    description: >-
+      Read the refusal lane resolver at the checked-out commit from GitHub and require the work-ledger
+      reader's name in it. There is no live deploy of this module to probe, so the check reads the file as
+      published; at the merge base the file names no reader and the check fails. It does not establish the
+      lab install, which dod-omn26508-ac4-lab-install records.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC2
+    checks:
+      - check_type: command
+        check_value: >-
+          gh api "repos/OmniNode-ai/omniclaude/contents/src/omniclaude/nodes/node_hook_refusal_record_effect/handlers/handler_hook_refusal_lane.py?ref=$(git rev-parse HEAD)"
+          --jq '.content | gsub("\n"; "") | @base64d | contains("READER = \"hook-refusal-lane\"")'
+          | grep -qx true
         cwd: ${OMNI_HOME}/omniclaude

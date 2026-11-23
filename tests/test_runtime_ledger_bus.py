@@ -18,6 +18,7 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
 import pytest
+import yaml
 
 pytestmark = pytest.mark.unit
 
@@ -196,3 +197,14 @@ def test_no_file_path(rel: str) -> None:
     text = (REPO / rel).read_text(encoding="utf-8")
     assert PATH_VARIABLE not in text
     assert LEDGER_FILE not in text
+
+
+def test_census_table_drops_the_moved_files() -> None:
+    ratchet = yaml.safe_load(
+        (REPO / "config" / "ledger_file_census_ratchet.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    table = ratchet["files"]["omniclaude"]
+    assert [rel for rel in MOVED if rel in table] == []
+    assert ratchet["ratchet"]["omniclaude"] == len(table) <= 55
