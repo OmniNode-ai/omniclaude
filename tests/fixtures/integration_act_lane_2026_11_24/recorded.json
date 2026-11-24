@@ -1,0 +1,31 @@
+{
+  "source": "work ledger rows of 2026-11-24 (lane integration:act283: its CLAIM of 10:14:37Z, the TERMINAL that closed it at 10:17:54Z) and two timed runs of the gate's own claim-reader argv on lab host h201 at 2026-11-24T13:07Z, the hook-refusal-lane reader through the dev bus session",
+  "scrub": "principal, req and via cells dropped; the ticket cell and the free text after the last cell reduced to this ticket; no person names, no paths",
+  "lane": "integration:act283",
+  "claim_row": "2026-11-24T10:14:37Z | CLAIM | lane=integration:act283 | ticket=OMN-26641 | actor=claude:sonnet:workflow-lane | model=claude-sonnet | est ~0.5 lane-hours; displaces hourly integration pass idle time; (OMN-26641) | worktree=none | item=throughput | parent=orchestrator-31d9-swarm | harness-sidecar alias CLAIM of the integration pass act lane",
+  "terminal_row": "2026-11-24T10:17:54Z | TERMINAL | lane=integration:act283 | ticket=OMN-26641 | actor=claude:sonnet:workflow-lane | model=claude-sonnet | closes-CLAIM=2026-11-24T10:14:37Z | outcome=blocked | worktree=none | delegated=0 delegation_reason=read-only-lane | friction=none | alias CLAIM closed",
+  "window_rows_6h": {"all_rows": 6102, "claim_and_terminal_rows": 627},
+  "reader_readings": [
+    {
+      "argv_tail": "--reader hook-refusal-lane --query rows --window-hours 6 --kind CLAIM --kind TERMINAL",
+      "exit": 69,
+      "stdout_lines": 0,
+      "elapsed_s": 120.512,
+      "stderr": "READER reader=hook-refusal-lane query=rows status=unreadable source=none reason=node-read-failed-bus-session-failed-timeouterror watermark_age_s=none max_age_s=900 parity=unread matched=0 file_read=no elapsed_s=120.512"
+    },
+    {
+      "argv_tail": "--reader hook-refusal-lane --query rows --window-hours 6 --kind CLAIM --kind TERMINAL --row-lane integration:act283",
+      "exit": 0,
+      "stdout_lines": 2,
+      "elapsed_s": 46.727,
+      "stderr": "READER reader=hook-refusal-lane query=rows status=ok source=node reason=node-answered-fresh watermark_age_s=0 max_age_s=900 parity=unread matched=2 file_read=no elapsed_s=46.727"
+    },
+    {
+      "argv_tail": "--reader hook-refusal-lane --query rows --window-hours 6 --kind CLAIM (ONEX_SKILL_OVERLAY_ROOTS unset)",
+      "exit": 1,
+      "stdout_lines": 0,
+      "elapsed_s": 0,
+      "stderr": "omnimarket.handlers.node_overlay_reader.NodeOverlayNotFoundError: node_work_ledger_reader_effect: the overlay file is not configured; none was found at <root>/node_work_ledger_reader_effect/overlay.yaml; ONEX_SKILL_OVERLAY_ROOTS names no root; or set ONEX_LEDGER_READER_OVERLAY to the overlay file"
+    }
+  ]
+}
