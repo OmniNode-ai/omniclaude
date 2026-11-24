@@ -155,9 +155,15 @@ import time
 from collections import ChainMap
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Final
 
+from omniclaude.handlers.ledger_reader_rows import (
+    LedgerReaderUnreadableError,
+    read_lane_claims,
+    read_parsed_rows,
+)
 from omniclaude.nodes.node_git_effect.container import container_git_admission
 from omniclaude.nodes.node_git_effect.container.wrapped_command_segments import (
     ASSIGNMENT as _ASSIGNMENT,
@@ -311,6 +317,7 @@ class Policy:
     restore_max_dirty_paths: int
     restore_safe_alternatives: str
     git_probe_timeout_seconds: float
+    ledger_reader_timeout_seconds: float
     worktree_root_envs: tuple[str, ...]
     # The lane git-fetch arm (OMN-20495). See _lane_fetch_refusal.
     clone_sync_engine: str = "canonical_clone_sync.py"
@@ -411,6 +418,9 @@ def load_policy(path: Path | None = None) -> Policy:
         restore_max_dirty_paths=int(_positive_number(raw, "restore_max_dirty_paths")),
         restore_safe_alternatives=_require_str(raw, "restore_safe_alternatives"),
         git_probe_timeout_seconds=_positive_number(raw, "git_probe_timeout_seconds"),
+        ledger_reader_timeout_seconds=_positive_number(
+            raw, "ledger_reader_timeout_seconds"
+        ),
         worktree_root_envs=tuple(_str_list(raw, "worktree_root_envs")),
         fetch_ticket=_require_str(raw, "fetch_ticket"),
         fetch_subcommands=frozenset(_str_list(raw, "fetch_subcommands")),
@@ -2682,6 +2692,12 @@ def _is_publish_command(command: str) -> bool:
     return False
 
 
+#: The work-ledger reader node's name for the ruling re-read (OMN-26508), listed in
+#: ``moved_readers`` of the overlays repository.
+_REREAD_READER: Final[str] = "git-admission-ruling-reread"
+_REREAD_LOOKBACK: Final[timedelta] = timedelta(days=30)
+
+
 def ruling_reread_refusal(
     environ: Mapping[str, str], working_directory: str | None = None
 ) -> str | None:
@@ -2700,36 +2716,24 @@ def ruling_reread_refusal(
         ):
             return "BLOCKED (OMN-18645): lane worktree publishing requires ONEX_LANE or ONEX_LANE_ID; resolve the executing lane before publishing."
         return None  # Operator calls outside a lane have no lane CLAIM to compare.
-    ledger_name = environ.get("ONEX_LEDGER_PATH")
     state_root = environ.get("ONEX_STATE_DIR")
-    if not ledger_name or not state_root:
-        return "BLOCKED (OMN-18645): lane publishing requires ONEX_LEDGER_PATH and ONEX_STATE_DIR."
-    ledger = Path(ledger_name).resolve()
+    if not state_root:
+        return "BLOCKED (OMN-18645): lane publishing requires ONEX_STATE_DIR."
+    timeout = load_policy().ledger_reader_timeout_seconds
     try:
-        # Rolls move rows; read all rolls, never an arbitrary tail or age cutoff.
-        sources = [*sorted((ledger.parent / "archive").glob("*-split.md")), ledger]
-        rows: list[tuple[str, str, dict[str, str], str, str]] = []
-        for source in sources:
-            for number, raw in enumerate(
-                source.read_text(encoding="utf-8").splitlines(), 1
-            ):
-                cells = [cell.strip() for cell in raw.split(" | ")]
-                if len(cells) < 2:
-                    continue
-                stamp = cells[0].removeprefix("- ").strip()
-                if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", stamp):
-                    continue
-                fields = dict(cell.split("=", 1) for cell in cells[2:] if "=" in cell)
-                rows.append((stamp, cells[1], fields, f"{source}:{number}", raw))
-        claims = [
-            stamp
-            for stamp, kind, fields, _, _ in rows
-            if kind == "CLAIM" and fields.get("lane") == lane
-        ]
+        # The ledger is read from the work-ledger reader node, never from a file (OMN-26508).
+        since = datetime.now(UTC) - _REREAD_LOOKBACK
+        claims = read_lane_claims(
+            _REREAD_READER, lane, since, timeout_s=timeout, environ=environ
+        )
         if not claims:
             return f"BLOCKED (OMN-18645): no ledger CLAIM found for lane={lane}; publishing cannot prove a ruling re-read."
         # Earlier observations remain pending even when a lane re-claims.
         claim = max(claims)
+        since = datetime.strptime(claim, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
+        rows = read_parsed_rows(
+            _REREAD_READER, since, ("RULING", "ACK"), timeout_s=timeout, environ=environ
+        )
         journal = Path(state_root) / "hooks" / "ruling-reread.jsonl"
         journal.parent.mkdir(parents=True, exist_ok=True)
         pending: list[str] = []
@@ -2754,12 +2758,12 @@ def ruling_reread_refusal(
                 if key in entries and entries[key] != value:
                     raise ValueError("conflicting ruling observation")
                 entries[key] = value
-            for stamp, kind, fields, citation, raw in rows:
+            for stamp, kind, fields, raw in rows:
                 if kind != "RULING" or stamp < claim:
                     continue
                 digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
-                ref = fields.get("id") or stamp
-                key = (str(ledger), lane, digest)
+                ref, citation = fields.get("id") or stamp, f"{_REREAD_READER}@{stamp}"
+                key = (_REREAD_READER, lane, digest)
                 if key not in entries:
                     store.write(json.dumps([*key, stamp, ref, citation, raw]) + "\n")
                     entries[key] = (stamp, ref, citation, raw)
@@ -2769,7 +2773,7 @@ def ruling_reread_refusal(
                 (
                     (digest, *value)
                     for (source, actor, digest), value in entries.items()
-                    if source == str(ledger) and actor == lane
+                    if source == _REREAD_READER and actor == lane
                 ),
                 key=lambda observation: (observation[1], observation[0]),
             )
@@ -2784,7 +2788,7 @@ def ruling_reread_refusal(
                     and fields.get("re") == ref
                     and fields.get("ruling") == citation
                     and fields.get("ruling-sha256") == digest
-                    for ack_stamp, kind, fields, _, _ in rows
+                    for ack_stamp, kind, fields, _ in rows
                 )
                 if not acknowledged:
                     pending.append(
@@ -2799,8 +2803,8 @@ def ruling_reread_refusal(
             )
     except BlockingIOError:
         return "BLOCKED (OMN-18645): ruling re-read journal is locked by another publisher; retry the publish."
-    except (OSError, UnicodeError, ValueError) as exc:
-        return f"BLOCKED (OMN-18645): ledger ruling re-read could not be verified ({exc}); repair the ledger/journal before publishing."
+    except (OSError, UnicodeError, ValueError, LedgerReaderUnreadableError) as exc:
+        return f"BLOCKED (OMN-18645): ledger ruling re-read could not be verified ({exc}); repair the ledger reader or journal before publishing."
     return None
 
 

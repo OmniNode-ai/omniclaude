@@ -27,7 +27,7 @@ from omniclaude.hooks.lib.worktree_prune_policy import (
     EnumPruneDisposition,
 )
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.usefixtures("ledger_reader")]
 
 _MODULE_PATH = (
     Path(__file__).resolve().parents[2] / "scripts" / "worktree_auto_prune.py"
@@ -246,8 +246,6 @@ class TestScanMovesOn:
             [
                 "--worktrees-root",
                 str(root),
-                "--ledger",
-                str(ledger),
                 "--no-tracker",
                 "--no-pr-state",
                 "--no-debris",

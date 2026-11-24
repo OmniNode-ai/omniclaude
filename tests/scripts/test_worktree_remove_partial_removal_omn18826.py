@@ -25,7 +25,7 @@ from omniclaude.hooks.lib.worktree_prune_policy import (
     EnumPruneDisposition,
 )
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.usefixtures("ledger_reader")]
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = ROOT / "scripts"
 SESSION_END = ROOT / "plugins/onex/hooks/scripts/session-end.sh"
@@ -325,8 +325,6 @@ def test_main_reports_half_removed_without_classifying(
             [
                 "--worktrees-root",
                 str(registry / "omni_worktrees"),
-                "--ledger",
-                str(ledger),
                 "--no-tracker",
                 "--no-pr-state",
                 "--no-fetch",

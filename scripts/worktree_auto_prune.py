@@ -11,7 +11,7 @@ rolling work ledger, hands them to the **pure** predicate in
 Why this exists
 ---------------
 Pruning is keyed to **what the worktree HOLDS** — operator ruling 2026-09-14,
-``docs/tracking/ROLLING_WORK_LEDGER.md`` line 7870. A worktree is removable when
+``docs/tracking/ROLLING_WORK_LEDGER.md:7870``. A worktree is removable when
 it is clean and zero commits ahead with no open ledger ``CLAIM``, or clean with a
 MERGED pull request and no open ``CLAIM``. The ticket's own state decides
 nothing: an empty or fully-merged worktree carries no work whatever the ticket
@@ -94,6 +94,10 @@ from typing import Any, NamedTuple
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
+from omniclaude.handlers.ledger_reader_rows import (
+    LedgerReaderUnreadableError,
+    read_history_rows,
+)
 from omniclaude.hooks.lib.worktree_health import extract_ticket_id
 from omniclaude.hooks.lib.worktree_prune_policy import (
     EnumBranchPrState,
@@ -583,23 +587,37 @@ def count_attributed_stashes(subjects: Sequence[str], branch: str | None) -> int
 
 
 _LANE_RE = re.compile(r"\blane=([^\s|]+)")
-# Three spellings are live in the real ledger: `closes-CLAIM=<path>:<line>`,
-# the equally-real `closes=CLAIM <path>:<line>` (no dash before CLAIM), and the
-# ledger_lock claim token `closes-CLAIM=LCT1-<offset>-<line>-<digest>-<appended_at>`
-# (OMN-16400). The token is tried first: its appended_at ends in `HH:MM:SSZ`, so
-# the path:line pattern alone reads the token's MINUTES as the line number and
-# closes the wrong row or none. Measured 2026-09-24 (OMN-19409): 160 of the 520
-# claims this parser held open had been closed by an LCT1 TERMINAL.
-_CLOSES_CLAIM_LCT1_RE = re.compile(r"closes[-=]CLAIM[=\s]+LCT1-\d+-(\d+)-[0-9a-f]{12}-")
-_CLOSES_CLAIM_RE = re.compile(r"closes[-=]CLAIM[=\s]+\S*?:(\d+)")
+#: The work-ledger reader node's name for this script's read (OMN-26508), listed in
+#: ``moved_readers`` of the overlays repository, and the window it reads: 30 days of CLAIM and
+#: TERMINAL rows. A reader that did not answer is ``LedgerReaderUnreadableError``: never an empty ledger.
+LEDGER_READER = "worktree-auto-prune-claims"
+LEDGER_READ_DAYS = 30
+LEDGER_READ_TIMEOUT_S = 150
+
+
+def read_ledger_rows() -> list[str]:
+    """The CLAIM and TERMINAL rows of the last 30 days, from the work-ledger reader node.
+
+    A reader that did not answer ends the run with exit 2 and removes nothing further: with no ledger
+    there is no claim-awareness, and a prune without it is exactly the OMN-15551 hazard.
+    """
+    since = datetime.now(UTC) - timedelta(days=LEDGER_READ_DAYS)
+    try:
+        return read_history_rows(
+            LEDGER_READER, since, ("CLAIM", "TERMINAL"), timeout_s=LEDGER_READ_TIMEOUT_S
+        )
+    except LedgerReaderUnreadableError as exc:
+        sys.stderr.write(f"ERROR: ledger not readable ({exc}); refusing (OMN-15551).\n")
+        raise SystemExit(2) from exc
 
 
 class LedgerClaimRow(NamedTuple):
     """One still-open ``CLAIM`` row: not yet closed by a matching ``TERMINAL``.
 
-    ``lineno`` is 1-based, matching the numbering ``closes-CLAIM=<path>:<line>``
-    citations use (and what ``sed -n '<n>p'`` / ``grep -n`` report), so a
-    citation can be compared directly against it.
+    ``lineno`` is the 1-based position of the row in the reader node's answer
+    (oldest first). The node holds no file lines, so a ``closes-CLAIM=<path>:<line>``
+    citation cannot be compared against it: a ``TERMINAL`` closes by lane and
+    ticket, as a ``TERMINAL`` with no citation always did.
     """
 
     lineno: int
@@ -609,16 +627,17 @@ class LedgerClaimRow(NamedTuple):
 
 
 def parse_ledger_claims(
-    ledger_path: Path,
+    rows: Iterable[str],
 ) -> dict[str, tuple[bool, tuple[LedgerClaimRow, ...]]]:
     """Map each ticket to ``(has_terminal_ever, open_claims)``.
 
-    A ``CLAIM`` is keyed by ``(lane, line)`` [OMN-18380 AC1], not by ticket. It
-    is closed ONLY by a ``TERMINAL`` whose ``closes-CLAIM`` field cites that
-    exact line, or, when the ``TERMINAL`` carries no ``closes-CLAIM`` field, by
-    a ``TERMINAL`` whose ``lane=`` matches (and whose ticket set, if either
-    row has one, intersects the claim's). A ``TERMINAL`` naming the ticket
-    alone — no ``closes-CLAIM``, no matching lane — closes NOTHING.
+    ``rows`` are the work-ledger reader node's CLAIM and TERMINAL rows, oldest
+    first (:func:`read_ledger_rows`). A ``CLAIM`` is keyed by ``(lane, position)``
+    [OMN-18380 AC1], not by ticket. It is closed ONLY by a ``TERMINAL`` whose
+    ``lane=`` matches (and whose ticket set, if either row has one, intersects
+    the claim's); it closes the newest such open claim. A ``TERMINAL`` naming the
+    ticket alone — no matching lane — closes NOTHING. The ``closes-CLAIM`` field
+    cites a file line, which the node does not hold, so it is not consulted.
 
     The previous revision compared the newest CLAIM line against the newest
     TERMINAL line **for the ticket**, so any lane's TERMINAL on a shared
@@ -639,17 +658,12 @@ def parse_ledger_claims(
     the fail-safe direction (OMN-15551): an unprovable close leaves the claim
     open rather than assumed closed.
     """
-    if not ledger_path.is_file():
-        return {}
-
     open_claims: dict[int, LedgerClaimRow] = {}
     has_terminal_ever: dict[str, bool] = {}
     section_ticket: str | None = None
 
-    for index, raw in enumerate(
-        ledger_path.read_text(encoding="utf-8", errors="replace").splitlines()
-    ):
-        lineno = index + 1  # 1-based, matching closes-CLAIM=<path>:<line> citations
+    for index, raw in enumerate(rows):
+        lineno = index + 1  # 1-based position in the reader node's answer
         line = raw.strip()
         if line.startswith("#"):
             heading_ticket = _TICKET_RE.search(line.upper())
@@ -674,16 +688,10 @@ def parse_ledger_claims(
                 has_terminal_ever[ticket] = True
 
         if is_terminal:
-            closes_match = _CLOSES_CLAIM_LCT1_RE.search(
-                line
-            ) or _CLOSES_CLAIM_RE.search(line)
-            if closes_match:
-                cited_line = int(closes_match.group(1))
-                open_claims.pop(cited_line, None)
-            elif lane is not None:
-                # No explicit citation: close the most recent OPEN claim from
-                # the SAME lane whose tickets intersect this TERMINAL's (or
-                # either side carries no tickets at all — a bare lane close).
+            if lane is not None:
+                # Close the most recent OPEN claim from the SAME lane whose tickets
+                # intersect this TERMINAL's (or either side carries no tickets at
+                # all — a bare lane close).
                 candidates = [
                     row
                     for row in open_claims.values()
@@ -693,7 +701,7 @@ def parse_ledger_claims(
                 if candidates:
                     newest = max(candidates, key=lambda row: row.lineno)
                     open_claims.pop(newest.lineno, None)
-            # Neither field present: this TERMINAL closes nothing (rule 8).
+            # No lane: this TERMINAL closes nothing (rule 8).
             continue
 
         # is_claim (CLAIM+TERMINAL combined rows never reach here: they match
@@ -1398,7 +1406,7 @@ def newest_git_visible_mtime_age_days(
 _LEADING_TIMESTAMP_RE = re.compile(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)")
 
 
-def newest_claim_timestamp_by_ticket(ledger_path: Path) -> dict[str, float]:
+def newest_claim_timestamp_by_ticket(rows: Iterable[str]) -> dict[str, float]:
     """Map each ticket to the epoch seconds of the NEWEST ``CLAIM`` naming it.
 
     Deliberately different from :func:`parse_ledger_claims`, which answers "is a
@@ -1412,9 +1420,7 @@ def newest_claim_timestamp_by_ticket(ledger_path: Path) -> dict[str, float]:
     be aged, and a row of unknown age must not be read as old.
     """
     newest: dict[str, float] = {}
-    if not ledger_path.is_file():
-        return newest
-    for raw in ledger_path.read_text(encoding="utf-8", errors="replace").splitlines():
+    for raw in rows:
         line = raw.strip()
         if not any(marker in line for marker in _CLAIM_MARKERS):
             continue
@@ -2856,15 +2862,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Worktrees root (default: $ONEX_WORKTREES_ROOT, else $OMNI_HOME/omni_worktrees)",
     )
     parser.add_argument(
-        "--ledger",
-        default=(
-            f"{os.environ['OMNI_HOME'].rstrip('/')}/docs/tracking/ROLLING_WORK_LEDGER.md"
-            if os.environ.get("OMNI_HOME")
-            else None
-        ),
-        help="Rolling work ledger path (default: $OMNI_HOME/docs/tracking/ROLLING_WORK_LEDGER.md)",
-    )
-    parser.add_argument(
         "--execute",
         action="store_true",
         help="Actually remove prune-eligible worktrees (default: dry run)",
@@ -3086,16 +3083,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"ERROR: worktrees root is not a directory: {root}", file=sys.stderr)
         return 2
 
-    ledger_path = Path(args.ledger).expanduser() if args.ledger else None
-    if ledger_path is None or not ledger_path.is_file():
-        # Fail closed: with no ledger there is no claim-awareness, and a prune
-        # without claim-awareness is exactly the OMN-15551 hazard.
-        print(
-            f"ERROR: ledger not readable ({ledger_path}); refusing to classify "
-            "without claim-awareness (OMN-15551).",
-            file=sys.stderr,
-        )
-        return 2
+    ledger_rows = read_ledger_rows()
 
     # `--limit` bounds the CLASSIFIER, never the orphan discovery. An orphan is
     # defined by the absence of a registered worktree beneath it, so deriving
@@ -3151,7 +3139,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     print(f"Scanning {len(worktrees)} worktree(s) under {root}", flush=True)
 
-    ledger = parse_ledger_claims(ledger_path)
+    ledger = parse_ledger_claims(ledger_rows)
     print(f"Ledger: {len(ledger)} ticket(s) carry CLAIM/TERMINAL rows", flush=True)
 
     base_ref_cache: dict[Path, str | None] = {}
@@ -3221,7 +3209,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             flush=True,
         )
     newest_claim_by_ticket = (
-        newest_claim_timestamp_by_ticket(ledger_path) if args.rescue_only else {}
+        newest_claim_timestamp_by_ticket(ledger_rows) if args.rescue_only else {}
     )
     rescue_now = time.time()
 
@@ -3389,7 +3377,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     Path(decision.path),
                     root,
                     ticket_states,
-                    parse_ledger_claims(ledger_path),
+                    parse_ledger_claims(read_ledger_rows()),
                     base_ref_cache,
                     stash_cache,
                     pr_state_cache,

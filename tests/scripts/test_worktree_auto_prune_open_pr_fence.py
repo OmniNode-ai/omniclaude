@@ -30,7 +30,7 @@ from omnibase_core.validators.no_unguarded_git_subprocess import (
 
 from omniclaude.hooks.lib.worktree_prune_policy import EnumBranchPrState
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.usefixtures("ledger_reader")]
 
 _MODULE_PATH = (
     Path(__file__).resolve().parents[2] / "scripts" / "worktree_auto_prune.py"
@@ -115,8 +115,6 @@ def _row(root: Path, ledger: Path, tmp_path: Path, *extra: str) -> dict[str, obj
     argv = [
         "--worktrees-root",
         str(root),
-        "--ledger",
-        str(ledger),
         "--no-fetch",
         "--no-tracker",
         "--no-debris",
@@ -207,8 +205,6 @@ def test_a_pr_opened_during_the_scan_is_caught_at_removal_time(
     argv = [
         "--worktrees-root",
         str(root),
-        "--ledger",
-        str(ledger),
         "--no-fetch",
         "--no-tracker",
         "--no-debris",
