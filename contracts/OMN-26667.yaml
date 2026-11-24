@@ -8,38 +8,35 @@ summary: >
   same deadlock stayed open through the READER: scan_every_workflow_branch ran
   inside the try whose except GateError returns 2, so an unresolvable uses: pin on
   another branch killed the whole run instead of becoming that branch's finding.
-  In omninode_infra on 2026-11-24 about 140 stale branches carried a workflow
-  calling an omniclaude reusable deleted on 2026-10-17, one push brought a branch
-  back into the enumeration at 18:15:51Z, and every run from 18:16:34Z exited 2
-  with THE GATE DID NOT RUN, blocking every pull request in the repository. Each
-  branch is now judged under its own handler: a refusal becomes a finding named
-  for that branch, warn demotes it, fail still reports it as 1, and the branch is
-  listed as NOT JUDGED rather than reading as clean. The checkout's own refusal
-  still exits 2.
+  Measured in a private infrastructure repository on 2026-11-24: about 140 stale
+  branches carried a workflow calling a reusable deleted on 2026-10-17, one push
+  brought a branch back into the enumeration at 18:15:51Z, and every run from
+  18:16:34Z exited 2 with THE GATE DID NOT RUN, blocking every pull request there.
+  Each branch is now judged under its own handler: a refusal becomes a finding
+  named for that branch, warn demotes it, fail still reports it as 1, and the
+  branch is listed as NOT JUDGED rather than reading as clean. The checkout's own
+  refusal still exits 2. The file is a shrink-only baseline, so the handler is
+  paid for by one _text helper over seven hand-written stdout decodes, one
+  strip-once branch-name read, and the same refusal message on fuller lines.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
 requirements:
   - id: req-omn26667-other-branch-demoted
-    statement: An unreadable tree on another branch is that branch's finding, not the whole run's refusal.
+    statement: An unreadable tree on another branch is that branch's finding, not the whole run's refusal, and the checkout's own stays fail-closed.
     acceptance:
       - id: AC1
-        statement: "AC1: an unresolvable cross-repository uses: on a non-event branch is reported as that branch's finding and demoted by --other-branches warn, so the run exits 0 and the warning names the branch and the pin"
+        statement: "AC1: an unresolvable cross-repository uses: on a non-event branch is reported as that branch's finding and demoted by --other-branches warn, so the run exits 0 and the warning names the branch and the pin, while an unresolvable pin in the checkout's own tree still exits 2 with THE GATE DID NOT RUN"
   - id: req-omn26667-fail-mode-reports
     statement: Push and schedule runs still report it, as a finding rather than a refusal.
     acceptance:
       - id: AC2
         statement: "AC2: --other-branches fail still reports that branch and exits 1 rather than 2"
-  - id: req-omn26667-own-tree-fails-closed
-    statement: The fail-closed half is unchanged for the checkout's own tree.
-    acceptance:
-      - id: AC3
-        statement: "AC3: an unresolvable pin in the checkout's own tree still exits 2 with THE GATE DID NOT RUN"
   - id: req-omn26667-judged-list-honest
     statement: A branch the gate could not judge says so.
     acceptance:
-      - id: AC4
-        statement: "AC4: a branch whose tree refused is listed as NOT JUDGED with the reason, rather than reading as judged and clean"
+      - id: AC3
+        statement: "AC3: a branch whose tree refused is listed as NOT JUDGED with the reason, rather than reading as judged and clean"
 evidence_requirements:
   - kind: tests
     description: "Placement gate tests pass"
@@ -50,12 +47,12 @@ emergency_bypass:
   follow_up_ticket_id: ""
 dod_evidence:
   - id: dod-omn26667-ac1-warn-demotes
-    description: 'A dev checkout on the fleet, with main carrying a uses: the called-workflow fixture has no entry for, exits 0 under --other-branches warn and prints a ::warning:: naming main:(tree not judged) and the pin. Fails at the merge base, where the refusal escapes and returns 2.'
+    description: 'Two cases in one selection. A dev checkout on the fleet, with main carrying a uses: the called-workflow fixture has no entry for, exits 0 under --other-branches warn and prints a ::warning:: naming main:(tree not judged) and the pin; the mirror case, where the checkout itself carries that pin, still exits 2 and still prints THE GATE DID NOT RUN. The selection fails at the merge base on the first case, where the refusal escapes and returns 2. The second holds at both revisions deliberately: it is the fail-closed behaviour this change must not move.'
     source: manual
     binds_ac: [AC1]
     checks:
       - check_type: test_passes
-        check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q --no-cov -k another_branchs_unresolvable_pin_warns"
+        check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q --no-cov -k 'another_branchs_unresolvable_pin_warns or the_checkouts_own_unresolvable_pin'"
         cwd: "${OMNI_HOME}/omniclaude"
   - id: dod-omn26667-ac2-fail-reports
     description: 'The same fixture under --other-branches fail exits 1, the code for a finding, not 2. Fails at the merge base, which returns 2.'
@@ -65,18 +62,10 @@ dod_evidence:
       - check_type: test_passes
         check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q --no-cov -k fail_mode_still_fails_on_another_branchs_unresolvable_pin"
         cwd: "${OMNI_HOME}/omniclaude"
-  - id: dod-omn26667-ac3-own-tree
-    description: 'The checkout itself carrying the unresolvable pin still exits 2 and still prints THE GATE DID NOT RUN. Holds at the merge base too, deliberately: it is the behaviour this change must not move.'
-    source: manual
-    binds_ac: [AC3]
-    checks:
-      - check_type: test_passes
-        check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q --no-cov -k the_checkouts_own_unresolvable_pin_still_returns_two"
-        cwd: "${OMNI_HOME}/omniclaude"
-  - id: dod-omn26667-ac4-judged-list
+  - id: dod-omn26667-ac3-judged-list
     description: 'The per-branch judged list names the refusing branch as NOT JUDGED with the reason. Fails at the merge base, where the run ends before the list is printed.'
     source: manual
-    binds_ac: [AC4]
+    binds_ac: [AC3]
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/scripts/test_private_repo_runner_placement_gate.py -q --no-cov -k unresolvable_pin_is_named_in_the_judged_list"

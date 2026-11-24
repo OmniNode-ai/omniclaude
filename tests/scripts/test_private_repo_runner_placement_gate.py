@@ -2547,12 +2547,12 @@ def test_other_branches_reusable_warns_only_on_pull_request_events() -> None:
 # same deadlock came back through the READER: a `uses:` pin another branch
 # carries that no longer resolves raised GateError from inside
 # scan_every_workflow_branch, escaped it, and returned 2 for the whole run, so
-# the pull request failed on a branch it cannot change. Measured in
-# omninode_infra on 2026-11-24: ~140 stale branches carry
-# .github/workflows/call-occ-autobind.yml pinned to an omniclaude reusable
-# deleted on 2026-10-17, one push brought a branch back into the enumeration at
-# 18:15:51Z, and every run from 18:16:34Z exited 2 with THE GATE DID NOT RUN on
-# every pull request in the repository, main's own push included.
+# the pull request failed on a branch it cannot change. Measured in a private
+# infrastructure repository on 2026-11-24: ~140 stale branches carry a workflow
+# pinned to a reusable this repository deleted on 2026-10-17, one push brought a
+# branch back into the enumeration at 18:15:51Z, and every run from 18:16:34Z
+# exited 2 with THE GATE DID NOT RUN on every pull request there, main's own
+# push included.
 
 #: A caller whose cross-repository `uses:` the fixture will not carry, so the
 #: reader refuses it the way a deleted reusable refuses live.
