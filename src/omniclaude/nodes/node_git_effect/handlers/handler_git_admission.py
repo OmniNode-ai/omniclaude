@@ -158,6 +158,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Final
 
+from omniclaude.handlers.work_ledger_rows import read_rows
 from omniclaude.nodes.node_git_effect.container import container_git_admission
 from omniclaude.nodes.node_git_effect.container.wrapped_command_segments import (
     ASSIGNMENT as _ASSIGNMENT,
@@ -2682,6 +2683,12 @@ def _is_publish_command(command: str) -> bool:
     return False
 
 
+#: The work-ledger reader node's name for the ruling re-read (OMN-26330), the node's 30 day ceiling
+#: and the journal source the observations are kept under.
+_RULING_REREAD_READER = "git-admission-ruling-reread"
+_RULING_REREAD_SOURCE = f"work-ledger-reader:{_RULING_REREAD_READER}"
+
+
 def ruling_reread_refusal(
     environ: Mapping[str, str], working_directory: str | None = None
 ) -> str | None:
@@ -2700,27 +2707,25 @@ def ruling_reread_refusal(
         ):
             return "BLOCKED (OMN-18645): lane worktree publishing requires ONEX_LANE or ONEX_LANE_ID; resolve the executing lane before publishing."
         return None  # Operator calls outside a lane have no lane CLAIM to compare.
-    ledger_name = environ.get("ONEX_LEDGER_PATH")
     state_root = environ.get("ONEX_STATE_DIR")
-    if not ledger_name or not state_root:
-        return "BLOCKED (OMN-18645): lane publishing requires ONEX_LEDGER_PATH and ONEX_STATE_DIR."
-    ledger = Path(ledger_name).resolve()
+    if not state_root:
+        return "BLOCKED (OMN-18645): lane publishing requires ONEX_STATE_DIR."
     try:
-        # Rolls move rows; read all rolls, never an arbitrary tail or age cutoff.
-        sources = [*sorted((ledger.parent / "archive").glob("*-split.md")), ledger]
+        # The rows come from the work-ledger reader node, never from a file. One window covers
+        # the lane's CLAIM and every RULING and ACK after it.
         rows: list[tuple[str, str, dict[str, str], str, str]] = []
-        for source in sources:
-            for number, raw in enumerate(
-                source.read_text(encoding="utf-8").splitlines(), 1
-            ):
-                cells = [cell.strip() for cell in raw.split(" | ")]
-                if len(cells) < 2:
-                    continue
-                stamp = cells[0].removeprefix("- ").strip()
-                if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", stamp):
-                    continue
-                fields = dict(cell.split("=", 1) for cell in cells[2:] if "=" in cell)
-                rows.append((stamp, cells[1], fields, f"{source}:{number}", raw))
+        for raw in read_rows(
+            _RULING_REREAD_READER, 24 * 30, ("CLAIM", "RULING", "ACK"), environ=environ
+        ):
+            cells = [cell.strip() for cell in raw.split(" | ")]
+            if len(cells) < 2:
+                continue
+            stamp = cells[0].removeprefix("- ").strip()
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", stamp):
+                continue
+            fields = dict(cell.split("=", 1) for cell in cells[2:] if "=" in cell)
+            # A reader row has no line number: the citation of a row is its timestamp.
+            rows.append((stamp, cells[1], fields, stamp, raw))
         claims = [
             stamp
             for stamp, kind, fields, _, _ in rows
@@ -2759,7 +2764,7 @@ def ruling_reread_refusal(
                     continue
                 digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
                 ref = fields.get("id") or stamp
-                key = (str(ledger), lane, digest)
+                key = (_RULING_REREAD_SOURCE, lane, digest)
                 if key not in entries:
                     store.write(json.dumps([*key, stamp, ref, citation, raw]) + "\n")
                     entries[key] = (stamp, ref, citation, raw)
@@ -2769,7 +2774,7 @@ def ruling_reread_refusal(
                 (
                     (digest, *value)
                     for (source, actor, digest), value in entries.items()
-                    if source == str(ledger) and actor == lane
+                    if source == _RULING_REREAD_SOURCE and actor == lane
                 ),
                 key=lambda observation: (observation[1], observation[0]),
             )

@@ -36,6 +36,7 @@ from omniclaude.hooks.lib.worktree_prune_policy import (
     EnumPruneDisposition,
     EnumTicketLifecycle,
 )
+from tests.scripts.conftest import fake_ledger_reader
 
 pytestmark = pytest.mark.unit
 
@@ -69,6 +70,11 @@ def _scratch_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 # =============================================================================
 
 
+def _claims(ledger: Path) -> dict[str, tuple[bool, tuple[mod.LedgerClaimRow, ...]]]:
+    """The claim map over the rows a reader node answers (here, the rows a test wrote)."""
+    return mod.parse_ledger_claims(ledger.read_text(encoding="utf-8").splitlines())
+
+
 class TestParseLedgerClaims:
     """[OMN-18380] A CLAIM is keyed by (lane, line), never by ticket alone."""
 
@@ -81,42 +87,57 @@ class TestParseLedgerClaims:
             "2026-08-02T10:00:00Z | TERMINAL | lane=lane-a | ticket=OMN-1234 | landed\n",
             encoding="utf-8",
         )
-        has_terminal, open_claims = mod.parse_ledger_claims(ledger)["OMN-1234"]
+        has_terminal, open_claims = _claims(ledger)["OMN-1234"]
         assert has_terminal is True
         assert open_claims == ()
 
-    def test_terminal_with_closes_claim_citation_closes_that_exact_line(
+    def test_terminal_with_closes_claim_citation_closes_that_exact_claim(
         self, tmp_path: Path
     ) -> None:
         ledger = tmp_path / "ledger.md"
         ledger.write_text(
             "2026-08-01T10:00:00Z | CLAIM | lane=lane-a | ticket=OMN-1234 | started\n"
-            "2026-08-02T10:00:00Z | TERMINAL | lane=lane-a | closes-CLAIM=ledger.md:1"
-            " | ticket=OMN-1234 | landed\n",
+            "2026-08-02T10:00:00Z | TERMINAL | lane=lane-a"
+            " | closes-CLAIM=2026-08-01T10:00:00Z | ticket=OMN-1234 | landed\n",
             encoding="utf-8",
         )
-        has_terminal, open_claims = mod.parse_ledger_claims(ledger)["OMN-1234"]
+        has_terminal, open_claims = _claims(ledger)["OMN-1234"]
         assert has_terminal is True
         assert open_claims == ()
 
-    def test_terminal_with_an_lct1_claim_token_closes_the_tokens_line(
-        self, tmp_path: Path
-    ) -> None:
-        """[OMN-19409] The token's appended_at ends in HH:MM:SSZ. Read as a
-        path:line citation, the minutes (here 33) become the line number and
-        the real claim on line 2 stays open forever."""
+    def test_terminal_citing_a_file_line_closes_nothing(self, tmp_path: Path) -> None:
+        """[OMN-26330] A row of the reader node has no line number, so the older
+        `closes-CLAIM=<path>:<line>` and ledger_lock token citations name no claim
+        this parser can resolve. Such a TERMINAL closes nothing: a claim left open is
+        the safe direction, and the lane-match fallback is not applied to it either."""
         ledger = tmp_path / "ledger.md"
         ledger.write_text(
             "2026-08-01T09:00:00Z | CLAIM | lane=lane-z | ticket=OMN-9999 | unrelated\n"
             "2026-08-01T10:00:00Z | CLAIM | lane=lane-a | ticket=OMN-1234 | started\n"
             "2026-08-02T10:00:00Z | TERMINAL | lane=lane-a"
             " | closes-CLAIM=LCT1-4250486-2-50796cfe849e-2026-08-01T10:33:04Z"
-            " | ticket=OMN-1234 | landed\n",
+            " | ticket=OMN-1234 | landed\n"
+            "2026-08-02T11:00:00Z | TERMINAL | lane=lane-z"
+            " | closes-CLAIM=ledger.md:1 | ticket=OMN-9999 | landed\n",
             encoding="utf-8",
         )
-        claims = mod.parse_ledger_claims(ledger)
-        assert claims["OMN-1234"][1] == ()
-        assert len(claims["OMN-9999"][1]) == 1, "only the cited line closes"
+        claims = _claims(ledger)
+        assert len(claims["OMN-1234"][1]) == 1
+        assert len(claims["OMN-9999"][1]) == 1
+
+    def test_the_cited_timestamp_closes_only_the_claim_it_names(
+        self, tmp_path: Path
+    ) -> None:
+        ledger = tmp_path / "ledger.md"
+        ledger.write_text(
+            "2026-08-01T10:00:00Z | CLAIM | lane=lane-a | ticket=OMN-1234 | first\n"
+            "2026-08-01T11:00:00Z | CLAIM | lane=lane-a | ticket=OMN-1234 | second\n"
+            "2026-08-02T10:00:00Z | TERMINAL | lane=lane-a"
+            " | closes-CLAIM=2026-08-01T10:00:00Z | ticket=OMN-1234 | first landed\n",
+            encoding="utf-8",
+        )
+        _, open_claims = _claims(ledger)["OMN-1234"]
+        assert [claim.stamp for claim in open_claims] == ["2026-08-01T11:00:00Z"]
 
     def test_peer_lanes_terminal_does_not_clear_a_different_lanes_claim(
         self, tmp_path: Path
@@ -128,10 +149,10 @@ class TestParseLedgerClaims:
             "2026-08-01T10:00:00Z | CLAIM | lane=lane-a | ticket=OMN-1234 | started\n"
             "2026-08-02T10:00:00Z | CLAIM | lane=lane-b | ticket=OMN-1234 | started too\n"
             "2026-08-03T10:00:00Z | TERMINAL | lane=lane-a"
-            " | closes-CLAIM=ledger.md:1 | ticket=OMN-1234 | lane a landed\n",
+            " | closes-CLAIM=2026-08-01T10:00:00Z | ticket=OMN-1234 | lane a landed\n",
             encoding="utf-8",
         )
-        has_terminal, open_claims = mod.parse_ledger_claims(ledger)["OMN-1234"]
+        has_terminal, open_claims = _claims(ledger)["OMN-1234"]
         assert has_terminal is True
         assert len(open_claims) == 1
         assert open_claims[0].lane == "lane-b"
@@ -150,7 +171,7 @@ class TestParseLedgerClaims:
             " | unrelated work finished\n",
             encoding="utf-8",
         )
-        has_terminal, open_claims = mod.parse_ledger_claims(ledger)["OMN-1234"]
+        has_terminal, open_claims = _claims(ledger)["OMN-1234"]
         assert has_terminal is True
         assert len(open_claims) == 1
         assert open_claims[0].lane == "lane-a"
@@ -163,7 +184,7 @@ class TestParseLedgerClaims:
             "2026-08-03T10:00:00Z | CLAIM | lane=lane-b | ticket=OMN-1234 | repair lane\n",
             encoding="utf-8",
         )
-        has_terminal, open_claims = mod.parse_ledger_claims(ledger)["OMN-1234"]
+        has_terminal, open_claims = _claims(ledger)["OMN-1234"]
         assert has_terminal is True
         assert len(open_claims) == 1
         assert "repair lane" in open_claims[0].text
@@ -173,27 +194,12 @@ class TestParseLedgerClaims:
     ) -> None:
         ledger = tmp_path / "ledger.md"
         ledger.write_text(
-            "### OMN-1234 — a lane\n\n- **Status:** CLAIM+TERMINAL\n",
+            "2026-08-01T10:00:00Z | CLAIM+TERMINAL | lane=lane-a | ticket=OMN-1234 | done\n",
             encoding="utf-8",
         )
-        has_terminal, open_claims = mod.parse_ledger_claims(ledger)["OMN-1234"]
+        has_terminal, open_claims = _claims(ledger)["OMN-1234"]
         assert has_terminal is True
         assert open_claims == ()
-
-    def test_section_body_inherits_the_ticket_from_its_heading(
-        self, tmp_path: Path
-    ) -> None:
-        """`- **Status:** IN PROGRESS.` carries no ticket id of its own."""
-        ledger = tmp_path / "ledger.md"
-        ledger.write_text(
-            "### OMN-1234 — a lane\n\n"
-            "- **Scope:** something\n"
-            "- **Status:** IN PROGRESS.\n",
-            encoding="utf-8",
-        )
-        has_terminal, open_claims = mod.parse_ledger_claims(ledger)["OMN-1234"]
-        assert has_terminal is False
-        assert len(open_claims) == 1
 
     def test_prose_mentioning_a_ticket_is_not_a_claim(self, tmp_path: Path) -> None:
         ledger = tmp_path / "ledger.md"
@@ -201,10 +207,10 @@ class TestParseLedgerClaims:
             "Some prose about the claim gate and OMN-1234 being terminal-ish.\n",
             encoding="utf-8",
         )
-        assert mod.parse_ledger_claims(ledger) == {}
+        assert _claims(ledger) == {}
 
-    def test_missing_ledger_returns_empty_map(self, tmp_path: Path) -> None:
-        assert mod.parse_ledger_claims(tmp_path / "absent.md") == {}
+    def test_no_rows_returns_empty_map(self) -> None:
+        assert mod.parse_ledger_claims([]) == {}
 
     def test_tickets_are_tracked_independently(self, tmp_path: Path) -> None:
         ledger = tmp_path / "ledger.md"
@@ -213,10 +219,48 @@ class TestParseLedgerClaims:
             "2026-08-01T10:00:01Z | CLAIM | lane=lane-y | ticket=OMN-2 | live\n",
             encoding="utf-8",
         )
-        parsed = mod.parse_ledger_claims(ledger)
+        parsed = _claims(ledger)
         assert parsed["OMN-1"] == (True, ())
         assert parsed["OMN-2"][0] is False
         assert len(parsed["OMN-2"][1]) == 1
+
+
+class TestReadLedgerRows:
+    """[OMN-26330] The pruner reads the ledger only through the work-ledger reader node."""
+
+    def test_the_read_names_its_reader_window_and_kinds(self) -> None:
+        assert mod.LEDGER_READ == ("worktree-auto-prune", 720, ("CLAIM", "TERMINAL"))
+
+    @pytest.mark.parametrize("code", [3, 69, 2])
+    def test_main_refuses_with_exit_2_when_the_reader_does_not_answer(
+        self, tmp_path: Path, code: int
+    ) -> None:
+        root = tmp_path / "omni_worktrees"
+        root.mkdir()
+        reader = tmp_path / "reader"
+        reader.write_text(f"#!/bin/sh\nexit {code}\n", encoding="utf-8")
+        reader.chmod(0o755)
+        assert (
+            mod.main(["--worktrees-root", str(root), "--ledger-reader", str(reader)])
+            == 2
+        )
+
+    def test_main_refuses_with_exit_2_when_there_is_no_interpreter(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        root = tmp_path / "omni_worktrees"
+        root.mkdir()
+        monkeypatch.delenv("ONEX_LEDGER_READER_PYTHON", raising=False)
+        monkeypatch.delenv("ONEX_LEDGER_BUS_APPEND_COMMAND", raising=False)
+        monkeypatch.setenv("OMNI_HOME", str(tmp_path))
+        assert mod.main(["--worktrees-root", str(root)]) == 2
+
+    def test_the_script_names_neither_the_ledger_file_nor_its_path_variable(
+        self,
+    ) -> None:
+        text = _MODULE_PATH.read_text(encoding="utf-8")
+        assert "ONEX_LEDGER_" + "PATH" not in text
+        assert '"--ledger"' not in text
 
 
 class TestParseLedgerClaimsRealFixtureOMN18380:
@@ -266,7 +310,7 @@ class TestParseLedgerClaimsRealFixtureOMN18380:
             + "\n",
             encoding="utf-8",
         )
-        has_terminal, open_claims = mod.parse_ledger_claims(ledger)["OMN-16901"]
+        has_terminal, open_claims = _claims(ledger)["OMN-16901"]
         assert has_terminal is True  # the peer TERMINAL did cite OMN-16901
         assert len(open_claims) == 1  # but it did NOT close this lane's CLAIM
         assert open_claims[0].lane == "worktree-cleanup-phase2"
@@ -279,7 +323,7 @@ class TestParseLedgerClaimsRealFixtureOMN18380:
         (describing the bug) — it must not itself open or close anything."""
         ledger = tmp_path / "ledger.md"
         ledger.write_text(self._FRICTION_7963 + "\n", encoding="utf-8")
-        assert mod.parse_ledger_claims(ledger) == {}
+        assert _claims(ledger) == {}
 
 
 class TestSelectBlockingClaim:
@@ -291,7 +335,7 @@ class TestSelectBlockingClaim:
 
     def test_a_claim_naming_this_exact_worktree_path_blocks(self) -> None:
         claim = mod.LedgerClaimRow(
-            lineno=1,
+            stamp="2026-08-01T10:00:01Z",
             lane="lane-a",
             tickets=frozenset({"OMN-1"}),
             text="CLAIM | lane=lane-a | worktree=/wt/OMN-1/repo | ticket=OMN-1",
@@ -302,7 +346,7 @@ class TestSelectBlockingClaim:
 
     def test_a_claim_naming_this_worktrees_branch_blocks(self) -> None:
         claim = mod.LedgerClaimRow(
-            lineno=1,
+            stamp="2026-08-01T10:00:01Z",
             lane="lane-a",
             tickets=frozenset({"OMN-1"}),
             text="CLAIM | lane=lane-a | branch lane-a/omn-1-fix-thing | ticket=OMN-1",
@@ -317,7 +361,7 @@ class TestSelectBlockingClaim:
         """Absent an explicit path/branch match, ANY open claim on the ticket
         still blocks — un-named is not proof of exclusion (OMN-15551)."""
         claim = mod.LedgerClaimRow(
-            lineno=1,
+            stamp="2026-08-01T10:00:01Z",
             lane="lane-a",
             tickets=frozenset({"OMN-1"}),
             text="CLAIM | lane=lane-a | ticket=OMN-1 | generic scope, no paths",
@@ -965,8 +1009,8 @@ class TestRemovalTimeRevalidation:
             [
                 "--worktrees-root",
                 str(root),
-                "--ledger",
-                str(ledger),
+                "--ledger-reader",
+                fake_ledger_reader(ledger),
                 "--execute",
                 "--no-fetch",
                 "--no-tracker",
@@ -1007,8 +1051,8 @@ class TestReportIsPathPortable:
             [
                 "--worktrees-root",
                 str(root),
-                "--ledger",
-                str(ledger),
+                "--ledger-reader",
+                fake_ledger_reader(ledger),
                 "--execute",
                 "--no-debris",
                 "--no-fetch",
@@ -1142,8 +1186,8 @@ class TestCheckpointResumeEndToEnd:
             [
                 "--worktrees-root",
                 str(root),
-                "--ledger",
-                str(ledger),
+                "--ledger-reader",
+                fake_ledger_reader(ledger),
                 "--no-debris",
                 "--no-fetch",
                 "--no-tracker",
@@ -1179,8 +1223,8 @@ class TestCheckpointResumeEndToEnd:
             [
                 "--worktrees-root",
                 str(root),
-                "--ledger",
-                str(ledger),
+                "--ledger-reader",
+                fake_ledger_reader(ledger),
                 "--no-debris",
                 "--no-fetch",
                 "--no-tracker",
@@ -1215,8 +1259,8 @@ class TestCheckpointResumeEndToEnd:
             [
                 "--worktrees-root",
                 str(root),
-                "--ledger",
-                str(ledger),
+                "--ledger-reader",
+                fake_ledger_reader(ledger),
                 "--no-debris",
                 "--no-fetch",
                 "--no-tracker",
@@ -1250,8 +1294,8 @@ class TestCheckpointResumeEndToEnd:
             [
                 "--worktrees-root",
                 str(root),
-                "--ledger",
-                str(ledger),
+                "--ledger-reader",
+                fake_ledger_reader(ledger),
                 "--no-debris",
                 "--no-fetch",
                 "--no-tracker",
@@ -1293,8 +1337,8 @@ class TestNoDebrisFlag:
             [
                 "--worktrees-root",
                 str(root),
-                "--ledger",
-                str(ledger),
+                "--ledger-reader",
+                fake_ledger_reader(ledger),
                 "--execute",
                 "--no-debris",
                 "--no-fetch",
