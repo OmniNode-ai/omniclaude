@@ -46,7 +46,7 @@ def rows_for_stamp(
         )
     except (OSError, SubprocessError):
         return []
-    if done.returncode not in (0, 1):
+    if done.returncode != 0:
         return []
     return [
         line for line in done.stdout.splitlines() if line.split(separator)[0] == stamp
