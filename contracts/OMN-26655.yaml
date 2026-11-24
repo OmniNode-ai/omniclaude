@@ -46,7 +46,7 @@ dod_evidence:
         check_value: "uv run pytest tests/hooks/test_done_flip_guard_live_ticket.py -q --no-cov -k ac2"
         cwd: "."
   - id: dod-omn26655-ac4-unchanged
-    description: "Canceled and Duplicate transitions stay allowed, even with the live ticket unreadable, and a live close-if-done label still closes a ticket with no cited pull request but never waives an open cited one. These pin behaviour that already held at the merge base."
+    description: "Canceled and Duplicate transitions stay allowed, even with the live ticket unreadable, and a live close-if-done label still closes a ticket with no cited pull request but never waives an open cited one. Most of these pin behaviour that already held at the merge base; the last one fails there, because the merge base allows a Done whose call omits an open pull request the live ticket cites, even when the live ticket carries the label."
     source: manual
     binds_ac: [AC4]
     checks:

@@ -290,3 +290,24 @@ def test_ac4_live_exemption_label_still_does_not_waive_an_open_cited_pr() -> Non
     )
     assert not decision.allowed
     assert "pr_not_merged" in decision.reason
+
+
+def test_ac4_live_exemption_label_does_not_waive_a_citation_the_call_leaves_out() -> (
+    None
+):
+    """A live exemption label never waives an open pull request the live ticket
+    cites, also when the call carries a description that omits the citation.
+
+    The merge base reads citations from the call's own description, so it sees no
+    pull request and allows the Done on repo-bound evidence; the guard judges the
+    live citation and refuses with ``pr_not_merged``."""
+    decision = guard.decide(
+        _call({"state": "Done", "description": "a description with no pull request"}),
+        repo_evidence_probe=_repo_pass_probe,
+        pr_fetcher=_open_fetcher,
+        linear_fetcher=_live(
+            f"decision only, see {OPEN_PR_URL}", labels=["close-if-done"]
+        ),
+    )
+    assert not decision.allowed
+    assert "pr_not_merged" in decision.reason
