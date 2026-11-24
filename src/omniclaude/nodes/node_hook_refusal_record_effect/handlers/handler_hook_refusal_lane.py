@@ -431,7 +431,7 @@ def _claim_rows(env: Mapping[str, str]) -> list[str]:
         )
     except (OSError, subprocess.SubprocessError):
         return []
-    return done.stdout.splitlines() if done.returncode in (0, 1) else []
+    return done.stdout.splitlines() if done.returncode == 0 else []
 
 
 def open_claims(

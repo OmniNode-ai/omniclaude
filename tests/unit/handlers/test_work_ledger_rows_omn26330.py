@@ -43,9 +43,10 @@ def test_a_reader_that_did_not_answer_is_unavailable(tmp_path: Path, code: int) 
         read_rows("r", 1, interpreter=_reader(tmp_path, f"exit {code}"), environ={})
 
 
-def test_a_stale_answer_still_carries_its_rows(tmp_path: Path) -> None:
+def test_exit_one_with_no_reader_line_is_unavailable(tmp_path: Path) -> None:
     reader = _reader(tmp_path, "echo row\nexit 1")
-    assert read_rows("r", 1, interpreter=reader, environ={}) == ["row"]
+    with pytest.raises(LedgerRowsUnavailable):
+        read_rows("r", 1, interpreter=reader, environ={})
 
 
 def test_a_missing_interpreter_is_unavailable() -> None:

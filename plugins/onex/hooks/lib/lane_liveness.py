@@ -375,7 +375,7 @@ def _lane_rows(lane: str) -> list[str]:
         )
     except (OSError, subprocess.SubprocessError):
         return []
-    return done.stdout.splitlines() if done.returncode in (0, 1) else []
+    return done.stdout.splitlines() if done.returncode == 0 else []
 
 
 def last_ledger_row(lane: str) -> tuple[float | None, str | None]:
