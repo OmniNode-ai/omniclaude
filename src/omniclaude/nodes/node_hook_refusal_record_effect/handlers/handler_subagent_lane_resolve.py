@@ -294,7 +294,7 @@ def subagent_lane(
     # module, so its read arguments are this call's alone. An unreadable ledger reads as no open
     # CLAIM, which confirms nothing.
     for lane in dict.fromkeys(x for x in (named, prompted, parent_lane) if x):
-        reader.READ_ARGS += f" --row-lane {reader.lane_cell(lane)}"
+        reader.__dict__["READ_ARGS"] += f" --row-lane {reader.lane_cell(lane)}"
     claims = reader.open_claims(environ)
     if named and any(claim.get("lane") == named for claim in claims):
         return named, named, LANE_SOURCE_SIDECAR_CLAIM, ""
