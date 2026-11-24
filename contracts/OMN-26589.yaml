@@ -1,0 +1,76 @@
+schema_version: "1.0.0"
+ticket_id: OMN-26589
+title: The omniclaude credential rotation guard and canonical clone converge script reach the ledger over the bus client, not the ledger file
+summary: >-
+  plugins/onex/hooks/lib/credential_rotation_guard.py read the cited OPERATOR-CONSENT row by opening the ledger file
+  and its archive; it now asks the work-ledger reader node for the one row at the cited instant (reader name
+  credential-rotation-consent, listed in moved_readers of the overlays repository), refuses a line-number citation
+  because the node has no lines, and refuses when the node does not answer. scripts/converge-canonical-clone.sh
+  required the ledger path variable and appended with the file form of the ledger CLI; it now puts the row on the stdin of
+  onex-ledger append-rows --timeout 30s - and names no ledger file (operator ruling 2026-11-05 and operator ruling
+  2026-11-14T14:43:55Z). The guard keeps one citation-grammar string that names the ledger file and reads none.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn26589-credential-converge-bus
+    statement: The credential rotation guard and the canonical clone converge script reach the ledger over the bus client.
+    acceptance:
+      - id: AC1
+        statement: >-
+          AC1: the census node run over an omniclaude worktree lists neither file as a runtime hit except a guard that
+          reads no file, and the census ratchet rows of cleared files are lowered -- falsifier: ONEX_LEDGER_CENSUS_ROOT
+          set and uv run python -m omnimarket.nodes.node_work_ledger_file_census_effect --packaged-overlay --register
+          omniclaude --directory omniclaude=<worktree> --verbose, grep of the two paths, run first on origin/dev as the
+          positive control
+      - id: AC2
+        statement: >-
+          AC2: a test run with the ledger path variable unset and no ledger file on disk shows each moved reader answering from
+          the reader node and never opening a file -- falsifier: uv run pytest on the new tests -q, failing on the
+          merge base
+      - id: AC3
+        statement: >-
+          AC3: a reader node that does not answer leaves each moved reader failing closed with the answer an unreadable
+          ledger gives today -- falsifier: uv run pytest on the new tests -k unanswered -q, failing on the merge base
+evidence_requirements:
+  - kind: tests
+    description: The guard and converge tests pass at the head and fail at the merge base.
+    command: uv run pytest tests/hooks/test_credential_rotation_guard.py tests/scripts/test_converge_canonical_clone.py -q
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+  - id: dod-omn26589-ac1-ratchet-row-removed
+    description: The ratchet file no longer carries a row for the converge script.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC1
+    checks:
+      - check_type: command
+        check_value: >-
+          bash -c '! grep -q "converge-canonical-clone.sh" config/ledger_file_census_ratchet.yaml'
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn26589-ac2-bus-reads-and-appends
+    description: >-
+      With no ledger file on disk the guard resolves the cited consent row from the reader node and the converge script
+      appends over the bus with the row on stdin; both fail at the merge base.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC2
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/hooks/test_credential_rotation_guard.py tests/scripts/test_converge_canonical_clone.py -q
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn26589-ac3-unanswered-fails-closed
+    description: A reader node that does not answer refuses the rotation as an unreadable ledger; fails at the merge base.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC3
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/hooks/test_credential_rotation_guard.py -k unanswered -q
+        cwd: ${OMNI_HOME}/omniclaude

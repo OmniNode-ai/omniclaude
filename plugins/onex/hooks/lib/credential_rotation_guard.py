@@ -63,7 +63,7 @@ What it refuses, and what it deliberately does not
 A shell segment whose tokens match a configured rotation shape is refused unless
 the command carries::
 
-    ROTATION-CONSENT: docs/tracking/ROLLING_WORK_LEDGER.md:<line>
+    ROTATION-CONSENT: docs/tracking/ROLLING_WORK_LEDGER.md@<row timestamp>
 
 resolving to an ``OPERATOR-CONSENT`` row -- rule 18 of the workspace doctrine,
 extended by rule 22 with ``approved_by=<operator|jake>`` -- whose APPROVED SCOPE
@@ -179,6 +179,7 @@ import json
 import os
 import re
 import shlex
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -214,8 +215,7 @@ GATE_BIT_NAME: Final[str] = "PRE_TOOL_AUTHORIZATION_SHIM"
 TICKET: Final[str] = "OMN-17957"
 
 CONSENT_CITATION_GRAMMAR: Final[str] = (
-    "ROTATION-CONSENT: docs/tracking/ROLLING_WORK_LEDGER.md@<row timestamp> "
-    "(or the older :<line> form)"
+    "ROTATION-CONSENT: docs/tracking/ROLLING_WORK_LEDGER.md@<row timestamp>"
 )
 
 #: The citation, read from the raw command text. TWO FORMS (OMN-18620).
@@ -229,9 +229,9 @@ CONSENT_CITATION_GRAMMAR: Final[str] = (
 #: rotation while reporting a reason that describes the wrong row entirely.
 #:
 #: A row timestamp travels with the row -- into the archive when it is rolled --
-#: so the timestamp form survives any number of rolls. The line form is kept
-#: working because citations already written must not be invalidated by the
-#: change that introduces the replacement.
+#: so the timestamp form survives any number of rolls. The consent row is read from the
+#: work-ledger reader node, which has no line numbers (OMN-26589), so a line citation still
+#: parses here and is refused with the timestamp form named, never resolved.
 _CITATION: Final[re.Pattern[str]] = re.compile(
     r"ROTATION-CONSENT:\s*(?P<path>[^\s:@'\"]+)"
     r"(?::(?P<line>\d+)|@(?P<stamp>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z))"
@@ -823,41 +823,64 @@ def _citation_path_is_canonical(cited: str, policy: Policy) -> bool:
     )
 
 
-def _archive_dir_for(ledger: Path) -> Path:
-    """Where a roll of ``ledger`` puts the rows it removed."""
-    return ledger.parent / "archive"
+#: The work-ledger reader node's name for the consent read (OMN-26589), and the bound on it.
+#: The reader node can answer slowly, so the read is bounded; a read that did not answer is an
+#: unreadable ledger, which this guard refuses (an unverifiable rotation is never assumed clean).
+CONSENT_READER: Final[str] = "credential-rotation-consent"
+READ_TIMEOUT_S: Final[int] = 25
+
+#: One point read: the rows stamped at one instant with one kind, at any age, from the reader
+#: node. Run by the dispatch venv, which holds the node; argv carries reader, stamp and kind.
+#: Exit 0 answered (rows on stdout, possibly none), exit 2 the node did not answer.
+_ROW_AT_PROGRAM: Final[str] = (
+    "import sys\n"
+    "from datetime import datetime\n"
+    "from omnimarket.nodes.node_work_ledger_reader_effect.adapters.rows_read import "
+    "LedgerRowsUnreadableError, read_row_at\n"
+    "try:\n"
+    "    rows = read_row_at(sys.argv[1], "
+    "datetime.fromisoformat(sys.argv[2].replace('Z', '+00:00')), sys.argv[3])\n"
+    "except LedgerRowsUnreadableError as exc:\n"
+    "    sys.stderr.write(str(exc) + '\\n')\n"
+    "    sys.exit(2)\n"
+    "sys.stdout.write('\\n'.join(rows) + '\\n' if rows else '')\n"
+)
 
 
-def _is_real_file_inside(candidate: Path, directory: Path) -> bool:
-    """Whether ``candidate`` is a regular file that really lives in ``directory``.
+class _ConsentReadError(Exception):
+    """The reader node did not answer; the consent row cannot be told present or absent."""
 
-    THE GLOB RESTRICTS THE NAME, NOT THE INODE. A symlink called
-    `<ledger stem>_<date>-split.md` matches the pattern, and `read_text` follows
-    symlinks, so without this a link planted in the archive directory could point
-    at any file on the host and answer a consent citation with whatever that file
-    contains. The name is attacker-choosable; the target must not be.
 
-    Four conditions, each load-bearing: the DIRECTORY is not itself a symlink
-    (otherwise every entry in it resolves consistently and the check passes while
-    reading a tree somewhere else entirely -- a case found by the test for it,
-    not by inspection); the entry is not a symlink; it is a regular file, not a
-    fifo, device or directory; and it resolves to something whose parent really
-    is this directory.
+def _consent_rows_at(stamp: str, root: Path) -> list[str]:
+    """Every OPERATOR-CONSENT row stamped ``stamp``, from the work-ledger reader node.
 
-    What this does NOT claim: the archive is not a trusted store. Anyone who can
-    plant a file in it can also append a row to the live ledger, which is read
-    with no such check because it is the file the citation names. This closes one
-    specific vector -- a name that matches the roll pattern standing for content
-    that lives anywhere on the host -- and nothing wider.
+    Never opens a ledger file. A node that did not answer raises ``_ConsentReadError``;
+    zero rows is a real answer (absent), and more than one is the caller's ambiguity.
     """
+    python = f"{root}/.onex-dispatch-venv/bin/python"
     try:
-        if directory.is_symlink():
-            return False
-        if candidate.is_symlink() or not candidate.is_file():
-            return False
-        return candidate.resolve().parent == directory.resolve()
-    except OSError:
-        return False
+        done = subprocess.run(
+            [
+                python,
+                "-I",
+                "-c",
+                _ROW_AT_PROGRAM,
+                CONSENT_READER,
+                stamp,
+                _REQUIRED_ROW_KIND,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=READ_TIMEOUT_S,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise _ConsentReadError(str(exc)) from exc
+    if done.returncode != 0:
+        raise _ConsentReadError(
+            done.stderr.strip()[:200] or f"reader exited {done.returncode}"
+        )
+    return [line for line in done.stdout.splitlines() if line.strip()]
 
 
 def _rows_with_stamp(rows: list[str], stamp: str) -> list[str]:
@@ -882,7 +905,7 @@ def _cited_ref(cited: str, match: re.Match[str]) -> str:
 
 
 def _read_consent_row(
-    command: str, policy: Policy, omni_home: Path
+    command: str, policy: Policy, registry_root: Path
 ) -> _ConsentVerdict | None:
     """Resolve the citation in ``command``, or ``None`` when there is none."""
     match = _CITATION.search(command)
@@ -906,93 +929,61 @@ def _read_consent_row(
             scope="",
         )
 
-    ledger = omni_home / cited
-    try:
-        rows = ledger.read_text(encoding="utf-8").splitlines()
-    except OSError as exc:
+    stamp = match.group("stamp")
+    if stamp is None:
+        # A line number names a position in one file, and no file is read any more: the
+        # row's timestamp is the one address that travels with the row (OMN-26589).
         return _ConsentVerdict(
-            code="consent_ledger_unreadable",
-            reason=f"the cited ledger {ledger} could not be read ({exc})",
+            code="consent_line_form_unresolvable",
+            reason=(
+                f"the citation {_cited_ref(cited, match)} names a line, and the ledger "
+                "is read from the work-ledger reader node, which has no line numbers"
+            ),
             fix=(
-                "set OMNI_HOME to the omni_home clone and cite a line that "
-                "exists in its rolling ledger"
+                f"cite the row as {cited}@<row timestamp>, copied from the consent "
+                "row itself, which a ledger roll cannot move"
             ),
             scope="",
         )
-
-    stamp = match.group("stamp")
-    if stamp is not None:
-        located = _rows_with_stamp(rows, stamp)
-        if not located and _archive_dir_for(ledger).is_dir():
-            # A rolled row is still a real consent row. This is the whole point
-            # of the timestamp form: the row moved into the archive and its
-            # timestamp went with it.
-            #
-            # SCOPED TO THE ROLL'S OWN FILENAME SHAPE, not `*.md`. A bare glob
-            # would read every markdown file in the directory, so anything that
-            # could land a file there -- a stray doc, a partial write, a crafted
-            # name -- could carry a row with the target timestamp and the
-            # required fields and authorise a rotation nobody consented to. The
-            # names this accepts are the ones `ledger_lock.py` itself writes:
-            # `<ledger stem>_<date>-split.md`, beside THIS ledger.
-            for archive in sorted(
-                _archive_dir_for(ledger).glob(f"{ledger.stem}_*-split.md")
-            ):
-                if not _is_real_file_inside(archive, _archive_dir_for(ledger)):
-                    continue
-                try:
-                    archived = archive.read_text(encoding="utf-8").splitlines()
-                except OSError:
-                    continue
-                located.extend(_rows_with_stamp(archived, stamp))
-        if not located:
-            return _ConsentVerdict(
-                code="consent_stamp_absent",
-                reason=(
-                    f"no row in {cited} or its archive carries the timestamp {stamp}"
-                ),
-                fix=(
-                    "cite the timestamp the consent row actually opens with, "
-                    "copied from the row rather than retyped"
-                ),
-                scope="",
-            )
-        if len(located) > 1:
-            # AMBIGUITY IS A REFUSAL, never a pick. Two lanes can append inside
-            # the same second, so a timestamp is not guaranteed unique, and
-            # choosing one of several rows would mean this guard authorising a
-            # rotation against a row nobody cited.
-            return _ConsentVerdict(
-                code="consent_stamp_ambiguous",
-                reason=(
-                    f"{len(located)} rows carry the timestamp {stamp}, so the "
-                    "citation does not name one row"
-                ),
-                fix=(
-                    "cite the line form for this row instead, or have the "
-                    "approver re-append the consent row so its timestamp is "
-                    "unique"
-                ),
-                scope="",
-            )
-        row = located[0]
-    else:
-        line_no = int(match.group("line"))
-        if line_no < 1 or line_no > len(rows):
-            return _ConsentVerdict(
-                code="consent_line_absent",
-                reason=(
-                    f"the citation names line {line_no} of {cited}, which has "
-                    f"{len(rows)} lines"
-                ),
-                fix=(
-                    "cite the line number the consent row actually occupies, or "
-                    "better, cite it as <path>@<row timestamp>, which a ledger "
-                    "roll cannot move"
-                ),
-                scope="",
-            )
-        row = rows[line_no - 1]
+    try:
+        located = _rows_with_stamp(_consent_rows_at(stamp, registry_root), stamp)
+    except _ConsentReadError as exc:
+        return _ConsentVerdict(
+            code="consent_ledger_unreadable",
+            reason=f"the work-ledger reader node did not answer ({exc})",
+            fix=(
+                "set OMNI_HOME to the registry root whose dispatch venv holds the "
+                "reader node, and retry once the node answers"
+            ),
+            scope="",
+        )
+    if not located:
+        return _ConsentVerdict(
+            code="consent_stamp_absent",
+            reason=f"no {_REQUIRED_ROW_KIND} row in the ledger carries the timestamp {stamp}",
+            fix=(
+                "cite the timestamp the consent row actually opens with, "
+                "copied from the row rather than retyped"
+            ),
+            scope="",
+        )
+    if len(located) > 1:
+        # AMBIGUITY IS A REFUSAL, never a pick. Two lanes can append inside
+        # the same second, so a timestamp is not guaranteed unique, and
+        # choosing one of several rows would mean this guard authorising a
+        # rotation against a row nobody cited.
+        return _ConsentVerdict(
+            code="consent_stamp_ambiguous",
+            reason=(
+                f"{len(located)} rows carry the timestamp {stamp}, so the "
+                "citation does not name one row"
+            ),
+            fix=(
+                "have the approver re-append the consent row so its timestamp is unique"
+            ),
+            scope="",
+        )
+    row = located[0]
     fields = [field.strip() for field in row.split("|")]
     if _REQUIRED_ROW_KIND not in fields:
         return _ConsentVerdict(
