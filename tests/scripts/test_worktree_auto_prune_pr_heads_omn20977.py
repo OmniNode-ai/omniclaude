@@ -43,6 +43,7 @@ from omnibase_core.validators.no_unguarded_git_subprocess import (
 )
 
 from omniclaude.hooks.lib.worktree_prune_policy import EnumBranchPrState
+from tests.scripts.conftest import fake_ledger_reader
 
 pytestmark = pytest.mark.unit
 
@@ -298,8 +299,8 @@ def _run_main(
     argv = [
         "--worktrees-root",
         str(root),
-        "--ledger",
-        str(ledger),
+        "--ledger-reader",
+        fake_ledger_reader(ledger),
         "--no-fetch",
         "--no-tracker",
         "--no-debris",

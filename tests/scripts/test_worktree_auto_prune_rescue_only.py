@@ -45,6 +45,7 @@ from omniclaude.hooks.lib.worktree_prune_policy import (
     EnumRescueOnlyDisposition,
     EnumRescueOnlyHoldReason,
 )
+from tests.scripts.conftest import fake_ledger_reader
 
 pytestmark = pytest.mark.unit
 
@@ -187,8 +188,8 @@ def _run(
     argv = [
         "--worktrees-root",
         str(fixture.root),
-        "--ledger",
-        str(fixture.ledger),
+        "--ledger-reader",
+        fake_ledger_reader(fixture.ledger),
         "--no-fetch",
         "--no-tracker",
         "--no-debris",
@@ -291,8 +292,8 @@ class TestAgeBarIsRequiredAndCarriesNoDefault:
                 [
                     "--worktrees-root",
                     str(rescue_fixture.root),
-                    "--ledger",
-                    str(rescue_fixture.ledger),
+                    "--ledger-reader",
+                    fake_ledger_reader(rescue_fixture.ledger),
                     "--no-fetch",
                     "--no-tracker",
                     "--rescue-only",
@@ -322,8 +323,8 @@ class TestAgeBarIsRequiredAndCarriesNoDefault:
                 [
                     "--worktrees-root",
                     str(rescue_fixture.root),
-                    "--ledger",
-                    str(rescue_fixture.ledger),
+                    "--ledger-reader",
+                    fake_ledger_reader(rescue_fixture.ledger),
                     "--no-fetch",
                     "--no-tracker",
                     "--no-debris",
@@ -582,8 +583,8 @@ class TestRescueOnlyIsOffUnlessAskedFor:
                 [
                     "--worktrees-root",
                     str(rescue_fixture.root),
-                    "--ledger",
-                    str(rescue_fixture.ledger),
+                    "--ledger-reader",
+                    fake_ledger_reader(rescue_fixture.ledger),
                     "--no-fetch",
                     "--no-tracker",
                     "--no-debris",

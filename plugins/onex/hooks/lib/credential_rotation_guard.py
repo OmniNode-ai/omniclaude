@@ -186,7 +186,6 @@ from pathlib import Path
 from typing import Any, Final
 
 __all__ = [
-    "CONSENT_CITATION_GRAMMAR",
     "GATE_BIT_NAME",
     "Decision",
     "Finding",
@@ -214,9 +213,6 @@ GATE_BIT_NAME: Final[str] = "PRE_TOOL_AUTHORIZATION_SHIM"
 
 TICKET: Final[str] = "OMN-17957"
 
-CONSENT_CITATION_GRAMMAR: Final[str] = (
-    "ROTATION-CONSENT: docs/tracking/ROLLING_WORK_LEDGER.md@<row timestamp>"
-)
 
 #: The citation, read from the raw command text. TWO FORMS (OMN-18620).
 #:
@@ -1204,7 +1200,7 @@ def evaluate_bash_command(command: Any, policy: Policy, omni_home: Path) -> Deci
                         f"do not rotate. If the credential is genuinely exposed "
                         f"and the operator or Jake has approved it, append the "
                         f"OPERATOR-CONSENT row through scripts/ledger_lock.py "
-                        f"and cite it as '{CONSENT_CITATION_GRAMMAR}'"
+                        f"and cite it as 'ROTATION-CONSENT: {sorted(policy.consent_ledger_paths)[0]}@<row timestamp>'"
                     ),
                 )
             )
@@ -1302,7 +1298,7 @@ def render_block_reason(findings: list[Finding], policy: Policy) -> str:
             "",
             (
                 "To proceed on a real, approved exposure, carry the citation on "
-                f"the command line or in an inline assignment: '{CONSENT_CITATION_GRAMMAR}' "
+                f"the command line or in an inline assignment: 'ROTATION-CONSENT: {sorted(policy.consent_ledger_paths)[0]}@<row timestamp>' "
                 "pointing at an OPERATOR-CONSENT row (omni_home CLAUDE.md rules "
                 "18 and 22) that carries approved_by=<"
                 + "|".join(sorted(policy.approvers))

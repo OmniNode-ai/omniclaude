@@ -14,6 +14,7 @@ an agent's own judgement is never the authorisation, so no test may encode one.
 
 from __future__ import annotations
 
+import dataclasses
 import importlib
 import json
 import os
@@ -47,7 +48,6 @@ POLICY_PATH = (
 sys.path.insert(0, str(LIB_DIR))
 
 from credential_rotation_guard import (  # noqa: E402
-    CONSENT_CITATION_GRAMMAR,
     GATE_BIT_NAME,
     Finding,
     Policy,
@@ -549,7 +549,8 @@ def test_refusal_states_the_ruling_and_the_exposure_bar(
     assert "is not exposure" in lowered
     assert "pushed to a remote" in lowered
     assert "operator" in lowered and "jake" in lowered
-    assert CONSENT_CITATION_GRAMMAR in reason
+    assert "ROTATION-CONSENT: docs/tracking/" in reason
+    assert reason.count("@<row timestamp>") == 2
     assert GATE_BIT_NAME in reason
     assert "no agent, lane or codex message is approval" in lowered
 
@@ -1347,3 +1348,13 @@ def test_a_non_consent_row_the_node_answers_is_still_refused(
         tmp_path, f"{_ROTATE} {_stamp_cite('2026-09-05T11:00:00Z')}", policy
     )
     assert "consent_row_not_operator_consent" in codes(findings), findings
+
+
+def test_the_citation_grammar_takes_its_surface_from_the_policy(policy: Policy) -> None:
+    """OMN-26330: the refusal teaches the surface the policy declares, not a file of its own."""
+    other = dataclasses.replace(policy, consent_ledger_paths=frozenset({"docs/x.md"}))
+    findings = check_bash_command(
+        "aws secretsmanager rotate-secret --secret-id operator-k8s", other, Path("/x")
+    )
+    reason = render_block_reason(findings, other)
+    assert reason.count("ROTATION-CONSENT: docs/x.md@<row timestamp>") == 2
