@@ -869,7 +869,7 @@ def claim_holders(environ: dict[str, str] | None = None) -> dict[str, str]:
         )
     except (OSError, subprocess.SubprocessError) as exc:
         raise ClaimStoreUnreadable(str(exc)) from exc
-    if done.returncode not in (0, 1):
+    if done.returncode != 0:
         raise ClaimStoreUnreadable(f"the reader node exited {done.returncode}")
     cutoff = datetime.now(UTC).timestamp() - CLAIM_WINDOW_HOURS * 3600
     lanes: dict[str, set[str]] = {}
