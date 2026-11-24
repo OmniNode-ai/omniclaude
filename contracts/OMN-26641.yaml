@@ -1,0 +1,61 @@
+schema_version: "1.0.0"
+ticket_id: OMN-26641
+title: Integration act lanes pass the Linear create gate
+summary: >-
+  The create gate resolved a workflow subagent's lane by reading the open CLAIM rows of every lane in a 6 hour window
+  through the work-ledger reader node. On a lab host that read timed out at the reader's 120 s route bound (exit 69,
+  no rows) while the same read naming the lane answered in 47 s; the gate read the timeout as no CLAIM and refused the
+  hourly integration pass's act lane (integration:act<pass>) with lane_identity_missing. The claim read now names the
+  lanes it resolves (--row-lane), and a claim read that does not answer says so on stderr. A lane with no open CLAIM
+  is still refused.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn26641-act-lane-claim-read
+    statement: The create gate's CLAIM read answers for an integration act lane that holds an open CLAIM.
+    acceptance:
+      - id: AC1
+        statement: >-
+          AC1: a regression test built from the recorded refusal (lane named integration:act<pass> with an open CLAIM,
+          answer lane_identity_missing; fixture under the owning repository's tests/fixtures) fails on the broken code
+          and passes on the fix -- falsifier: uv run pytest of that test in the repository that owns the gate fails on
+          the code before the fix
+      - id: AC2
+        statement: >-
+          AC2: integrated: on the lab host the merged fix runs, one ticket is minted by an integration act lane and read
+          back live with its created-by-lane stamp -- falsifier: the act lane's create returns lane_identity_missing, or
+          the read-back of the new ticket finds no such ticket
+evidence_requirements:
+  - kind: tests
+    description: The seven act-lane tests pass at the head and four of them fail at the merge base.
+    command: uv run pytest tests/hooks/test_ticket_creation_guard_integration_act_lane.py -q
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+  - id: dod-omn26641-ac1-recorded-refusal-replay
+    description: >-
+      The recorded integration:act283 CLAIM and the recorded reader readings admit the act lane's create; four of the
+      seven tests fail at the merge base.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC1
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/hooks/test_ticket_creation_guard_integration_act_lane.py -q
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn26641-ac2-registered-hook-admits-act-lane
+    description: >-
+      The registered hook script, run as the harness runs it, admits the act lane's create; the live mint and its
+      read-back follow the install and are recorded on the ticket.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC2
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/hooks/test_ticket_creation_guard_integration_act_lane.py -k registered-hook -q
+        cwd: ${OMNI_HOME}/omniclaude

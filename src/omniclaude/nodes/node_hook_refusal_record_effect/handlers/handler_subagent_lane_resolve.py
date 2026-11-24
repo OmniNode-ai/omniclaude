@@ -276,23 +276,34 @@ def subagent_lane(
         named = reader.lane_cell(reader.sidecar_lane(meta))
         if named:
             break
-    # An unreadable ledger reads as no open CLAIM, which confirms nothing.
-    claims = reader.open_claims(environ)
-    if named and any(claim.get("lane") == named for claim in claims):
-        return named, named, LANE_SOURCE_SIDECAR_CLAIM, ""
     # The harness label of a workflow lane is a short description or the ROUTE
     # line, not its name, so the dispatch prompt names it (OMN-17942).
     prompted, parent = _prompt_named(
         reader, attribution, payload, session_id, agent_id.strip()
     )
+    parent_lane = (
+        _parent_session_lane(session_id, environ)
+        if named and allow_parent and session_id
+        else ""
+    )
+    # The CLAIM read names the lanes this call can resolve to (``--row-lane``): the node then
+    # answers those lanes' rows and not every lane's rows of the 6 hour window. That window
+    # (627 CLAIM and TERMINAL rows of 6102, 2026-11-24) timed out at the reader's 120 s route
+    # bound on a lab host, while the read naming one lane answered in 47 s, and the integration
+    # act lanes were refused as unclaimed (OMN-26641). ``reader`` is this call's own load of the
+    # module, so its read arguments are this call's alone. An unreadable ledger reads as no open
+    # CLAIM, which confirms nothing.
+    for lane in dict.fromkeys(x for x in (named, prompted, parent_lane) if x):
+        reader.READ_ARGS += f" --row-lane {reader.lane_cell(lane)}"
+    claims = reader.open_claims(environ)
+    if named and any(claim.get("lane") == named for claim in claims):
+        return named, named, LANE_SOURCE_SIDECAR_CLAIM, ""
     if prompted and any(_claim_matches(c, prompted, parent) for c in claims):
         return prompted, named or prompted, LANE_SOURCE_PROMPT_CLAIM, ""
     if not named:
         return "", prompted, "", ""
-    if allow_parent and session_id:
-        parent_lane = _parent_session_lane(session_id, environ)
-        if parent_lane and any(claim.get("lane") == parent_lane for claim in claims):
-            return parent_lane, named, LANE_SOURCE_PARENT_SESSION_CLAIM, session_id
+    if parent_lane and any(claim.get("lane") == parent_lane for claim in claims):
+        return parent_lane, named, LANE_SOURCE_PARENT_SESSION_CLAIM, session_id
     return "", prompted or named, "", ""
 
 
