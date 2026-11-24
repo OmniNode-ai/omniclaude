@@ -212,13 +212,15 @@ def test_the_rows_come_from_the_reader_node_named_for_this_read(
     """OMN-26330: the re-read asks the reader node for the CLAIM, RULING and ACK rows."""
     append(ledger_env, RULING)
     assert guard.ruling_reread_refusal(os.environ)
-    call = (
-        Path(ledger_env["FAKE_READER_LOG"]).read_text(encoding="utf-8").splitlines()[0]
-    )
-    assert "-m omnimarket.nodes.node_work_ledger_reader_effect" in call
-    assert "--reader git-admission-ruling-reread" in call
-    assert "--query rows --window-hours 720" in call
-    assert "--kind CLAIM --kind RULING --kind ACK" in call
+    calls = Path(ledger_env["FAKE_READER_LOG"]).read_text(encoding="utf-8").splitlines()
+    assert len(calls) == 2
+    for call in calls:
+        assert "-m omnimarket.nodes.node_work_ledger_reader_effect" in call
+        assert "--reader git-admission-ruling-reread --query rows" in call
+    # The lane's own CLAIM and ACK rows first, then the RULING rows since its CLAIM.
+    assert "--window-hours 720 --kind CLAIM --kind ACK --row-lane worker" in calls[0]
+    assert "--kind RULING" in calls[1]
+    assert "--row-lane" not in calls[1]
 
 
 @pytest.mark.parametrize("code", [3, 69])

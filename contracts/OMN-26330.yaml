@@ -10,6 +10,9 @@ summary: >-
   policy. The pre-push branch claim hook is not moved: its resolver, scripts/branch_claim.py, is a baselined
   file the file-shape ratchet lets only shrink, and the pull-request check runs the same resolver over a
   fetched copy of the store. Census: 44 files and 6 runtime before, 36 and 1 after.
+  Follow-up slice: the git admission ruling re-read stops asking the reader node for the CLAIM, RULING and ACK rows of
+  every lane over 720 hours in one read (263.3 s on a lab host on 2026-11-24, past the 150 s bound) and reads the
+  lane's own CLAIM and ACK rows by lane, then the RULING rows since its newest CLAIM.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
@@ -26,6 +29,12 @@ requirements:
       - id: AC3
         statement: >-
           AC3: each moved reader has a test that fails on the old code and passes on the change -- falsifier: the focused test files named in the evidence requirement exit non-zero at the head
+  - id: req-omn26330-reread-narrow
+    statement: The publish-time ruling re-read answers inside the reader bound on the live ledger.
+    acceptance:
+      - id: AC6
+        statement: >-
+          AC6: the ruling re-read reads the lane's CLAIM and ACK rows with --row-lane and the RULING rows of the hours since its newest CLAIM, never the CLAIM, RULING and ACK rows of every lane over 720 hours in one read -- falsifier: tests/unit/handlers/test_ruling_reread_rows_omn26330.py or tests/hooks/test_ledger_ruling_reread.py fails at the head, or passes on the merge base
 evidence_requirements:
   - kind: tests
     description: The focused test files of the six moved files pass at the head.
@@ -84,3 +93,18 @@ dod_evidence:
           uv run pytest tests/scripts/test_worktree_auto_prune.py tests/hooks/test_ledger_ruling_reread.py
           tests/unit/handlers/test_work_ledger_rows_omn26330.py tests/hooks_system/test_hook_canary.py
           tests/hooks/test_credential_rotation_guard.py tests/test_runtime_readers_ledger_bus.py -q --no-cov
+  - id: dod-omn26330-ac6-ruling-reread-narrow
+    description: >-
+      The re-read's two reads (the lane's CLAIM and ACK rows by lane, then the RULING rows since its CLAIM) are asserted
+      against a stand-in reader that refuses the unfiltered 30 day read; the guard answers there at the head and
+      refuses on the merge base.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC6
+    checks:
+      - check_type: test_passes
+        check_value: >-
+          uv run pytest tests/unit/handlers/test_ruling_reread_rows_omn26330.py tests/hooks/test_ledger_ruling_reread.py
+          tests/unit/handlers/test_work_ledger_rows_omn26330.py -q --no-cov
+        cwd: ${OMNI_HOME}/omniclaude

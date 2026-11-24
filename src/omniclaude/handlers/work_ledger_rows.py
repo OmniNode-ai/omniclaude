@@ -47,8 +47,13 @@ def read_rows(
     interpreter: str = "",
     environ: Mapping[str, str] | None = None,
     timeout_s: float = 150.0,
+    row_lanes: Sequence[str] = (),
 ) -> list[str]:
-    """The ledger rows of the last ``window_hours`` hours (one ``--kind`` per entry of ``kinds``)."""
+    """The ledger rows of the last ``window_hours`` hours (one ``--kind`` per entry of ``kinds``).
+
+    ``row_lanes`` keeps only the rows of those lanes (one ``--row-lane`` each): the node scans every
+    row of the window either way, but it prints and parses only the rows of the named lanes.
+    """
     env = dict(os.environ if environ is None else environ)
     python = reader_interpreter(env, interpreter)
     if not python:
@@ -57,6 +62,8 @@ def read_rows(
     argv += ["--window-hours", str(window_hours)]
     for kind in kinds:
         argv += ["--kind", kind]
+    for lane in row_lanes:
+        argv += ["--row-lane", lane]
     try:
         done = run(
             argv,
