@@ -49,6 +49,13 @@ is_done_state = linear_done_verify.is_done_state
 is_cancel_state = linear_done_verify.is_cancel_state
 
 
+@pytest.fixture(autouse=True)
+def _no_live_linear_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """OMN-26655: ``main`` reads the live ticket on every Done, so no test may
+    inherit the host's key and reach Linear. A test that wants a key sets one."""
+    monkeypatch.delenv("LINEAR_API_KEY", raising=False)
+
+
 def _merged(ref: PRRef) -> PRStatus:
     return PRStatus(ref=ref, state="MERGED", merge_state="CLEAN")
 

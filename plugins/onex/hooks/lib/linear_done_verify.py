@@ -562,18 +562,15 @@ def is_exempt(description: str, labels: list[str] | None) -> bool:
         - Label `close-if-done` (or `close-if-done: true`)
         - Frontmatter/body line `close-if-done: true`
     """
-    if labels:
-        for label in labels:
-            normalized = label.strip().lower()
-            if normalized in {"close-if-done", "close-if-done: true"}:
-                return True
-
-    for line in description.splitlines():
-        stripped = line.strip().lower().lstrip("-*# ").strip()
-        if stripped in {"close-if-done: true", "close_if_done: true"}:
-            return True
-
-    return False
+    label_hit = any(
+        label.strip().lower() in {"close-if-done", "close-if-done: true"}
+        for label in labels or []
+    )
+    return label_hit or any(
+        line.strip().lower().lstrip("-*# ").strip()
+        in {"close-if-done: true", "close_if_done: true"}
+        for line in description.splitlines()
+    )
 
 
 def is_done_state(state_value: str) -> bool:
@@ -834,6 +831,7 @@ def verify(
     fetcher: Any = fetch_pr_status,
     prober: Callable[[int], bool] | None = None,
     ticket_id: str | None = None,
+    exemption: tuple[str, list[str]] | None = None,
 ) -> VerificationResult:
     """Run the full verification against a ticket description.
 
@@ -862,6 +860,11 @@ def verify(
     see :func:`_resolve_commit_anchored_refs`. Otherwise it still refuses, the
     OMN-15025 / OMN-18747 fail-closed shape.
     """
+    # OMN-26655: ``exemption`` is the live ticket's own ``(description, labels)``.
+    # When given, the ``close-if-done`` exemption is read from it alone and never
+    # from ``description`` / ``labels``, which then carry only what the PR check
+    # must see (the call's text and the live text together). A caller that holds
+    # the live ticket passes it, so one update cannot supply its own exemption.
     # Product PR references only — weak-signal (onex_change_control) refs are
     # filtered out so an OCC evidence companion never gates a product Done.
     refs = [
@@ -922,7 +925,7 @@ def verify(
 
     # No product PR cited — the exemption may legitimately apply (decision-only
     # tickets, epic ALL_CHILDREN_DONE roll-ups that carry the label).
-    if is_exempt(description, labels):
+    if is_exempt(*(exemption or (description, labels))):
         return VerificationResult(allowed=True, reason="exempt")
 
     # No PR references and no exemption — trust the human; nothing to verify.
@@ -1223,75 +1226,78 @@ def augment_description_with_attachments(
     return description + "\n\n" + "\n".join(urls)
 
 
+# OMN-26655: the text a Done transition's PR check reads is the live ticket's plus
+# the call's. A call that rewrites the description can add citations but must not
+# drop one the live ticket already makes. Pure function.
+def merge_call_and_live_text(call_text: str, live_text: str) -> str:
+    return "\n\n".join(dict.fromkeys(t for t in (live_text, call_text) if t))
+
+
 def main() -> int:
     call = _load_stdin_tool_call()
-    tool_name = call.get("tool_name", "")
-    if tool_name not in {
+    if call.get("tool_name") not in {
         "mcp__linear-server__save_issue",
         "mcp__linear-server__update_issue",
     }:
         return 0
 
     params: dict[str, Any] = call.get("tool_input") or {}
-    state_value = str(params.get("state") or params.get("status") or "")
     # Cancel/Duplicate/Won't-do close the ticket without requiring a PR;
-    # short-circuit before any verification logic. (OMN-10047)
-    if is_cancel_state(state_value):
-        return 0
-    if not is_done_state(state_value):
+    # they are not Done states, so they stop here before any verification
+    # or live read. (OMN-10047)
+    if not is_done_state(str(params.get("state") or params.get("status") or "")):
         return 0
 
     ticket_id = str(params.get("id") or params.get("issueId") or "")
     description = str(params.get("description") or "")
     labels: list[str] = list(params.get("labels") or [])
 
-    # If the description wasn't passed on this update (common: status-only
-    # updates), fetch the live ticket to read DoD references.
+    # OMN-26655: a Done is judged on the LIVE ticket, whatever the call carries.
+    # The call's text can add PR citations to check, but it cannot supply the
+    # ``close-if-done`` exemption or leave out a PR the live ticket cites.
     # Semantics of _fetch_linear_issue return values:
     #   None  → network/API failure → fail-closed (block transition)
-    #   {}    → LINEAR_API_KEY missing → fail-open (skip PR check)
-    #   {...} → real issue data → use description + labels from response
-    if not description and ticket_id:
-        issue = _fetch_linear_issue(ticket_id)
-        if issue is None:
-            decision = {
-                "decision": "block",
-                "reason": (
-                    f"[OMN-8415 done-state PR verify] Could not fetch Linear "
-                    f"ticket {ticket_id} to read DoD; refusing to mark Done "
-                    "without verifying referenced PRs. Retry once Linear is "
-                    "reachable or pass the description in the save_issue call."
-                ),
-            }
-            sys.stderr.write(json.dumps(decision) + "\n")
-            return 2
-        description = str(issue.get("description") or "")
-        labels = labels or list(issue.get("labels") or [])
-        # Fold in the linked-PR attachment URLs so the merge check sees the PR
-        # linked via the Linear GitHub integration, not only PRs cited in the
-        # body (OMN-14641 — the OMN-14582 linked-but-uncited false-Done shape).
-        description = augment_description_with_attachments(
-            description, list(issue.get("attachment_urls") or [])
+    #   {}    → LINEAR_API_KEY missing → fail-open (judge the call's own text)
+    #   {...} → real issue data → the live text and labels are authoritative
+    issue = _fetch_linear_issue(ticket_id) if ticket_id else {}
+    exemption = None
+    if issue is None:
+        reason = (
+            f"Could not fetch Linear ticket {ticket_id} to read DoD; refusing to "
+            "mark Done without verifying referenced PRs. Retry once Linear is "
+            "reachable."
         )
-
-    default_repo = os.environ.get("LINEAR_DONE_VERIFY_DEFAULT_REPO") or None
-
-    # OMN-15782: wire the live onex_change_control membership prober so a
-    # bare `#N` reference to a genuine OCC PR classifies weak the same as
-    # `owner/repo#N` — see is_weak_signal_ref()/probe_occ_membership().
-    result = verify(
-        description,
-        labels,
-        default_repo=default_repo,
-        prober=probe_occ_membership,
-        ticket_id=ticket_id or None,
-    )
-    if result.allowed:
+    else:
+        if issue:
+            exemption = (
+                str(issue.get("description") or ""),
+                list(issue.get("labels") or []),
+            )
+            labels = exemption[1]
+            # Fold in the linked-PR attachment URLs so the merge check sees the PR
+            # linked via the Linear GitHub integration, not only PRs cited in the
+            # body (OMN-14641 — the OMN-14582 linked-but-uncited false-Done shape).
+            description = augment_description_with_attachments(
+                merge_call_and_live_text(description, exemption[0]),
+                list(issue.get("attachment_urls") or []),
+            )
+        # OMN-15782: wire the live onex_change_control membership prober so a
+        # bare `#N` reference to a genuine OCC PR classifies weak the same as
+        # `owner/repo#N` — see is_weak_signal_ref()/probe_occ_membership().
+        result = verify(
+            description,
+            labels,
+            default_repo=os.environ.get("LINEAR_DONE_VERIFY_DEFAULT_REPO") or None,
+            prober=probe_occ_membership,
+            ticket_id=ticket_id or None,
+            exemption=exemption,
+        )
+        reason = "" if result.allowed else result.reason
+    if not reason:
         return 0
-
     decision = {
         "decision": "block",
-        "reason": f"[OMN-8415 done-state PR verify] {result.reason}",
+        "reason": f"[OMN-8415 done-state PR verify] {reason}",
     }
     sys.stderr.write(json.dumps(decision) + "\n")
     return 2
