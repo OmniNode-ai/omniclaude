@@ -22,6 +22,7 @@ from uuid import uuid4
 
 import pytest
 
+from omniclaude.enums.enum_llm_parse_status import EnumLlmParseStatus
 from omniclaude.nodes.node_transition_selector_effect.models.model_contract_state import (
     ModelContractState,
 )
@@ -267,40 +268,40 @@ class TestParseSelection:
     def test_valid_json_integer(self) -> None:
         raw = '{"selected": 2}'
         result = NodeTransitionSelectorEffect._parse_selection(raw)
-        assert result == 2
+        assert result.value == 2
 
     def test_valid_json_first_action(self) -> None:
         raw = '{"selected": 1}'
         result = NodeTransitionSelectorEffect._parse_selection(raw)
-        assert result == 1
+        assert result.value == 1
 
     def test_json_with_surrounding_text(self) -> None:
         raw = 'Thinking...\n{"selected": 3}\nDone.'
         result = NodeTransitionSelectorEffect._parse_selection(raw)
-        assert result == 3
+        assert result.value == 3
 
     def test_malformed_json_returns_none(self) -> None:
         raw = "I think option 2 is best."
         result = NodeTransitionSelectorEffect._parse_selection(raw)
-        assert result is None
+        assert result.status is EnumLlmParseStatus.UNPARSABLE
 
     def test_empty_string_returns_none(self) -> None:
         result = NodeTransitionSelectorEffect._parse_selection("")
-        assert result is None
+        assert result.status is EnumLlmParseStatus.UNPARSABLE
 
     def test_whitespace_only_returns_none(self) -> None:
         result = NodeTransitionSelectorEffect._parse_selection("   ")
-        assert result is None
+        assert result.status is EnumLlmParseStatus.UNPARSABLE
 
     def test_wrong_key_returns_none(self) -> None:
         raw = '{"choice": 1}'
         result = NodeTransitionSelectorEffect._parse_selection(raw)
-        assert result is None
+        assert result.status is EnumLlmParseStatus.UNPARSABLE
 
     def test_string_integer_coerced(self) -> None:
         raw = '{"selected": "2"}'
         result = NodeTransitionSelectorEffect._parse_selection(raw)
-        assert result == 2
+        assert result.value == 2
 
     def test_non_integer_float_coerces_if_possible(self) -> None:
         raw = '{"selected": 1.0}'
@@ -308,17 +309,17 @@ class TestParseSelection:
         result = NodeTransitionSelectorEffect._parse_selection(raw)
         # json.loads parses 1.0 as float; _parse_selection should handle
         # We accept either None or 1 depending on coercion — verify no crash
-        assert result is None or result == 1
+        assert result.value is None or result.value == 1
 
     def test_null_selected_returns_none(self) -> None:
         raw = '{"selected": null}'
         result = NodeTransitionSelectorEffect._parse_selection(raw)
-        assert result is None
+        assert result.status is EnumLlmParseStatus.UNPARSABLE
 
     def test_nested_json_extracts_correctly(self) -> None:
         raw = '{"selected": 5, "reasoning": "action 5 is closest to goal"}'
         result = NodeTransitionSelectorEffect._parse_selection(raw)
-        assert result == 5
+        assert result.value == 5
 
 
 # =============================================================================

@@ -23,6 +23,7 @@ import yaml
 
 from omniclaude.delegation.runner import canonical_bifrost_contract_path
 from omniclaude.models.model_endpoint_defaults import ModelEndpointDefaults
+from omniclaude.models.model_llm_parse_result import ModelLlmParseResult
 
 try:
     import httpx
@@ -49,6 +50,28 @@ class QuorumUnconfiguredProviderError(RuntimeError):
     """
 
 
+def _read_score_reply(reply_text: str) -> ModelLlmParseResult[dict[str, Any]]:
+    """Read one scoring reply: a JSON object, or an UNPARSABLE result (OMN-26353).
+
+    A reply that is not JSON, or is JSON but not an object, holds no score. It
+    is returned as UNPARSABLE so the consensus can leave the model out of the
+    vote, rather than counting an invented 0.5. A markdown code fence around the
+    JSON is dropped first.
+    """
+    text = reply_text.strip()
+    if text.startswith("```"):
+        text = "\n".join(line for line in text.split("\n")[1:-1] if line.strip())
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        reason = f"reply is not JSON: {exc.msg}"
+    else:
+        if isinstance(data, dict):
+            return ModelLlmParseResult[dict[str, Any]].parsed(data, reply_text)
+        reason = "reply is JSON but not an object"
+    return ModelLlmParseResult[dict[str, Any]].unparsable(reply_text, reason)
+
+
 def _resolve_local_backend_base_url(backend_id: str) -> str:
     """Resolve a local backend's base URL from the routing contract.
 
@@ -57,10 +80,14 @@ def _resolve_local_backend_base_url(backend_id: str) -> str:
     the backend is unknown, its variable is unset, or the URL is not an
     OpenAI-compatible chat URL this module can derive a base from.
     """
-    from omniclaude.handlers.handler_contract_endpoint_resolver import HandlerContractEndpointResolver
+    from omniclaude.handlers.handler_contract_endpoint_resolver import (
+        HandlerContractEndpointResolver,
+    )
     from omniclaude.models.model_contract_endpoint import base_url_of
 
-    url = HandlerContractEndpointResolver(_BIFROST_YAML_PATH).resolve_backend_url(backend_id)
+    url = HandlerContractEndpointResolver(_BIFROST_YAML_PATH).resolve_backend_url(
+        backend_id
+    )
     if not url:
         raise RuntimeError(
             f"No endpoint URL is configured for local backend {backend_id!r}. "
@@ -192,7 +219,9 @@ class ModelConfig:
         if self.endpoint is None:
             if self.provider == ModelProvider.GEMINI:
                 # The default endpoint is declared in the runtime contract.
-                self.endpoint = ModelEndpointDefaults.from_contract().gemini_api_endpoint
+                self.endpoint = (
+                    ModelEndpointDefaults.from_contract().gemini_api_endpoint
+                )
 
         if self.api_key is None and self.provider == ModelProvider.GEMINI:
             self.api_key = os.getenv("GEMINI_API_KEY", "")
@@ -513,7 +542,7 @@ class AIQuorum:
                 scores.append(score)
 
         # Calculate weighted consensus - filter out exceptions
-        valid_scores: list[tuple[ModelConfig, dict[str, Any]]] = [
+        valid_scores: list[tuple[ModelConfig, ModelLlmParseResult[dict[str, Any]]]] = [
             item for item in scores if not isinstance(item, BaseException)
         ]
         return self._calculate_consensus(valid_scores)
@@ -590,7 +619,7 @@ Provide your evaluation:"""
 
     async def _score_with_model(
         self, model: ModelConfig, scoring_prompt: str
-    ) -> tuple[ModelConfig, dict[str, Any]]:
+    ) -> tuple[ModelConfig, ModelLlmParseResult[dict[str, Any]]]:
         """
         Score correction with a single AI model.
 
@@ -613,7 +642,7 @@ Provide your evaluation:"""
 
     async def _score_with_openai_compatible(
         self, model: ModelConfig, scoring_prompt: str
-    ) -> tuple[ModelConfig, dict[str, Any]]:
+    ) -> tuple[ModelConfig, ModelLlmParseResult[dict[str, Any]]]:
         """Score using an OpenAI-compatible endpoint (vLLM, etc.).
 
         The endpoint is resolved from the model config or the routing contract.
@@ -649,17 +678,7 @@ Provide your evaluation:"""
                     .get("content", "{}")
                 )
 
-                # Parse JSON response
-                try:
-                    score_data = json.loads(response_text)
-                except json.JSONDecodeError:
-                    score_data = {
-                        "score": 0.5,
-                        "reasoning": f"Failed to parse model response: {response_text[:100]}",
-                        "recommendation": "REVIEW",
-                    }
-
-                return (model, score_data)
+                return (model, _read_score_reply(response_text))
 
         except Exception as e:
             print(
@@ -668,16 +687,12 @@ Provide your evaluation:"""
             )
             return (
                 model,
-                {
-                    "score": 0.5,
-                    "reasoning": f"Error: {str(e)}",
-                    "recommendation": "REVIEW",
-                },
+                ModelLlmParseResult[dict[str, Any]].unavailable(reason=f"Error: {e}"),
             )
 
     async def _score_with_gemini(
         self, model: ModelConfig, scoring_prompt: str
-    ) -> tuple[ModelConfig, dict[str, Any]]:
+    ) -> tuple[ModelConfig, ModelLlmParseResult[dict[str, Any]]]:
         """
         Score using Gemini model.
 
@@ -713,32 +728,18 @@ Provide your evaluation:"""
                     .get("text", "{}")
                 )
 
-                # Parse JSON response
-                try:
-                    score_data = json.loads(response_text)
-                except json.JSONDecodeError:
-                    score_data = {
-                        "score": 0.5,
-                        "reasoning": f"Failed to parse model response: {response_text[:100]}",
-                        "recommendation": "REVIEW",
-                    }
-
-                return (model, score_data)
+                return (model, _read_score_reply(response_text))
 
         except Exception as e:
             print(f"Error scoring with Gemini {model.name}: {e}", file=sys.stderr)
             return (
                 model,
-                {
-                    "score": 0.5,
-                    "reasoning": f"Error: {str(e)}",
-                    "recommendation": "REVIEW",
-                },
+                ModelLlmParseResult[dict[str, Any]].unavailable(reason=f"Error: {e}"),
             )
 
     async def _score_with_openai(
         self, model: ModelConfig, scoring_prompt: str
-    ) -> tuple[ModelConfig, dict[str, Any]]:
+    ) -> tuple[ModelConfig, ModelLlmParseResult[dict[str, Any]]]:
         """
         Score using OpenAI-compatible API (including vLLM).
 
@@ -788,46 +789,25 @@ Provide your evaluation:"""
                 )
 
                 # Parse JSON response - handle markdown code blocks
-                try:
-                    # Strip markdown code blocks if present
-                    cleaned_text = response_text.strip()
-                    if cleaned_text.startswith("```"):
-                        # Extract JSON from markdown code block
-                        lines = cleaned_text.split("\n")
-                        # Remove first line (```json) and last line (```)
-                        json_lines = [line for line in lines[1:-1] if line.strip()]
-                        cleaned_text = "\n".join(json_lines)
-
-                    score_data = json.loads(cleaned_text)
-                except json.JSONDecodeError:
-                    # Try to extract score from text if JSON parsing fails
-                    score_data = {
-                        "score": 0.5,
-                        "reasoning": f"Failed to parse model response: {response_text[:200]}",
-                        "recommendation": "REVIEW",
-                    }
-
-                return (model, score_data)
+                return (model, _read_score_reply(response_text))
 
         except Exception as e:
             print(f"Error scoring with OpenAI {model.name}: {e}", file=sys.stderr)
             return (
                 model,
-                {
-                    "score": 0.5,
-                    "reasoning": f"Error: {str(e)}",
-                    "recommendation": "REVIEW",
-                },
+                ModelLlmParseResult[dict[str, Any]].unavailable(reason=f"Error: {e}"),
             )
 
     def _calculate_consensus(
-        self, scores: list[tuple[ModelConfig, dict[str, Any]]]
+        self, scores: list[tuple[ModelConfig, ModelLlmParseResult[dict[str, Any]]]]
     ) -> QuorumScore:
         """
         Calculate weighted consensus from model scores.
 
         Args:
-            scores: List of (model, score_dict) tuples
+            scores: List of (model, typed reply) tuples. A model whose reply is
+                not PARSED (unparsable or unavailable) does not vote: it is
+                named in ``model_reasoning`` and counts against participation.
 
         Returns:
             QuorumScore with consensus evaluation
@@ -841,8 +821,20 @@ Provide your evaluation:"""
         weighted_score_sum = 0.0
 
         for item in scores:
-            model, score_data = item
+            model, outcome = item
 
+            if not outcome.is_parsed or outcome.value is None:
+                model_reasoning[model.name] = (
+                    f"{outcome.status.value}: {outcome.reason}"
+                    + (
+                        f" (reply: {outcome.raw_reply[:100]})"
+                        if outcome.raw_reply
+                        else ""
+                    )
+                )
+                continue
+
+            score_data = outcome.value
             score = score_data.get("score", 0.5)
             reasoning = score_data.get("reasoning", "No reasoning provided")
             recommendation = score_data.get("recommendation", "REVIEW")

@@ -23,13 +23,14 @@ Flow:
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 from uuid import UUID
 
 import httpx
 
+from omniclaude.enums.enum_llm_parse_status import EnumLlmParseStatus
+from omniclaude.models.model_llm_parse_result import ModelLlmParseResult
 from omniclaude.nodes.node_agent_routing_compute._internal import (
     ConfidenceScorer,
     TriggerMatcher,
@@ -49,6 +50,9 @@ from omniclaude.nodes.node_agent_routing_compute.models import (
 __all__ = ["HandlerRoutingLlm"]
 
 logger = logging.getLogger(__name__)
+
+#: One LLM routing reply, read: an agent name, or why there is none (OMN-26353).
+_Selection = ModelLlmParseResult[str]
 
 
 # Maximum number of candidates to present to the LLM
@@ -108,7 +112,7 @@ def _build_routing_prompt(candidates: list[ModelRoutingCandidate], prompt: str) 
 
 def _parse_agent_from_response(
     response_text: str, known_agents: set[str]
-) -> str | None:
+) -> _Selection:
     """Extract a valid agent name from the LLM response.
 
     Strips whitespace and punctuation, then checks the text for any known
@@ -120,7 +124,8 @@ def _parse_agent_from_response(
         known_agents: Set of valid agent names from the registry.
 
     Returns:
-        The matched agent name, or None if no valid name was found.
+        PARSED with the matched agent name, or UNPARSABLE (carrying the reply
+        text) when no valid name was found.
     """
     # Strip any <think>...</think> blocks before parsing (Qwen3 thinking mode)
     text = (
@@ -131,16 +136,18 @@ def _parse_agent_from_response(
 
     # First try exact match (most common with temperature=0.0)
     if text in known_agents:
-        return text
+        return _Selection.parsed(text, raw_reply=response_text)
 
     # Try to find any known agent name as a substring.
     # Sort longest-first so more-specific names (e.g. "agent-api-architect")
     # are matched before shorter prefix names (e.g. "agent-api").
     for agent_name in sorted(known_agents, key=lambda n: (-len(n), n)):
         if agent_name in text:
-            return agent_name
+            return _Selection.parsed(agent_name, raw_reply=response_text)
 
-    return None
+    return _Selection.unparsable(
+        raw_reply=response_text, reason="reply names no known agent"
+    )
 
 
 class HandlerRoutingLlm:
@@ -297,7 +304,7 @@ class HandlerRoutingLlm:
         # threshold.
         above_threshold_names = {c.agent_name for c in above_threshold}
         (
-            selected_agent,
+            selection,
             prompt_tokens,
             completion_tokens,
             total_tokens,
@@ -308,15 +315,21 @@ class HandlerRoutingLlm:
             correlation_id=cid,
         )
 
-        # 9. LLM did not return a usable name: fall back to top trigger match
-        if selected_agent is None:
+        # 9. LLM did not return a usable name: fall back to top trigger match.
+        # The typed result says why: an unreachable endpoint and an unrecognised
+        # reply are different fallbacks.
+        if not selection.is_parsed or selection.value is None:
             best = above_threshold[0]
             logger.info(
-                "LLM returned no valid agent; using top trigger match %s "
+                "LLM returned no valid agent (%s); using top trigger match %s "
                 "(correlation_id=%s)",
+                selection.status.value,
                 best.agent_name,
                 cid,
             )
+            why = "returned unrecognised agent"
+            if selection.status is not EnumLlmParseStatus.UNPARSABLE:
+                why = "unavailable"
             return ModelRoutingResult(
                 selected_agent=best.agent_name,
                 confidence=best.confidence,
@@ -324,8 +337,7 @@ class HandlerRoutingLlm:
                 routing_policy="trigger_match",
                 routing_path="local",
                 candidates=tuple(candidates),
-                fallback_reason="LLM unavailable or returned unrecognised agent; "
-                "using top trigger match",
+                fallback_reason=f"LLM {why}; using top trigger match",
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
                 total_tokens=total_tokens,
@@ -333,6 +345,7 @@ class HandlerRoutingLlm:
             )
 
         # 10. Build result with LLM-selected agent
+        selected_agent = selection.value
         # Find the candidate record for the LLM's choice (for its breakdown)
         llm_candidate = next(
             (c for c in candidates if c.agent_name == selected_agent),
@@ -389,7 +402,7 @@ class HandlerRoutingLlm:
         prompt: str,
         agent_names: set[str],
         correlation_id: UUID,
-    ) -> tuple[str | None, int, int, int]:
+    ) -> tuple[_Selection, int, int, int]:
         """Send a chat completion request and parse the agent name from the response.
 
         Also extracts token usage from the vLLM ``usage`` dict so callers can
@@ -403,7 +416,9 @@ class HandlerRoutingLlm:
 
         Returns:
             A 4-tuple ``(selected_agent, prompt_tokens, completion_tokens, total_tokens)``.
-            ``selected_agent`` is a validated agent name or None on failure.
+            ``selected_agent`` is a ``ModelLlmParseResult``: PARSED with a validated
+            agent name, UNPARSABLE for an unrecognised reply, or UNAVAILABLE when
+            no reply was read.
             Token counts default to 0 when the LLM call fails or the ``usage`` key
             is absent from the response.
         """
@@ -427,44 +442,23 @@ class HandlerRoutingLlm:
                 )
                 response.raise_for_status()
                 data = response.json()
-        except httpx.TimeoutException:
-            logger.warning(
-                "LLM routing call timed out after %.1fs (correlation_id=%s)",
-                self._timeout,
-                correlation_id,
-            )
-            return None, 0, 0, 0
-        except httpx.NetworkError as exc:
-            logger.warning(
-                "LLM routing connection error: %s (correlation_id=%s)",
-                exc,
-                correlation_id,
-            )
-            return None, 0, 0, 0
-        except httpx.HTTPError as exc:
-            logger.warning(
-                "LLM routing HTTP error: %s (correlation_id=%s)",
-                exc,
-                correlation_id,
-            )
-            return None, 0, 0, 0
-        except (json.JSONDecodeError, KeyError, ValueError) as exc:
-            logger.warning(
-                "LLM routing response parse error: %s (correlation_id=%s)",
-                exc,
-                correlation_id,
-            )
-            return None, 0, 0, 0
-
-        try:
             raw_text: str = data["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError) as exc:
+        except httpx.HTTPError as exc:
+            # Timeout, connection and HTTP-status failures: no reply was read.
             logger.warning(
-                "LLM routing response missing expected fields: %s (correlation_id=%s)",
+                "LLM routing call failed: %s %s (correlation_id=%s)",
+                type(exc).__name__,
                 exc,
                 correlation_id,
             )
-            return None, 0, 0, 0
+            return _Selection.unavailable(f"{type(exc).__name__}: {exc}"), 0, 0, 0
+        except (ValueError, LookupError, TypeError) as exc:
+            logger.warning(
+                "LLM routing response parse error: %r (correlation_id=%s)",
+                exc,
+                correlation_id,
+            )
+            return _Selection.unparsable("", f"unusable body: {exc!r}"), 0, 0, 0
 
         # Extract token usage from the vLLM response; default to 0 when absent.
         _usage = data.get("usage", {})
@@ -473,7 +467,7 @@ class HandlerRoutingLlm:
         total_tokens: int = prompt_tokens + completion_tokens
 
         selected = _parse_agent_from_response(raw_text, agent_names)
-        if selected is None:
+        if not selected.is_parsed:
             logger.warning(
                 "LLM returned unrecognised agent name %r (correlation_id=%s)",
                 raw_text[:100],

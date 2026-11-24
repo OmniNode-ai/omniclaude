@@ -14,6 +14,8 @@ from uuid import uuid4
 
 import pytest
 
+from omniclaude.enums.enum_llm_parse_status import EnumLlmParseStatus
+from omniclaude.models.model_llm_parse_result import ModelLlmParseResult
 from omniclaude.nodes.node_agent_routing_compute.handler_routing_llm import (
     _ROUTING_PROMPT_VERSION,
     HandlerRoutingLlm,
@@ -159,19 +161,19 @@ class TestParseAgentFromResponse:
     def test_exact_match(self) -> None:
         known = {"agent-debugger", "agent-api-architect"}
         result = _parse_agent_from_response("agent-debugger", known)
-        assert result == "agent-debugger"
+        assert result.value == "agent-debugger"
 
     @pytest.mark.unit
     def test_exact_match_with_trailing_whitespace(self) -> None:
         known = {"agent-debugger"}
         result = _parse_agent_from_response("  agent-debugger  ", known)
-        assert result == "agent-debugger"
+        assert result.value == "agent-debugger"
 
     @pytest.mark.unit
     def test_substring_match_with_punctuation(self) -> None:
         known = {"agent-debugger"}
         result = _parse_agent_from_response("agent-debugger.", known)
-        assert result == "agent-debugger"
+        assert result.value == "agent-debugger"
 
     @pytest.mark.unit
     def test_substring_match_in_sentence(self) -> None:
@@ -179,25 +181,25 @@ class TestParseAgentFromResponse:
         result = _parse_agent_from_response(
             "The best choice is agent-debugger for this task.", known
         )
-        assert result == "agent-debugger"
+        assert result.value == "agent-debugger"
 
     @pytest.mark.unit
     def test_case_insensitive(self) -> None:
         known = {"agent-debugger"}
         result = _parse_agent_from_response("AGENT-DEBUGGER", known)
-        assert result == "agent-debugger"
+        assert result.value == "agent-debugger"
 
     @pytest.mark.unit
     def test_no_match_returns_none(self) -> None:
         known = {"agent-debugger", "agent-api-architect"}
         result = _parse_agent_from_response("agent-nonexistent", known)
-        assert result is None
+        assert result.status is EnumLlmParseStatus.UNPARSABLE
 
     @pytest.mark.unit
     def test_empty_response_returns_none(self) -> None:
         known = {"agent-debugger"}
         result = _parse_agent_from_response("", known)
-        assert result is None
+        assert result.status is EnumLlmParseStatus.UNPARSABLE
 
     @pytest.mark.unit
     def test_deterministic_on_multiple_matches(self) -> None:
@@ -211,7 +213,7 @@ class TestParseAgentFromResponse:
         # Both names appear in the response; length tie-broken alphabetically,
         # so 'agent-aaa' < 'agent-zzz' and 'agent-aaa' wins.
         result = _parse_agent_from_response("agent-aaa agent-zzz", known)
-        assert result == "agent-aaa"
+        assert result.value == "agent-aaa"
 
 
 # ---------------------------------------------------------------------------
@@ -319,7 +321,7 @@ class TestHandlerRoutingLlm:
             handler,
             "_ask_llm",
             new_callable=AsyncMock,
-            return_value=("agent-debugger", 0, 0, 0),
+            return_value=(ModelLlmParseResult[str].parsed("agent-debugger"), 0, 0, 0),
         ):
             result = await handler.compute_routing(request)
 
@@ -345,7 +347,7 @@ class TestHandlerRoutingLlm:
             handler,
             "_ask_llm",
             new_callable=AsyncMock,
-            return_value=("agent-debugger", 0, 0, 0),
+            return_value=(ModelLlmParseResult[str].parsed("agent-debugger"), 0, 0, 0),
         ):
             result = await handler.compute_routing(request)
 
@@ -369,7 +371,10 @@ class TestHandlerRoutingLlm:
         request = _make_request("debug this issue", agents)
 
         with patch.object(
-            handler, "_ask_llm", new_callable=AsyncMock, return_value=(None, 0, 0, 0)
+            handler,
+            "_ask_llm",
+            new_callable=AsyncMock,
+            return_value=(ModelLlmParseResult[str].unavailable(reason="down"), 0, 0, 0),
         ):
             result = await handler.compute_routing(request)
 
@@ -409,7 +414,7 @@ class TestHandlerRoutingLlm:
                 correlation_id=uuid4(),
             )
 
-        assert selected is None
+        assert selected.status is EnumLlmParseStatus.UNAVAILABLE
         assert pt == 0
         assert ct == 0
         assert tt == 0
@@ -440,7 +445,7 @@ class TestHandlerRoutingLlm:
                 correlation_id=uuid4(),
             )
 
-        assert selected is None
+        assert selected.status is EnumLlmParseStatus.UNAVAILABLE
         assert pt == 0
         assert ct == 0
         assert tt == 0
@@ -480,7 +485,7 @@ class TestHandlerRoutingLlm:
                 correlation_id=uuid4(),
             )
 
-        assert selected is None
+        assert selected.status is EnumLlmParseStatus.UNAVAILABLE
         assert pt == 0
         assert ct == 0
         assert tt == 0
@@ -517,7 +522,7 @@ class TestHandlerRoutingLlm:
                 correlation_id=uuid4(),
             )
 
-        assert selected is None
+        assert selected.status is EnumLlmParseStatus.UNPARSABLE
         assert pt == 0
         assert ct == 0
         assert tt == 0
@@ -554,7 +559,7 @@ class TestHandlerRoutingLlm:
                 correlation_id=uuid4(),
             )
 
-        assert selected == "agent-debugger"
+        assert selected.value == "agent-debugger"
         assert pt == 0
         assert ct == 0
         assert tt == 0
@@ -579,7 +584,12 @@ class TestHandlerRoutingLlm:
             handler,
             "_ask_llm",
             new_callable=AsyncMock,
-            return_value=("agent-api-architect", 0, 0, 0),
+            return_value=(
+                ModelLlmParseResult[str].parsed("agent-api-architect"),
+                0,
+                0,
+                0,
+            ),
         ):
             result = await handler.compute_routing(request)
 
@@ -600,7 +610,7 @@ class TestHandlerRoutingLlm:
             handler,
             "_ask_llm",
             new_callable=AsyncMock,
-            return_value=("agent-test-0", 0, 0, 0),
+            return_value=(ModelLlmParseResult[str].parsed("agent-test-0"), 0, 0, 0),
         ):
             result = await handler.compute_routing(request)
 
@@ -621,7 +631,7 @@ class TestHandlerRoutingLlm:
             handler,
             "_ask_llm",
             new_callable=AsyncMock,
-            return_value=("agent-debugger", 0, 0, 0),
+            return_value=(ModelLlmParseResult[str].parsed("agent-debugger"), 0, 0, 0),
         ):
             result = await handler.compute_routing(request)
 
