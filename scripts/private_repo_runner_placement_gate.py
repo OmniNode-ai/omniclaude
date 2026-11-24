@@ -256,6 +256,11 @@ class Finding:
     via: str = ""
 
 
+#: The fields of a Finding that are the same for every branch whose tree the
+#: gate could not read: job, runs_on, resolved. `events` is left to default.
+_UNJUDGED = ("(every job on the branch)", "unreadable", "undecidable")
+
+
 @dataclass(frozen=True)
 class Branch:
     """One arm of a `runs-on` selector, with the guard that reaches it.
@@ -1224,7 +1229,7 @@ class CalledWorkflows:
                 )
                 if resolved.returncode != 0:
                     continue
-                commit = resolved.stdout.decode("utf-8", "replace").strip()
+                commit = _text(resolved).strip()
             published = _run_git_in_clone(
                 clone,
                 "for-each-ref",
@@ -1238,7 +1243,7 @@ class CalledWorkflows:
                 continue
             blob = _run_git_in_clone(clone, "cat-file", "blob", f"{commit}:{path}")
             if blob.returncode == 0:
-                return blob.stdout.decode("utf-8", "replace"), clone, commit
+                return _text(blob), clone, commit
         return None
 
     @staticmethod
@@ -1334,19 +1339,17 @@ class CalledWorkflows:
                 return text
             where = ", ".join(str(root) for root in self._roots()) or "(none)"
             raise GateError(
-                f"could not fetch the called workflow {uses!r} "
-                f"({live}). A `uses:` job's placement is "
-                "decided by the called workflow's runs-on resolved in THIS "
-                "repository's variable scopes, so a gate that cannot read it "
-                "has not judged the job -- and this repository's required "
-                "checks may be the jobs in question. Supply a credential with "
-                "cross-repository read as ACTIONS_VARIABLES_TOKEN. Outside "
-                "Actions a workflow pinned to a full commit sha or a tag "
-                "present in the clone's refs/tags is also read "
-                f"from a clone of {slug} under {where} whose origin branches "
-                "hold that commit; fetch the clone, or set OMNI_HOME to the "
-                "directory holding it. A branch pin is never answered locally. "
-                "THE GATE DID NOT RUN."
+                f"could not fetch the called workflow {uses!r} ({live}). A `uses:` "
+                "job's placement is decided by the called workflow's runs-on resolved "
+                "in THIS repository's variable scopes, so a gate that cannot read it "
+                "has not judged the job -- and this repository's required checks may "
+                "be the jobs in question. Supply a credential with cross-repository "
+                "read as ACTIONS_VARIABLES_TOKEN. Outside Actions a workflow pinned to "
+                "a full commit sha or a tag present in the clone's refs/tags is also "
+                f"read from a clone of {slug} under {where} whose origin branches hold "
+                "that commit; fetch the clone, or set OMNI_HOME to the directory "
+                "holding it. A branch pin is never answered locally. THE GATE DID NOT "
+                "RUN."
             )
         self._cache[uses] = result.stdout
         return self._cache[uses]
@@ -1383,7 +1386,7 @@ def _run_git_in_clone(clone: Path, *args: str) -> subprocess.CompletedProcess[by
 def _origin_is(clone: Path, slug: str) -> bool:
     """Does this clone's origin name the repository `slug` on GitHub?"""
     result = _run_git_in_clone(clone, "remote", "get-url", "origin")
-    url = result.stdout.decode("utf-8", "replace").strip()
+    url = _text(result).strip()
     return result.returncode == 0 and bool(
         re.search(rf"github\.com[:/]{re.escape(slug)}(\.git)?/?$", url, re.IGNORECASE)
     )
@@ -1406,9 +1409,7 @@ def local_clone_roots(repo_root: Path) -> list[Path]:
         repo_root, "rev-parse", "--path-format=absolute", "--git-common-dir"
     )
     if common.returncode == 0 and common.stdout.strip():
-        roots.append(
-            Path(common.stdout.decode("utf-8", "replace").strip()).parent.parent
-        )
+        roots.append(Path(_text(common).strip()).parent.parent)
     unique: list[Path] = []
     for root in roots:
         resolved = root.resolve()
@@ -2357,6 +2358,12 @@ BRANCH_FILTER_TRIGGERS = ("push", "pull_request", "pull_request_target")
 ALWAYS_JUDGED = ("main", "dev")
 
 
+def _text(result: subprocess.CompletedProcess[bytes]) -> str:
+    # A completed git read's stdout as text, replacing undecodable bytes. One
+    # spelling of the decode, which seven call sites had written out by hand.
+    return result.stdout.decode("utf-8", "replace")
+
+
 def _run_git(repo_root: Path, *args: str) -> subprocess.CompletedProcess[bytes]:
     return subprocess.run(
         ["git", "-C", str(repo_root), *args],
@@ -2447,11 +2454,8 @@ def _remote_branches(repo_root: Path) -> list[str]:
         "--format=%(refname:strip=3)",
         "refs/remotes/origin/",
     )
-    names = [
-        line.strip()
-        for line in result.stdout.decode("utf-8", "replace").splitlines()
-        if line.strip() and line.strip() != "HEAD"
-    ]
+    stripped = (line.strip() for line in _text(result).splitlines())
+    names = [name for name in stripped if name and name != "HEAD"]
     if result.returncode != 0 or not names:
         raise GateError(
             f"no branch of the repository is fetched into {repo_root} "
@@ -2467,7 +2471,7 @@ def _remote_branches(repo_root: Path) -> list[str]:
 
 def _default_branch(repo_root: Path) -> str:
     result = _run_git(repo_root, "ls-remote", "--symref", "origin", "HEAD")
-    for line in result.stdout.decode("utf-8", "replace").splitlines():
+    for line in _text(result).splitlines():
         match = re.match(r"^ref:\s+refs/heads/(\S+)\s+HEAD$", line.strip())
         if match:
             return match.group(1)
@@ -2585,57 +2589,72 @@ def scan_every_workflow_branch(
     """
     findings: list[Finding] = []
     for branch in workflow_branches(repo_root, event_branch):
-        texts = _workflow_texts(repo_root, branch)
-        sha = (
+        # Read outside the try: the except below names this branch and its sha,
+        # so the sha must already be bound when a read of the tree refuses.
+        sha = _text(
             _run_git(repo_root, "rev-parse", f"refs/remotes/origin/{branch}")
-            .stdout.decode("utf-8", "replace")
-            .strip()[:12]
-        )
-        if not texts:
-            judged.append(f"branch {branch} ({sha}): no workflows, nothing runs")
-            continue
-        with tempfile.TemporaryDirectory(prefix="placement-branch-") as scratch:
-            root = Path(scratch)
-            workflows = root / ".github" / "workflows"
-            workflows.mkdir(parents=True)
-            for name, text in texts.items():
-                (workflows / name).write_text(text, encoding="utf-8")
-            # The branch's OWN declaration, never the checkout's: a pull
-            # request's listing must not excuse another branch's tree.
-            declaration = _branch_file(repo_root, branch, ELIGIBLE_FILE)
-            if declaration is not None:
-                (root / ELIGIBLE_FILE).write_text(declaration, encoding="utf-8")
-            branch_accepted: list[str] = []
-            branch_findings = scan(
-                root,
-                slug,
-                variables,
-                CalledWorkflows(
+        ).strip()[:12]
+        try:
+            texts = _workflow_texts(repo_root, branch)
+            if not texts:
+                judged.append(f"branch {branch} ({sha}): no workflows, nothing runs")
+                continue
+            with tempfile.TemporaryDirectory(prefix="placement-branch-") as scratch:
+                root = Path(scratch)
+                workflows = root / ".github" / "workflows"
+                workflows.mkdir(parents=True)
+                for name, text in texts.items():
+                    (workflows / name).write_text(text, encoding="utf-8")
+                # The branch's OWN declaration, never the checkout's: a pull
+                # request's listing must not excuse another branch's tree.
+                declaration = _branch_file(repo_root, branch, ELIGIBLE_FILE)
+                if declaration is not None:
+                    (root / ELIGIBLE_FILE).write_text(declaration, encoding="utf-8")
+                branch_accepted: list[str] = []
+                branch_findings = scan(
                     root,
-                    fixture=called_fixture,
-                    clone_roots=local_clone_roots(repo_root),
-                ),
-                notes,
-                latent,
-                matrix,
-                refs,
-                rulings_path,
-                reader,
-                branch_accepted,
-            )
-            if accepted is not None:
-                accepted.extend(
-                    line.replace("eligible: ", f"eligible: {branch}:", 1)
-                    for line in branch_accepted
+                    slug,
+                    variables,
+                    CalledWorkflows(
+                        root,
+                        fixture=called_fixture,
+                        clone_roots=local_clone_roots(repo_root),
+                    ),
+                    notes,
+                    latent,
+                    matrix,
+                    refs,
+                    rulings_path,
+                    reader,
+                    branch_accepted,
                 )
-        judged.append(
-            f"branch {branch} ({sha}): {len(texts)} workflow(s), "
-            f"{len(branch_findings)} hosted placement(s)"
-        )
-        findings.extend(
-            replace(finding, workflow=f"{branch}:{finding.workflow}")
-            for finding in branch_findings
-        )
+                if accepted is not None:
+                    accepted.extend(
+                        line.replace("eligible: ", f"eligible: {branch}:", 1)
+                        for line in branch_accepted
+                    )
+            judged.append(
+                f"branch {branch} ({sha}): {len(texts)} workflow(s), "
+                f"{len(branch_findings)} hosted placement(s)"
+            )
+            findings.extend(
+                replace(finding, workflow=f"{branch}:{finding.workflow}")
+                for finding in branch_findings
+            )
+        except GateError as error:
+            # OMN-21348's ruling, applied to the other failure mode. A pull
+            # request cannot change another branch, so it cannot repair that
+            # branch's unresolvable `uses:` pin either -- and a GateError
+            # raised while judging that tree used to escape this function and
+            # return 2 for the whole run, which is the deadlock that ruling
+            # closed, reopened through the reader instead of the verdict.
+            # Reported as that branch's own finding, so `--other-branches
+            # warn` demotes it and `fail` still fails on it. No `continue`:
+            # this is the last statement of the loop body.
+            judged.append(f"branch {branch} ({sha}): NOT JUDGED -- {error}")
+            findings.append(
+                Finding(f"{branch}:(tree not judged)", *_UNJUDGED, str(error), branch)
+            )
     return findings
 
 
