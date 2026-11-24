@@ -70,3 +70,19 @@ dod_evidence:
           && ! grep -Fq 'scripts/worktree_auto_prune.py' config/ledger_file_census_ratchet.yaml
           && ! grep -Fq 'handler_git_admission.py' config/ledger_file_census_ratchet.yaml
         cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn26330-integration-proof
+    description: >-
+      The six focused test files run on a lab pool host at the pushed head, placed over the bus with the
+      lab-work runner, and exit 0 there; they call the reader node client that the change introduces.
+    source: manual
+    execution_scope: local_done_gate
+    binds_ac:
+      - AC3
+    checks:
+      - check_type: command
+        cwd: "."
+        check_value: >-
+          onex lab-work run --lane censclaude-1220 --repo OmniNode-ai/omniclaude --sha "$(git rev-parse HEAD)" --kind test --
+          uv run pytest tests/scripts/test_worktree_auto_prune.py tests/hooks/test_ledger_ruling_reread.py
+          tests/unit/handlers/test_work_ledger_rows_omn26330.py tests/hooks_system/test_hook_canary.py
+          tests/hooks/test_credential_rotation_guard.py tests/test_runtime_readers_ledger_bus.py -q --no-cov
