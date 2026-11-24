@@ -10,16 +10,16 @@
 # switch in a working tree never changes what a running canary executes.
 #
 # Usage:
-#   bash scripts/install-hook-process-canary.sh --state-dir DIR [--ledger FILE] [--internal-home DIR] [--omni-home DIR]
+#   bash scripts/install-hook-process-canary.sh --state-dir DIR [--internal-home DIR] [--omni-home DIR]
 #   bash scripts/install-hook-process-canary.sh --state-dir DIR --status
 #   bash scripts/install-hook-process-canary.sh --state-dir DIR --uninstall
 #
 # --state-dir is required, no default: it holds the heartbeat, ALERT.json, the log
-# and the copied scripts (under DIR/repo-copy). --ledger names the rolling ledger the
-# ALERT row is appended to, and --internal-home the omnibase_internal project whose
-# packaged onex-ledger appends it, run by uv (resolved here, at install time, because
-# launchd and cron have a restricted PATH). A host without a ledger, such as a lab host,
-# omits both and relies on the operator notifier alone; the canary then reports that
+# and the copied scripts (under DIR/repo-copy). --internal-home names the internal
+# project whose packaged onex-ledger appends the ALERT row over the event bus, run by uv
+# (resolved here, at install time, because launchd and cron have a restricted PATH); the
+# installer names no ledger file and the canary opens none (OMN-26330). A host that omits it,
+# such as a lab host, relies on the operator notifier alone; the canary then reports that
 # channel as not delivered on every alarm rather than pretending.
 # --omni-home names the workspace root containing the ledger's hook-emit appender.
 set -euo pipefail
@@ -29,14 +29,12 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 LABEL="ai.omninode.hook-process-canary"
 ACTION=install
 STATE_DIR=""
-LEDGER=""
 INTERNAL_HOME=""
 OMNI_HOME_DIR=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --state-dir) STATE_DIR="${2:?--state-dir needs a value}"; shift 2 ;;
-    --ledger) LEDGER="${2:?--ledger needs a value}"; shift 2 ;;
     --internal-home) INTERNAL_HOME="${2:?--internal-home needs a value}"; shift 2 ;;
     --omni-home) OMNI_HOME_DIR="${2:?--omni-home needs a value}"; shift 2 ;;
     --status) ACTION=status; shift ;;
@@ -79,20 +77,17 @@ copy_scripts() {
   for f in hook_process_canary.py hook_canary_notify.sh hook_canary_ledger_append.sh; do
     install -m 0755 "${REPO_ROOT}/scripts/${f}" "${COPY_ROOT}/scripts/${f}"
   done
-  install -m 0644 "${REPO_ROOT}/src/omniclaude/handlers/handler_ledger_write_guard.py" \
-    "${COPY_ROOT}/scripts/handler_ledger_write_guard.py"
   install -m 0644 "${REPO_ROOT}/plugins/onex/hooks/scripts/alert-channel.sh" \
     "${COPY_ROOT}/plugins/onex/hooks/scripts/alert-channel.sh"
 }
 
 render_plist() {
-  local python="$1" internal="${INTERNAL_HOME:-${OMNIBASE_INTERNAL_HOME:-}}" ledger="${LEDGER:-${ONEX_LEDGER_PATH:-}}" workspace_home="${OMNI_HOME_DIR:-${OMNI_HOME:-}}" uv_dir
+  local python="$1" internal="${INTERNAL_HOME:-${OMNIBASE_INTERNAL_HOME:-}}" workspace_home="${OMNI_HOME_DIR:-${OMNI_HOME:-}}" uv_dir
   [[ -n "${internal}" ]] || { echo "install-hook-process-canary: set OMNIBASE_INTERNAL_HOME or --internal-home" >&2; exit 2; }
-  [[ -n "${ledger}" ]] || { echo "install-hook-process-canary: set ONEX_LEDGER_PATH or --ledger" >&2; exit 2; }
   [[ -n "${workspace_home}" ]] || { echo "install-hook-process-canary: set OMNI_HOME or --omni-home (the ledger's dual write resolves its emit appender under it)" >&2; exit 2; }
   uv_dir="$(resolve_uv)"
   sed -e "s|__PYTHON__|${python}|g" -e "s|__ROOT__|${COPY_ROOT}|g" -e "s|__STATE_DIR__|${STATE_DIR}|g" \
-      -e "s|__INTERNAL_HOME__|${internal}|g" -e "s|__LEDGER__|${ledger}|g" -e "s|__HOME__|${HOME}|g" \
+      -e "s|__INTERNAL_HOME__|${internal}|g" -e "s|__HOME__|${HOME}|g" \
       -e "s|__OMNI_HOME__|${workspace_home}|g" \
       -e "s|__UV_DIR__|${uv_dir}|g" \
       "${REPO_ROOT}/scripts/launchd/${LABEL}.plist"
@@ -101,7 +96,7 @@ render_plist() {
 cron_line() {
   local python="$1"
   local env_prefix="ONEX_STATE_DIR=${STATE_DIR}"
-  [[ -n "${LEDGER}" ]] && env_prefix="${env_prefix} ONEX_LEDGER_PATH=${LEDGER} OMNIBASE_INTERNAL_HOME=${INTERNAL_HOME:?--internal-home is required with --ledger} OMNI_HOME=${OMNI_HOME_DIR:-${OMNI_HOME:?--omni-home or OMNI_HOME is required with --ledger}} PATH=$(resolve_uv):/usr/bin:/bin"
+  [[ -n "${INTERNAL_HOME}" ]] && env_prefix="${env_prefix} OMNIBASE_INTERNAL_HOME=${INTERNAL_HOME} OMNI_HOME=${OMNI_HOME_DIR:-${OMNI_HOME:?--omni-home or OMNI_HOME is required with --internal-home}} PATH=$(resolve_uv):/usr/bin:/bin"
   echo "* * * * * ${env_prefix} timeout 50 ${python} ${COPY_ROOT}/scripts/hook_process_canary.py --once --state-dir ${STATE_DIR} >> ${STATE_DIR}/canary.log 2>&1 ${CRON_TAG}"
 }
 

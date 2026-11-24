@@ -389,19 +389,22 @@ def test_hook_refuses_with_exit_two_and_logs_the_lane(
     "script", [HOOK_SCRIPT, ENTRYPOINT], ids=["guard", "entrypoint"]
 )
 def test_hook_allows_push_silently(lay: Layout, script: Path) -> None:
-    ledger = lay.root / "ROLLING_WORK_LEDGER.md"
-    ledger.write_text(
-        "2026-10-01T00:00:00Z | CLAIM | lane=lane-a | ticket=OMN-18645 | "
-        "actor=codex | worktree=none | no post-CLAIM rulings\n",
+    # The stand-in for the work-ledger reader node's interpreter: it prints the lane's CLAIM row.
+    reader = lay.root / "reader"
+    reader.write_text(
+        "#!/bin/sh\n"
+        "echo '2026-10-01T00:00:00Z | CLAIM | lane=lane-a | ticket=OMN-18645 | "
+        "actor=codex | worktree=none | no post-CLAIM rulings'\n",
         encoding="utf-8",
     )
+    reader.chmod(0o755)
     proc = _run(
         script,
         lay,
         "git push origin HEAD",
         lay.worktree,
         ONEX_LANE="lane-a",
-        ONEX_LEDGER_PATH=str(ledger),
+        ONEX_LEDGER_READER_PYTHON=str(reader),
     )
     assert proc.returncode == 0, (proc.stdout, proc.stderr)
     assert proc.stdout.strip() == ""

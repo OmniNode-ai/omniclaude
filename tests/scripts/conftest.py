@@ -82,3 +82,17 @@ def install_ancestry_ps(bin_dir: Path, ancestor_comm: str = "/usr/sbin/cron") ->
 
 def _sh_quote(value: str) -> str:
     return "'" + value.replace("'", "'\"'\"'") + "'"
+
+
+def fake_ledger_reader(ledger: Path) -> str:
+    """An executable standing in for the work-ledger reader node's interpreter (OMN-26330).
+
+    The worktree pruner runs ``<interpreter> -m <reader module> --reader <name> --query rows ...``;
+    this fake ignores the arguments and prints the rows of ``ledger`` as they stand when it is
+    called, so a test that edits the file between two reads sees the change. It is a stand-in for
+    the node, never a ledger path handed to the code under test.
+    """
+    script = ledger.with_name(f"{ledger.name}.reader")
+    script.write_text(f'#!/bin/sh\ncat "{ledger}"\n', encoding="utf-8")
+    script.chmod(0o755)
+    return str(script)

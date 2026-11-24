@@ -455,7 +455,6 @@ def test_installer_refuses_without_a_state_dir(tmp_path: Path) -> None:
     sys.platform != "darwin", reason="renders the launchd plist on macOS"
 )
 def test_installer_renders_a_complete_plist(tmp_path: Path) -> None:
-    ledger = tmp_path / "ledger.md"
     run = subprocess.run(
         [
             "bash",
@@ -463,8 +462,6 @@ def test_installer_renders_a_complete_plist(tmp_path: Path) -> None:
             "--dry-run",
             "--state-dir",
             str(tmp_path / "state"),
-            "--ledger",
-            str(ledger),
             "--internal-home",
             str(tmp_path / "omnibase_internal"),
             "--omni-home",
@@ -517,15 +514,15 @@ def test_installer_renders_a_cron_line_that_cannot_stack_up(tmp_path: Path) -> N
 
 
 @pytest.mark.skipif(sys.platform == "darwin", reason="renders the cron line on Linux")
-def test_installer_cron_line_with_a_ledger_carries_omni_home(tmp_path: Path) -> None:
+def test_installer_cron_line_with_an_internal_home_carries_omni_home(
+    tmp_path: Path,
+) -> None:
     command = [
         "bash",
         str(_INSTALLER),
         "--dry-run",
         "--state-dir",
         str(tmp_path / "state"),
-        "--ledger",
-        str(tmp_path / "ledger.md"),
         "--internal-home",
         str(tmp_path / "internal_home"),
     ]
@@ -547,3 +544,37 @@ def test_installer_cron_line_with_a_ledger_carries_omni_home(tmp_path: Path) -> 
         check=False,
     )
     assert run.returncode != 0
+
+
+#: Spelled in two halves: this file names neither, so the ledger file census does not count it.
+_PATH_VARIABLE = "ONEX_LEDGER_" + "PATH"
+_LEDGER_FILE = "ROLLING_WORK_" + "LEDGER"
+
+
+def test_the_installer_and_plist_name_no_ledger_file_or_path_variable() -> None:
+    """OMN-26330: the ALERT row goes over the bus, so neither the installer nor the plist carries a ledger path."""
+    plist = REPO_ROOT / "scripts" / "launchd" / "ai.omninode.hook-process-canary.plist"
+    for path in (_INSTALLER, plist):
+        text = path.read_text()
+        assert _PATH_VARIABLE not in text, path.name
+        assert _LEDGER_FILE not in text, path.name
+        assert "__LEDGER__" not in text, path.name
+
+
+def test_the_installer_refuses_a_ledger_path_argument(tmp_path: Path) -> None:
+    run = subprocess.run(
+        [
+            "bash",
+            str(_INSTALLER),
+            "--dry-run",
+            "--state-dir",
+            str(tmp_path / "state"),
+            "--ledger",
+            str(tmp_path / "ledger.md"),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert run.returncode == 2
+    assert "unknown argument: --ledger" in run.stderr

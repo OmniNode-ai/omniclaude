@@ -1,0 +1,72 @@
+schema_version: "1.0.0"
+ticket_id: OMN-26330
+title: The omniclaude runtime ledger-file readers and writers that remained after the first two slices read and write the ledger only through the bus
+summary: >-
+  Last slice of the omniclaude group of the ledger-file census. Five of the six runtime files still counted
+  are moved off the ledger file: the worktree prune script and the git admission ruling re-read read their
+  rows from the work-ledger reader node (through one shared client, src/omniclaude/handlers/work_ledger_rows.py);
+  the hook process canary installer and its launchd plist stop carrying a ledger path (the canary already
+  appends over the bus); the credential rotation guard's citation grammar takes its surface name from its
+  policy. The pre-push branch claim hook is not moved: its resolver, scripts/branch_claim.py, is a baselined
+  file the file-shape ratchet lets only shrink, and the pull-request check runs the same resolver over a
+  fetched copy of the store. Census: 44 files and 6 runtime before, 36 and 1 after.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn26330-bus-only
+    statement: No omniclaude runtime file holds an executable reader or writer of the work ledger file or its path variable.
+    acceptance:
+      - id: AC1
+        statement: >-
+          AC1: the census node, run over the omniclaude tree with --packaged-overlay --per-file, reports runtime=1 (the pre-push hook) and exits zero, down from runtime=6 -- falsifier: the census run prints runtime=<n> with n above 1, or exits non-zero; on the merge base it prints runtime=6
+      - id: AC2
+        statement: >-
+          AC2: the ratchet row and the per-file table of config/ledger_file_census_ratchet.yaml are lowered to the census count and no row is raised or added -- falsifier: git diff origin/dev -- config/ledger_file_census_ratchet.yaml shows a raised or added line, or the census run exits non-zero
+      - id: AC3
+        statement: >-
+          AC3: each moved reader has a test that fails on the old code and passes on the change -- falsifier: the focused test files named in the evidence requirement exit non-zero at the head
+evidence_requirements:
+  - kind: tests
+    description: The focused test files of the six moved files pass at the head.
+    command: >-
+      uv run pytest tests/scripts/test_worktree_auto_prune.py tests/hooks/test_ledger_ruling_reread.py
+      tests/unit/handlers/test_work_ledger_rows_omn26330.py tests/hooks_system/test_hook_canary.py
+      tests/hooks/test_credential_rotation_guard.py tests/test_runtime_readers_ledger_bus.py -q --no-cov
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+  - id: dod-omn26330-ac3-moved-readers
+    description: >-
+      The worktree prune script, the ruling re-read, the shared rows client, the canary installer and the
+      credential guard grammar each have focused tests that call a fake reader node and never open a ledger file;
+      the functions and flags they exercise do not exist at the merge base.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC3
+    checks:
+      - check_type: test_passes
+        check_value: >-
+          uv run pytest tests/scripts/test_worktree_auto_prune.py tests/hooks/test_ledger_ruling_reread.py
+          tests/unit/handlers/test_work_ledger_rows_omn26330.py tests/hooks_system/test_hook_canary.py
+          tests/hooks/test_credential_rotation_guard.py tests/test_runtime_readers_ledger_bus.py -q --no-cov
+        cwd: ${OMNI_HOME}/omniclaude
+  - id: dod-omn26330-ac1-ac2-ratchet
+    description: >-
+      The ratchet row reads 36 and the per-file table no longer lists the five moved runtime files; at the merge base the row
+      reads 44 and lists all six.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC1
+      - AC2
+    checks:
+      - check_type: command
+        check_value: >-
+          grep -Fq 'omniclaude: 36' config/ledger_file_census_ratchet.yaml
+          && ! grep -Fq 'scripts/worktree_auto_prune.py' config/ledger_file_census_ratchet.yaml
+          && ! grep -Fq 'handler_git_admission.py' config/ledger_file_census_ratchet.yaml
+        cwd: ${OMNI_HOME}/omniclaude
