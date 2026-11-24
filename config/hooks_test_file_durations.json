@@ -211,6 +211,7 @@
   "tests/hooks/test_tick_activity_classifier.py": 0.04,
   "tests/hooks/test_ticket_creation_guard.py": 5.5,
   "tests/hooks/test_ticket_creation_guard_defect_diagnosis.py": 1.38,
+  "tests/hooks/test_ticket_creation_guard_integration_act_lane.py": 2.0,
   "tests/hooks/test_ticket_creation_guard_ledger_bus.py": 1.72,
   "tests/hooks/test_ticket_creation_guard_lane_intake.py": 2.39,
   "tests/hooks/test_ticket_route_rows_match_core.py": 0.1,
