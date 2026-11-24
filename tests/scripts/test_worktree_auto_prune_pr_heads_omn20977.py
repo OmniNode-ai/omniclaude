@@ -44,7 +44,7 @@ from omnibase_core.validators.no_unguarded_git_subprocess import (
 
 from omniclaude.hooks.lib.worktree_prune_policy import EnumBranchPrState
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.usefixtures("ledger_reader")]
 
 _MODULE_PATH = (
     Path(__file__).resolve().parents[2] / "scripts" / "worktree_auto_prune.py"
@@ -298,8 +298,6 @@ def _run_main(
     argv = [
         "--worktrees-root",
         str(root),
-        "--ledger",
-        str(ledger),
         "--no-fetch",
         "--no-tracker",
         "--no-debris",

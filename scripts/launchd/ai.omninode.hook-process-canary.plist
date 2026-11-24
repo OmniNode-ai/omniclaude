@@ -16,7 +16,7 @@
   canary-gap alarm from the stale heartbeat, so a stopped canary is an alarm.
 
   Template: the double-underscore placeholders below (interpreter, script root,
-  state directory, omnibase_internal project, ledger, home, uv directory) are expanded by
+  state directory, ledger project, home, uv directory) are expanded by
   install-hook-process-canary.sh, which copies the scripts into a directory the
   job owns so a branch switch in a working tree never changes what the canary
   runs.
@@ -61,8 +61,6 @@
     <string>__INTERNAL_HOME__</string>
     <key>OMNI_HOME</key>
     <string>__OMNI_HOME__</string>
-    <key>ONEX_LEDGER_PATH</key>
-    <string>__LEDGER__</string>
     <key>PATH</key>
     <string>__UV_DIR__:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>

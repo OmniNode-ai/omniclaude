@@ -46,7 +46,7 @@ from omniclaude.hooks.lib.worktree_prune_policy import (
     EnumRescueOnlyHoldReason,
 )
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.usefixtures("ledger_reader")]
 
 _MODULE_PATH = (
     Path(__file__).resolve().parents[2] / "scripts" / "worktree_auto_prune.py"
@@ -112,7 +112,7 @@ class ModelRescueFixture:
 
 
 @pytest.fixture
-def rescue_fixture(tmp_path: Path) -> ModelRescueFixture:
+def rescue_fixture(tmp_path: Path, ledger_reader) -> ModelRescueFixture:
     """One over-age, rescue-only worktree: dirty, ahead, no pull request ever.
 
     Both age limbs are pushed past the bar deliberately and by different means —
@@ -153,8 +153,7 @@ def rescue_fixture(tmp_path: Path) -> ModelRescueFixture:
     for name in ("app.py", "rescued.py"):
         _backdate(worktree / name, OVER_AGE_DAYS)
 
-    ledger = tmp_path / "ledger.md"
-    ledger.write_text("", encoding="utf-8")
+    ledger = ledger_reader.rows_file  # the rows the reader node answers
 
     hand_held = tmp_path / "hand_held_worktrees.yaml"
     hand_held.write_text("hand_held: []\n", encoding="utf-8")
@@ -187,8 +186,6 @@ def _run(
     argv = [
         "--worktrees-root",
         str(fixture.root),
-        "--ledger",
-        str(fixture.ledger),
         "--no-fetch",
         "--no-tracker",
         "--no-debris",
@@ -291,8 +288,6 @@ class TestAgeBarIsRequiredAndCarriesNoDefault:
                 [
                     "--worktrees-root",
                     str(rescue_fixture.root),
-                    "--ledger",
-                    str(rescue_fixture.ledger),
                     "--no-fetch",
                     "--no-tracker",
                     "--rescue-only",
@@ -322,8 +317,6 @@ class TestAgeBarIsRequiredAndCarriesNoDefault:
                 [
                     "--worktrees-root",
                     str(rescue_fixture.root),
-                    "--ledger",
-                    str(rescue_fixture.ledger),
                     "--no-fetch",
                     "--no-tracker",
                     "--no-debris",
@@ -582,8 +575,6 @@ class TestRescueOnlyIsOffUnlessAskedFor:
                 [
                     "--worktrees-root",
                     str(rescue_fixture.root),
-                    "--ledger",
-                    str(rescue_fixture.ledger),
                     "--no-fetch",
                     "--no-tracker",
                     "--no-debris",

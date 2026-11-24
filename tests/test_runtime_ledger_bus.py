@@ -12,13 +12,17 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import re
 import stat
 import sys
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
 import pytest
 import yaml
+
+from omniclaude.nodes.node_git_effect.handlers import handler_git_admission as admission
 
 pytestmark = pytest.mark.unit
 
@@ -42,6 +46,14 @@ MOVED = [
     "plugins/onex/hooks/lib/hook_emit_bounded.py",
     "scripts/public_repo_hygiene_gate.py",
 ]
+
+#: The second slice (OMN-26508): the hook, gate and script group; each names neither the ledger path
+#: variable nor the ledger file as a path (a citation of a row by line or timestamp is no path).
+PRUNE = "scripts/worktree_auto_prune.py"
+INSTALLER = "scripts/install-hook-process-canary.sh"
+PLIST = "scripts/launchd/ai.omninode.hook-process-canary.plist"
+HANDLER = "src/omniclaude/nodes/node_git_effect/handlers/handler_git_admission.py"
+MOVED_SCRIPTS = [PRUNE, INSTALLER, PLIST, HANDLER]
 
 
 class Bus:
@@ -206,5 +218,189 @@ def test_census_table_drops_the_moved_files() -> None:
         )
     )
     table = ratchet["files"]["omniclaude"]
-    assert [rel for rel in MOVED if rel in table] == []
-    assert ratchet["ratchet"]["omniclaude"] == len(table) <= 55
+    assert [rel for rel in [*MOVED, *MOVED_SCRIPTS] if rel in table] == []
+    assert ratchet["ratchet"]["omniclaude"] == len(table) <= 39
+
+
+# ---------------------------------------------------------------------------
+# Second slice: hook, gate and script readers (OMN-26508)
+# ---------------------------------------------------------------------------
+
+
+class ProgramBus:
+    """The fake reader node run as ``-I -c <program> <reader> <since> <kind>...`` (a history read)."""
+
+    def __init__(self, root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        self.root = root
+        self.log = root / "bus.log"
+        self.rows = root / "rows.txt"
+        self.rows.write_text("", encoding="utf-8")
+        reader = root / "reader-python"
+        # argv: -I -c <program> <reader> <since> <kind>...  -- the reader name is argument 4.
+        reader.write_text(
+            '#!/bin/sh\nprintf \'%s\\n\' "$4 $5 $6 $7 $8 $9" >> "$FAKE_BUS_LOG"\n'
+            'cat "$FAKE_BUS_ROWS"\nexit 0\n',
+            encoding="utf-8",
+        )
+        reader.chmod(reader.stat().st_mode | stat.S_IXUSR)
+        self.reader = reader
+        monkeypatch.delenv(PATH_VARIABLE, raising=False)
+        monkeypatch.setenv("ONEX_LEDGER_READER_PYTHON", str(reader))
+        monkeypatch.setenv("FAKE_BUS_LOG", str(self.log))
+        monkeypatch.setenv("FAKE_BUS_ROWS", str(self.rows))
+        monkeypatch.setenv("OMNI_HOME", str(root / "home"))
+
+    def answer(self, *rows: str) -> None:
+        self.rows.write_text("".join(f"{row}\n" for row in rows), encoding="utf-8")
+
+    def calls(self) -> list[str]:
+        return (
+            self.log.read_text(encoding="utf-8").splitlines()
+            if self.log.exists()
+            else []
+        )
+
+    def ledger_files(self) -> list[Path]:
+        return [p for p in self.root.rglob(f"{LEDGER_FILE}*") if p.is_file()]
+
+
+@pytest.fixture
+def program_bus(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ProgramBus:
+    return ProgramBus(tmp_path, monkeypatch)
+
+
+def load_script(rel: str) -> ModuleType:
+    path = REPO / rel
+    sys.path.insert(0, str(path.parent))
+    # A name of its own: another suite registers the script under its stem, and a model defined in
+    # the script resolves its annotations through the module registered under the module's name.
+    spec = importlib.util.spec_from_file_location(f"ledger_bus_{path.stem}", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path.remove(str(path.parent))
+    return module
+
+
+def stamp_ago(seconds_ago: int = 0) -> str:
+    moment = datetime.now(UTC) - timedelta(seconds=seconds_ago)
+    return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# ---------------------------------------------------------------------------
+# worktree_auto_prune.py
+# ---------------------------------------------------------------------------
+
+
+def test_worktree_prune_reads_claims_from_the_reader_node(
+    program_bus: ProgramBus,
+) -> None:
+    prune = load_script(PRUNE)
+    program_bus.answer(
+        f"{stamp_ago(3600)} | CLAIM | lane=lane-a | ticket=OMN-1234 | started",
+        f"{stamp_ago(60)} | CLAIM | lane=lane-b | ticket=OMN-1234 | also started",
+        f"{stamp_ago(30)} | TERMINAL | lane=lane-a | ticket=OMN-1234 | landed",
+    )
+    claims = prune.parse_ledger_claims(prune.read_ledger_rows())
+    has_terminal, open_claims = claims["OMN-1234"]
+    assert has_terminal is True
+    assert [c.lane for c in open_claims] == ["lane-b"]
+    (call,) = program_bus.calls()
+    assert call.startswith("worktree-auto-prune-claims ")
+    assert call.strip().endswith("CLAIM TERMINAL")
+    assert program_bus.ledger_files() == []
+
+
+def test_worktree_prune_unanswered_reader_refuses_the_run(
+    program_bus: ProgramBus, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
+) -> None:
+    """An unreadable ledger is never an empty one: the run exits 2 and removes nothing."""
+    prune = load_script(PRUNE)
+    monkeypatch.setenv(
+        "ONEX_LEDGER_READER_PYTHON", str(program_bus.root / "absent-python")
+    )
+    root = tmp_path / "omni_worktrees"
+    root.mkdir()
+    with pytest.raises(SystemExit) as refused:
+        prune.main(
+            [
+                "--worktrees-root",
+                str(root),
+                "--no-fetch",
+                "--no-tracker",
+                "--no-pr-state",
+            ]
+        )
+    assert refused.value.code == 2
+    assert "ledger not readable" in capsys.readouterr().err
+
+
+def test_worktree_prune_takes_no_ledger_file_argument() -> None:
+    prune = load_script(PRUNE)
+    with pytest.raises(SystemExit):
+        prune.build_parser().parse_args(["--ledger", "/nowhere/ledger.md"])
+
+
+# ---------------------------------------------------------------------------
+# the git admission handler's ruling re-read
+# ---------------------------------------------------------------------------
+
+
+def test_ruling_reread_asks_the_reader_node_never_a_file(
+    program_bus: ProgramBus, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ONEX_STATE_DIR", str(program_bus.root / "state"))
+    program_bus.answer(
+        f"{stamp_ago(600)} | CLAIM | lane=census-lane | ticket=OMN-26508 | actor=x | worktree=none | s"
+    )
+    environ = {
+        **os.environ,
+        "ONEX_LANE": "census-lane",
+        "ONEX_STATE_DIR": str(program_bus.root / "state"),
+    }
+    assert admission.ruling_reread_refusal(environ) is None
+    calls = program_bus.calls()
+    assert calls and all(c.startswith("git-admission-ruling-reread ") for c in calls)
+    assert program_bus.ledger_files() == []
+
+
+def test_ruling_reread_unanswered_reader_blocks_the_publish(
+    program_bus: ProgramBus, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    environ = {
+        **os.environ,
+        "ONEX_LANE": "census-lane",
+        "ONEX_STATE_DIR": str(program_bus.root / "state"),
+        "ONEX_LEDGER_READER_PYTHON": str(program_bus.root / "absent-python"),
+    }
+    reason = admission.ruling_reread_refusal(environ) or ""
+    assert "could not be verified" in reason
+
+
+# ---------------------------------------------------------------------------
+# no file path
+# ---------------------------------------------------------------------------
+
+#: The ledger file's name followed by a line number or a timestamp is a citation, not a path.
+_CITATION = re.compile(re.escape(LEDGER_FILE) + r"(\.md)?(:\d+|@)")
+
+
+@pytest.mark.parametrize("rel", MOVED_SCRIPTS)
+def test_no_file_path_the_moved_files_name_neither_the_file_nor_its_variable(
+    rel: str,
+) -> None:
+    text = (REPO / rel).read_text(encoding="utf-8")
+    assert PATH_VARIABLE not in text, rel
+    for line in text.splitlines():
+        if LEDGER_FILE in line:
+            assert _CITATION.search(line), f"{rel}: {line.strip()}"
+
+
+def test_no_file_path_the_installer_passes_no_ledger_argument() -> None:
+    installer = (REPO / INSTALLER).read_text(encoding="utf-8")
+    assert "--ledger" not in installer
+    assert "__LEDGER__" not in installer
+    assert "__LEDGER__" not in (REPO / PLIST).read_text(encoding="utf-8")

@@ -322,6 +322,7 @@
     ],
     "restore_max_dirty_paths": 200,
     "git_probe_timeout_seconds": 10,
+    "ledger_reader_timeout_seconds": 150,
     "worktree_root_envs": [
         "ONEX_WORKTREES_ROOT",
         "OMNI_WORKTREES_DIR"

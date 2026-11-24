@@ -8,6 +8,17 @@ summary: >-
   record itself and publishes over the bus) or read through the work-ledger reader node, and name neither
   the ledger file nor its path variable. The other twelve files are listed in the pull request body with
   the reason each stays.
+
+  Second slice: the hook process canary installer and launchd unit, the worktree auto prune script and the git
+  admission ruling re-read stop opening a ledger file or carrying its path variable. The prune script (reader name
+  worktree-auto-prune-claims) and the ruling re-read (git-admission-ruling-reread) read their rows from the
+  work-ledger reader node through src/omniclaude/handlers/ledger_reader_rows.py and refuse when it does not answer;
+  the canary installer and plist drop a path variable the canary never read. The two reader names are listed in
+  moved_readers of the overlays repository. The census ratchet drops four runtime rows and lowers one test row
+  (44 files to 39). The git admission policy file stays: it names the ledger file in a list of paths a restore may
+  not overwrite, and is no reader. The pre-push branch claim hook stays: its check (scripts/branch_claim.py and
+  scripts/claim_index.py) reads a claim store file, both are baselined files that only shrink, and a command line
+  entry outside a node runtime is refused by the shape ratchet, so the move needs a node.
 is_seam_ticket: false
 interface_change: false
 interfaces_touched: []
@@ -73,8 +84,8 @@ dod_evidence:
   - id: dod-omn26508-ac1-census-ratchet
     description: >-
       The census ratchet row for omniclaude and the per-file table only shrink: the moved files are dropped
-      from the table and the row equals the table's size, which is at most 55; at the merge base the moved
-      files are still listed and the row is above 55, so the test fails there.
+      from the table and the row equals the table's size, which is at most 39; at the merge base the moved
+      files are still listed and the row is 44, so the test fails there.
     source: manual
     execution_scope: hosted_and_local
     binds_ac:
