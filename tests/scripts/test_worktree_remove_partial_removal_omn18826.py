@@ -24,6 +24,7 @@ from omniclaude.hooks.lib.worktree_prune_policy import (
     EnumBranchPrState,
     EnumPruneDisposition,
 )
+from tests.scripts.conftest import fake_ledger_reader
 
 pytestmark = pytest.mark.unit
 ROOT = Path(__file__).resolve().parents[2]
@@ -325,8 +326,8 @@ def test_main_reports_half_removed_without_classifying(
             [
                 "--worktrees-root",
                 str(registry / "omni_worktrees"),
-                "--ledger",
-                str(ledger),
+                "--ledger-reader",
+                fake_ledger_reader(ledger),
                 "--no-tracker",
                 "--no-pr-state",
                 "--no-fetch",

@@ -67,14 +67,17 @@ _CORRELATION_ID = uuid.uuid4()
 @pytest.fixture(autouse=True)
 def admitted_lane(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Exercise subprocess behavior with a real, isolated positive admission input."""
-    ledger = tmp_path / "ROLLING_WORK_LEDGER.md"
-    ledger.write_text(
-        "2026-10-01T00:00:00Z | CLAIM | lane=subprocess-test | ticket=OMN-18645 | "
-        "actor=codex | worktree=none | no post-CLAIM rulings\n",
+    # The stand-in for the work-ledger reader node's interpreter: it prints the lane's CLAIM row.
+    reader = tmp_path / "reader"
+    reader.write_text(
+        "#!/bin/sh\n"
+        "echo '2026-10-01T00:00:00Z | CLAIM | lane=subprocess-test | ticket=OMN-18645 | "
+        "actor=codex | worktree=none | no post-CLAIM rulings'\n",
         encoding="utf-8",
     )
+    reader.chmod(0o755)
     monkeypatch.setenv("ONEX_LANE", "subprocess-test")
-    monkeypatch.setenv("ONEX_LEDGER_PATH", str(ledger))
+    monkeypatch.setenv("ONEX_LEDGER_READER_PYTHON", str(reader))
     monkeypatch.setenv("ONEX_STATE_DIR", str(tmp_path / "state"))
 
 

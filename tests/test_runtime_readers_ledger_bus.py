@@ -33,6 +33,17 @@ PLACEMENT = "scripts/private_repo_runner_placement_gate.py"
 #: The runtime files this ticket moved; each names neither the ledger file nor its path variable.
 MOVED = [LIVENESS, IDENTITY, PLACEMENT]
 
+#: OMN-26330: the files that named neither the ledger file nor its path variable in code once moved.
+CANARY_INSTALLER = "scripts/install-hook-process-canary.sh"
+CANARY_PLIST = "scripts/launchd/ai.omninode.hook-process-canary.plist"
+MOVED += [CANARY_INSTALLER, CANARY_PLIST]
+#: Files that still cite the ledger file in a docstring or comment, and name no path variable.
+MOVED_NO_VARIABLE = [
+    "scripts/worktree_auto_prune.py",
+    "src/omniclaude/nodes/node_git_effect/handlers/handler_git_admission.py",
+    "plugins/onex/hooks/lib/credential_rotation_guard.py",
+]
+
 
 class Bus:
     """The fake reader node: records every call and answers ``rows`` from a file."""
@@ -209,3 +220,8 @@ def test_no_file_path(rel: str) -> None:
     assert PATH_VARIABLE not in text
     assert LEDGER_FILE not in text
     assert os.path.exists(REPO / rel)
+
+
+@pytest.mark.parametrize("rel", MOVED_NO_VARIABLE)
+def test_no_path_variable(rel: str) -> None:
+    assert PATH_VARIABLE not in (REPO / rel).read_text(encoding="utf-8")
