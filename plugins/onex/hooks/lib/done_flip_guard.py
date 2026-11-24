@@ -28,6 +28,7 @@ from linear_done_verify import (
     fetch_pr_status,
     is_cancel_state,
     is_done_state,
+    merge_call_and_live_text,
     parse_deploy_readback_marker,
     verify,
     verify_implementing,
@@ -379,18 +380,20 @@ def decide(
         return Decision(True, "not_done_state")
 
     # ---- Done transition -------------------------------------------------
-    labels: list[str] = [str(x) for x in (params.get("labels") or [])]
+    # OMN-26655: judged on the LIVE ticket, whatever the call carries. The call's
+    # description adds citations to check but cannot leave out one the live
+    # ticket makes, and the call's labels and text never supply the
+    # ``close-if-done`` exemption: only the live ticket's own do.
     live = _live() if ticket_id else None
     live_description = str(live.get("description") or "") if live else ""
-    if live is not None and not labels:
-        labels = [str(x) for x in (live.get("labels") or [])]
+    labels = [str(x) for x in ((live or params).get("labels") or [])]
     attachment_urls = (
         [str(x) for x in (live.get("attachment_urls") or [])] if live else []
     )
     # The criteria a Done must satisfy: today's, and whatever this call writes.
     # Evaluating only the proposed text would let a Done call drop a criterion.
     descriptions = [d for d in (live_description, new_description) if d]
-    description = new_description if new_description is not None else live_description
+    description = merge_call_and_live_text(new_description or "", live_description)
     pr_description = augment_description_with_attachments(description, attachment_urls)
 
     # (U) an unchecked box is the ticket's own admission it is not done
@@ -431,6 +434,7 @@ def decide(
             default_repo=default_repo,
             fetcher=pr_fetcher,
             ticket_id=ticket_id or None,
+            exemption=(live_description, labels) if live else None,
         )
         merged_statuses = [s for s in pr_result.pr_statuses if s.state == "MERGED"]
         if not pr_result.allowed:

@@ -1,0 +1,55 @@
+schema_version: "1.0.0"
+ticket_id: OMN-26655
+title: "The Done guard reads the ticket's live description and labels, so one Linear update cannot supply its own exemption or leave out its cited pull requests"
+summary: >
+  The Done guard judged a Done on the description and labels the same Linear call carried. It now reads the
+  live ticket and judges on it: the close-if-done exemption comes from the live ticket's own text and labels,
+  and a pull request the live ticket cites is checked even when the call's description leaves it out. AC1, AC2
+  and AC4 are met here. AC3 (an unreadable live ticket refuses the Done) is left open on purpose: it would block
+  every session that has no LINEAR_API_KEY, and the lane report names the machines and what must be true first.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn26655-live-ticket
+    statement: The Done guard judges a Done transition on the live ticket, whatever the call carries.
+    acceptance:
+      - id: AC1
+        statement: "AC1: a Done transition is judged on the live ticket's description and labels, read by the guard, whatever the call carries -- falsifier: a call that sets Done and supplies a description with a close-if-done line is allowed on a ticket whose live description has none"
+      - id: AC2
+        statement: "AC2: a pull request cited on the live ticket and still open refuses the transition when the call's description leaves it out -- falsifier: that call is allowed"
+      - id: AC4
+        statement: "AC4: cancel and duplicate transitions and a ticket whose live label already carries the exemption behave as before -- falsifier: either is refused"
+evidence_requirements:
+  - kind: tests
+    description: "The live-ticket Done guard suite passes with the planted exemption, omitted-citation, cancel and duplicate cases"
+    command: "uv run pytest tests/hooks/test_done_flip_guard_live_ticket.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn26655-ac1-live-exemption
+    description: "A Done call whose own description carries a close-if-done line or whose labels carry close-if-done is judged without the exemption when the live ticket has neither, on the registered guard and on the legacy entrypoint. Fails at the merge base, which reads the exemption from the call."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_done_flip_guard_live_ticket.py -q --no-cov -k ac1"
+        cwd: "."
+  - id: dod-omn26655-ac2-live-citation
+    description: "A Done call whose description leaves out an open pull request the live ticket cites, or whose patch removes it, is refused as pr_not_merged, on the registered guard and on the legacy entrypoint. Fails at the merge base, which reads the citations from the call."
+    source: manual
+    binds_ac: [AC2]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_done_flip_guard_live_ticket.py -q --no-cov -k ac2"
+        cwd: "."
+  - id: dod-omn26655-ac4-unchanged
+    description: "Canceled and Duplicate transitions stay allowed, even with the live ticket unreadable, and a live close-if-done label still closes a ticket with no cited pull request but never waives an open cited one. These pin behaviour that already held at the merge base."
+    source: manual
+    binds_ac: [AC4]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_done_flip_guard_live_ticket.py -q --no-cov -k ac4"
+        cwd: "."
