@@ -76,8 +76,6 @@ dod_evidence:
       lab-work runner, and exit 0 there; they call the reader node client that the change introduces.
     source: manual
     execution_scope: local_done_gate
-    binds_ac:
-      - AC3
     checks:
       - check_type: command
         cwd: "."
