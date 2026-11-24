@@ -2585,57 +2585,82 @@ def scan_every_workflow_branch(
     """
     findings: list[Finding] = []
     for branch in workflow_branches(repo_root, event_branch):
-        texts = _workflow_texts(repo_root, branch)
+        # Read outside the try: the except below names this branch and its sha,
+        # so the sha must already be bound when a read of the tree refuses.
         sha = (
             _run_git(repo_root, "rev-parse", f"refs/remotes/origin/{branch}")
             .stdout.decode("utf-8", "replace")
             .strip()[:12]
         )
-        if not texts:
-            judged.append(f"branch {branch} ({sha}): no workflows, nothing runs")
-            continue
-        with tempfile.TemporaryDirectory(prefix="placement-branch-") as scratch:
-            root = Path(scratch)
-            workflows = root / ".github" / "workflows"
-            workflows.mkdir(parents=True)
-            for name, text in texts.items():
-                (workflows / name).write_text(text, encoding="utf-8")
-            # The branch's OWN declaration, never the checkout's: a pull
-            # request's listing must not excuse another branch's tree.
-            declaration = _branch_file(repo_root, branch, ELIGIBLE_FILE)
-            if declaration is not None:
-                (root / ELIGIBLE_FILE).write_text(declaration, encoding="utf-8")
-            branch_accepted: list[str] = []
-            branch_findings = scan(
-                root,
-                slug,
-                variables,
-                CalledWorkflows(
+        try:
+            texts = _workflow_texts(repo_root, branch)
+            if not texts:
+                judged.append(f"branch {branch} ({sha}): no workflows, nothing runs")
+                continue
+            with tempfile.TemporaryDirectory(prefix="placement-branch-") as scratch:
+                root = Path(scratch)
+                workflows = root / ".github" / "workflows"
+                workflows.mkdir(parents=True)
+                for name, text in texts.items():
+                    (workflows / name).write_text(text, encoding="utf-8")
+                # The branch's OWN declaration, never the checkout's: a pull
+                # request's listing must not excuse another branch's tree.
+                declaration = _branch_file(repo_root, branch, ELIGIBLE_FILE)
+                if declaration is not None:
+                    (root / ELIGIBLE_FILE).write_text(declaration, encoding="utf-8")
+                branch_accepted: list[str] = []
+                branch_findings = scan(
                     root,
-                    fixture=called_fixture,
-                    clone_roots=local_clone_roots(repo_root),
-                ),
-                notes,
-                latent,
-                matrix,
-                refs,
-                rulings_path,
-                reader,
-                branch_accepted,
-            )
-            if accepted is not None:
-                accepted.extend(
-                    line.replace("eligible: ", f"eligible: {branch}:", 1)
-                    for line in branch_accepted
+                    slug,
+                    variables,
+                    CalledWorkflows(
+                        root,
+                        fixture=called_fixture,
+                        clone_roots=local_clone_roots(repo_root),
+                    ),
+                    notes,
+                    latent,
+                    matrix,
+                    refs,
+                    rulings_path,
+                    reader,
+                    branch_accepted,
                 )
-        judged.append(
-            f"branch {branch} ({sha}): {len(texts)} workflow(s), "
-            f"{len(branch_findings)} hosted placement(s)"
-        )
-        findings.extend(
-            replace(finding, workflow=f"{branch}:{finding.workflow}")
-            for finding in branch_findings
-        )
+                if accepted is not None:
+                    accepted.extend(
+                        line.replace("eligible: ", f"eligible: {branch}:", 1)
+                        for line in branch_accepted
+                    )
+            judged.append(
+                f"branch {branch} ({sha}): {len(texts)} workflow(s), "
+                f"{len(branch_findings)} hosted placement(s)"
+            )
+            findings.extend(
+                replace(finding, workflow=f"{branch}:{finding.workflow}")
+                for finding in branch_findings
+            )
+        except GateError as error:
+            # OMN-21348's ruling, applied to the other failure mode. A pull
+            # request cannot change another branch, so it cannot repair that
+            # branch's unresolvable `uses:` pin either -- and a GateError
+            # raised while judging that tree used to escape this function and
+            # return 2 for the whole run, which is the deadlock the ruling
+            # closed, reopened through the reader instead of the verdict.
+            # Reported as that branch's finding so `--other-branches warn`
+            # demotes it and `fail` still fails on it.
+            judged.append(f"branch {branch} ({sha}): NOT JUDGED -- {error}")
+            findings.append(
+                Finding(
+                    workflow=f"{branch}:(tree not judged)",
+                    job="(every job on the branch)",
+                    runs_on="unreadable",
+                    resolved="undecidable",
+                    why=str(error),
+                    branch=branch,
+                    events="every event",
+                )
+            )
+            continue
     return findings
 
 

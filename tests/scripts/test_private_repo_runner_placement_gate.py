@@ -2541,3 +2541,146 @@ def test_other_branches_reusable_warns_only_on_pull_request_events() -> None:
         "|| github.event_name == 'merge_group') && 'warn' || 'fail' }}"
     ) in reusable
     assert 'args+=(--other-branches "${OTHER_BRANCHES}")' in reusable
+
+
+# OMN-21348 closed the deadlock for a hosted placement on another branch. The
+# same deadlock came back through the READER: a `uses:` pin another branch
+# carries that no longer resolves raised GateError from inside
+# scan_every_workflow_branch, escaped it, and returned 2 for the whole run, so
+# the pull request failed on a branch it cannot change. Measured in
+# omninode_infra on 2026-11-24: ~140 stale branches carry
+# .github/workflows/call-occ-autobind.yml pinned to an omniclaude reusable
+# deleted on 2026-10-17, one push brought a branch back into the enumeration at
+# 18:15:51Z, and every run from 18:16:34Z exited 2 with THE GATE DID NOT RUN on
+# every pull request in the repository, main's own push included.
+
+#: A caller whose cross-repository `uses:` the fixture will not carry, so the
+#: reader refuses it the way a deleted reusable refuses live.
+DEAD_PIN_CI = (
+    "name: CI\non:\n  push:\n    branches: [dev, main]\n"
+    "  pull_request:\n    branches: [main, dev]\n"
+    "jobs:\n  autobind:\n"
+    "    uses: OmniNode-ai/other/.github/workflows/gone-reusable.yml@dev\n"
+)
+
+_DEAD_PIN = "OmniNode-ai/other/.github/workflows/gone-reusable.yml@dev"
+
+
+def _run_every_branch_with_fixture(
+    module,
+    root: Path,
+    tmp_path: Path,
+    event_branch: str,
+    branches: list[str],
+    mode: str,
+) -> int:
+    """`_run_every_branch_mode` plus a called-workflow fixture with no entry
+    for `_DEAD_PIN`, which is how an unresolvable pin is produced offline."""
+    vars_file = tmp_path / "vars-dead.json"
+    vars_file.write_text(json.dumps(dict(SEAM_VARIABLES)), encoding="utf-8")
+    called_file = tmp_path / "called-dead.json"
+    called_file.write_text(json.dumps({}), encoding="utf-8")
+    argv = [
+        "--repo-root",
+        str(root),
+        "--repo",
+        "OmniNode-ai/fixture",
+        "--assume-visibility",
+        "private",
+        "--variables-json",
+        str(vars_file),
+        "--called-workflows-json",
+        str(called_file),
+        "--branches-json",
+        json.dumps(branches),
+        "--every-workflow-branch",
+        "--event-branch",
+        event_branch,
+        "--other-branches",
+        mode,
+    ]
+    return _fixture_call(lambda: module.main(argv))
+
+
+def test_another_branchs_unresolvable_pin_warns_instead_of_killing_the_run(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The regression: exit 0, not 2, and the warning names the branch."""
+    module = _module()
+    origin = _origin_with_branches(
+        tmp_path,
+        "dev",
+        {"dev": {"ci.yml": FLEET_CI}, "main": {"ci.yml": DEAD_PIN_CI}},
+    )
+    work = _checkout(tmp_path, origin, "dev")
+    assert (
+        _run_every_branch_with_fixture(
+            module, work, tmp_path, "dev", ["dev", "main"], "warn"
+        )
+        == 0
+    )
+    err = capsys.readouterr().err
+    assert "::warning::" in err
+    assert "main:(tree not judged)" in err
+    assert _DEAD_PIN in err
+
+
+def test_another_branchs_unresolvable_pin_is_named_in_the_judged_list(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A verdict over every branch stays re-derivable: the branch that could
+    not be judged says so, rather than reading as judged and clean."""
+    module = _module()
+    origin = _origin_with_branches(
+        tmp_path,
+        "dev",
+        {"dev": {"ci.yml": FLEET_CI}, "main": {"ci.yml": DEAD_PIN_CI}},
+    )
+    work = _checkout(tmp_path, origin, "dev")
+    _run_every_branch_with_fixture(
+        module, work, tmp_path, "dev", ["dev", "main"], "warn"
+    )
+    captured = capsys.readouterr()
+    assert "branch main" in captured.out + captured.err
+    assert "NOT JUDGED" in captured.out + captured.err
+
+
+def test_fail_mode_still_fails_on_another_branchs_unresolvable_pin(
+    tmp_path: Path,
+) -> None:
+    """Demoted on a pull request, never excused: a push or scheduled run, which
+    runs with `fail`, still reports it -- as 1, a finding, not 2."""
+    module = _module()
+    origin = _origin_with_branches(
+        tmp_path,
+        "dev",
+        {"dev": {"ci.yml": FLEET_CI}, "main": {"ci.yml": DEAD_PIN_CI}},
+    )
+    work = _checkout(tmp_path, origin, "dev")
+    assert (
+        _run_every_branch_with_fixture(
+            module, work, tmp_path, "dev", ["dev", "main"], "fail"
+        )
+        == 1
+    )
+
+
+def test_the_checkouts_own_unresolvable_pin_still_returns_two(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The fail-closed half is untouched. A pull request CAN change its own
+    tree, so an unreadable pin there is still THE GATE DID NOT RUN."""
+    module = _module()
+    origin = _origin_with_branches(
+        tmp_path,
+        "dev",
+        {"dev": {"ci.yml": DEAD_PIN_CI}, "main": {"ci.yml": FLEET_CI}},
+    )
+    work = _checkout(tmp_path, origin, "dev")
+    assert (
+        _run_every_branch_with_fixture(
+            module, work, tmp_path, "dev", ["dev", "main"], "warn"
+        )
+        == 2
+    )
+    assert "THE GATE DID NOT RUN" in capsys.readouterr().err
