@@ -158,7 +158,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Final
 
-from omniclaude.handlers.work_ledger_rows import read_rows
+from omniclaude.handlers.ruling_reread_rows import ruling_reread_rows
 from omniclaude.nodes.node_git_effect.container import container_git_admission
 from omniclaude.nodes.node_git_effect.container.wrapped_command_segments import (
     ASSIGNMENT as _ASSIGNMENT,
@@ -2711,12 +2711,10 @@ def ruling_reread_refusal(
     if not state_root:
         return "BLOCKED (OMN-18645): lane publishing requires ONEX_STATE_DIR."
     try:
-        # The rows come from the work-ledger reader node, never from a file. One window covers
-        # the lane's CLAIM and every RULING and ACK after it.
+        # The rows come from the work-ledger reader node, never from a file: the lane's own CLAIM
+        # and ACK rows, then the RULING rows since its newest CLAIM (two reads inside the bound).
         rows: list[tuple[str, str, dict[str, str], str, str]] = []
-        for raw in read_rows(
-            _RULING_REREAD_READER, 24 * 30, ("CLAIM", "RULING", "ACK"), environ=environ
-        ):
+        for raw in ruling_reread_rows(_RULING_REREAD_READER, lane, environ=environ):
             cells = [cell.strip() for cell in raw.split(" | ")]
             if len(cells) < 2:
                 continue
