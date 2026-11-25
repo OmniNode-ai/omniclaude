@@ -1,10 +1,13 @@
 {
-  "source": "work ledger rows of 2026-11-24 (lane integration:act283: its CLAIM of 10:14:37Z, the TERMINAL that closed it at 10:17:54Z) and two timed runs of the gate's own claim-reader argv on lab host h201 at 2026-11-24T13:07Z, the hook-refusal-lane reader through the dev bus session",
+  "source": "work ledger rows of 2026-11-24 (lane integration:act283: its CLAIM of 10:14:37Z, the TERMINAL that closed it at 10:17:54Z) and two timed runs of the gate's own claim-reader argv on lab host h201 at 2026-11-24T13:07Z, the hook-refusal-lane reader through the dev bus session; later_refusals: two cases read from the ledger of 2026-11-24 (lane kbfix, CLAIM 14:07:52Z; lane integration:act287, CLAIM 14:14:19Z), their CLAIM rows scrubbed as above and the refusal counts as recorded by the lanes",
   "scrub": "principal, req and via cells dropped; the ticket cell and the free text after the last cell reduced to this ticket; no person names, no paths",
   "lane": "integration:act283",
   "claim_row": "2026-11-24T10:14:37Z | CLAIM | lane=integration:act283 | ticket=OMN-26641 | actor=claude:sonnet:workflow-lane | model=claude-sonnet | est ~0.5 lane-hours; displaces hourly integration pass idle time; (OMN-26641) | worktree=none | item=throughput | parent=orchestrator-31d9-swarm | harness-sidecar alias CLAIM of the integration pass act lane",
   "terminal_row": "2026-11-24T10:17:54Z | TERMINAL | lane=integration:act283 | ticket=OMN-26641 | actor=claude:sonnet:workflow-lane | model=claude-sonnet | closes-CLAIM=2026-11-24T10:14:37Z | outcome=blocked | worktree=none | delegated=0 delegation_reason=read-only-lane | friction=none | alias CLAIM closed",
-  "window_rows_6h": {"all_rows": 6102, "claim_and_terminal_rows": 627},
+  "window_rows_6h": {
+    "all_rows": 6102,
+    "claim_and_terminal_rows": 627
+  },
   "reader_readings": [
     {
       "argv_tail": "--reader hook-refusal-lane --query rows --window-hours 6 --kind CLAIM --kind TERMINAL",
@@ -26,6 +29,22 @@
       "stdout_lines": 0,
       "elapsed_s": 0,
       "stderr": "omnimarket.handlers.node_overlay_reader.NodeOverlayNotFoundError: node_work_ledger_reader_effect: the overlay file is not configured; none was found at <root>/node_work_ledger_reader_effect/overlay.yaml; ONEX_SKILL_OVERLAY_ROOTS names no root; or set ONEX_LEDGER_READER_OVERLAY to the overlay file"
+    }
+  ],
+  "later_refusals": [
+    {
+      "lane": "kbfix",
+      "claim_row": "2026-11-24T14:07:52Z | CLAIM | lane=kbfix | ticket=OMN-26641 | actor=claude:sonnet:workflow-lane | model=claude-sonnet | est ~0.2 lane-hours; displaces none, mints one ticket for another lane; (OMN-26641) | worktree=none | CLAIM of a workflow lane that mints one ticket",
+      "claim_written_at": "2026-11-24T14:07:52Z",
+      "creates_refused_after_claim": 2,
+      "refusal": "lane_identity_missing although the CLAIM was on the ledger; the same ticket was minted from the session lane at 14:11:58Z"
+    },
+    {
+      "lane": "integration:act287",
+      "claim_row": "2026-11-24T14:14:19Z | CLAIM | lane=integration:act287 | ticket=OMN-26641 | actor=claude:sonnet:workflow-lane | model=claude-sonnet | worktree=none | est ~0.75 lane-hours; displaces integration pass act step; (OMN-26641) | item=throughput | CLAIM of the integration pass act lane",
+      "claim_written_at": "2026-11-24T14:14:19Z",
+      "creates_refused_after_claim": 3,
+      "refusal": "lane_identity_missing naming the lane although the CLAIM was on the ledger"
     }
   ]
 }

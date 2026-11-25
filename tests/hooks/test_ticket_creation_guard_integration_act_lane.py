@@ -185,3 +185,34 @@ def test_a_prompt_named_act_lane_reads_its_own_claim(tmp_path: Path) -> None:
     argvs = log.read_text(encoding="utf-8").splitlines()
     assert len(argvs) == 1, argvs
     assert f"--row-lane {_LANE}" in argvs[0], argvs[0]
+
+
+_LATER: list[dict[str, Any]] = _RECORDED["later_refusals"]
+
+
+@pytest.mark.parametrize("case", _LATER, ids=[c["lane"] for c in _LATER])
+def test_later_recorded_refusals_with_an_open_claim_mint(
+    tmp_path: Path, case: dict[str, Any]
+) -> None:
+    """2026-11-24: lane kbfix (CLAIM 14:07:52Z, two creates refused) and integration:act287
+    (CLAIM 14:14:19Z, three creates refused) held an open CLAIM and were refused with
+    ``lane_identity_missing``. Every create the lane makes after its CLAIM is admitted, and
+    each claim read names the lane."""
+    lane: str = case["lane"]
+    assert case["creates_refused_after_claim"] >= 2
+    env, payload = _workflow_subagent(
+        tmp_path, sidecar_lane=lane, sidecar_description=lane
+    )
+    log = _reader(tmp_path, (case["claim_row"],))
+    for _ in range(case["creates_refused_after_claim"]):
+        result = _run(
+            _mint(lane),
+            tmp_path,
+            agent_id=_AGENT,
+            extra_env=env,
+            extra_payload=payload,
+        )
+        _admitted(result)
+    argvs = log.read_text(encoding="utf-8").splitlines()
+    assert len(argvs) == case["creates_refused_after_claim"], argvs
+    assert all(a.endswith(f"--row-lane {lane}") for a in argvs), argvs
