@@ -30,23 +30,59 @@ RULING = '2026-10-01T00:01:00Z | RULING | lane=operator | ticket=OMN-18645 | "Us
 pytestmark = pytest.mark.unit
 
 
+_READER_NAME = "git-admission-ruling-reread"
+_RULING_CITATION = f"{_READER_NAME}@2026-10-01T00:01:00Z"
+
+#: A stand-in for the dispatch venv interpreter: it answers the history read the handler runs
+#: with ``-I -c <program>`` from the rows file FAKE_READER_ROWS names, logs the reader, the
+#: instant, the lane term and the kinds, and exits with FAKE_READER_EXIT when that is set
+#: (2 is what the program exits when the node did not answer).
+_FAKE_READER = """#!{python}
+import json, os, sys
+# argv: -I -c <program> <reader> <since> <lane term or ""> <kind>...
+argv = sys.argv[1:]
+reader, since, term, kinds = argv[3], argv[4], argv[5], argv[6:]
+with open(os.environ["FAKE_READER_LOG"], "a", encoding="utf-8") as log:
+    log.write(json.dumps([reader, since, term, kinds]) + "\\n")
+code = os.environ.get("FAKE_READER_EXIT")
+if code:
+    sys.stderr.write("reader unavailable\\n")
+    sys.exit(int(code))
+for raw in open(os.environ["FAKE_READER_ROWS"], encoding="utf-8").read().splitlines():
+    cells = [c.strip() for c in raw.split(" | ")]
+    if len(cells) < 2 or (kinds and cells[1] not in kinds):
+        continue
+    if term and term not in cells:
+        continue
+    print(raw)
+"""
+
+
 @pytest.fixture
 def ledger_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
-    ledger = tmp_path / "ROLLING_WORK_LEDGER.md"
-    ledger.write_text(CLAIM + "\n", encoding="utf-8")
+    """A lane with the rows its reader node answers, in a file only the fake reader opens."""
+    rows = tmp_path / "reader-rows.txt"
+    rows.write_text(CLAIM + "\n", encoding="utf-8")
+    reader = tmp_path / "fake-reader-python"
+    reader.write_text(_FAKE_READER.format(python=sys.executable), encoding="utf-8")
+    reader.chmod(0o755)
     env = {
         "ONEX_LANE": "worker",
-        "ONEX_LEDGER_PATH": str(ledger),
         "ONEX_STATE_DIR": str(tmp_path / "state"),
+        "ONEX_LEDGER_READER_PYTHON": str(reader),
+        "FAKE_READER_ROWS": str(rows),
+        "FAKE_READER_LOG": str(tmp_path / "reader.log"),
     }
     monkeypatch.delenv("ONEX_LANE_ID", raising=False)
+    monkeypatch.delenv("ONEX_LEDGER_PATH", raising=False)
+    monkeypatch.delenv("FAKE_READER_EXIT", raising=False)
     for key, value in env.items():
         monkeypatch.setenv(key, value)
     return env
 
 
 def append(env: dict[str, str], *rows: str) -> None:
-    with Path(env["ONEX_LEDGER_PATH"]).open("a", encoding="utf-8") as file:
+    with Path(env["FAKE_READER_ROWS"]).open("a", encoding="utf-8") as file:
         file.write("\n".join(rows) + "\n")
 
 
@@ -58,7 +94,7 @@ def acknowledge(
         env,
         f"2026-10-01T00:02:00Z | ACK | lane={lane} | from={lane} | to=operator | "
         "id=2026-10-01T00:02:00Z-worker | re=2026-10-01T00:01:00Z | "
-        f"ruling={env['ONEX_LEDGER_PATH']}:2 | ruling-sha256={digest} | read and applied",
+        f"ruling={_RULING_CITATION} | ruling-sha256={digest} | read and applied",
     )
 
 
@@ -101,7 +137,7 @@ def test_registered_hook_refuses_mid_lane_ruling(
     assert result.returncode == 2, (result.stdout, result.stderr)
     reason = json.loads(result.stdout)["reason"]
     assert RULING in reason
-    assert f"{ledger_env['ONEX_LEDGER_PATH']}:2" in reason
+    assert _RULING_CITATION in reason
 
 
 def test_all_new_rulings_are_surfaced(ledger_env: dict[str, str]) -> None:
@@ -114,7 +150,7 @@ def test_all_new_rulings_are_surfaced(ledger_env: dict[str, str]) -> None:
 
 
 def test_positive_control_older_ruling_passes(ledger_env: dict[str, str]) -> None:
-    Path(ledger_env["ONEX_LEDGER_PATH"]).write_text(
+    Path(ledger_env["FAKE_READER_ROWS"]).write_text(
         RULING.replace("00:01:00Z", "00:00:00Z")
         + "\n"
         + CLAIM.replace("00:00:00Z", "00:01:00Z")
@@ -139,7 +175,7 @@ def test_ruling_mutation_or_reclaim_is_not_ack(
 ) -> None:
     append(ledger_env, RULING)
     assert guard.ruling_reread_refusal(os.environ)
-    path = Path(ledger_env["ONEX_LEDGER_PATH"])
+    path = Path(ledger_env["FAKE_READER_ROWS"])
     if change == "delete":
         path.write_text(CLAIM + "\n", encoding="utf-8")
     elif change == "edit":
@@ -174,10 +210,10 @@ def test_invalid_ack_never_clears(ledger_env: dict[str, str], change: str) -> No
     append(ledger_env, RULING)
     assert guard.ruling_reread_refusal(os.environ)
     acknowledge(ledger_env, lane="peer" if change == "other-lane" else "worker")
-    path = Path(ledger_env["ONEX_LEDGER_PATH"])
+    path = Path(ledger_env["FAKE_READER_ROWS"])
     text = path.read_text(encoding="utf-8")
     if change == "no-citation":
-        text = text.replace(f"ruling={path}:2", "comment=read")
+        text = text.replace(f"ruling={_RULING_CITATION}", "comment=read")
     elif change == "wrong-hash":
         text = text.replace(hashlib.sha256(RULING.encode()).hexdigest(), "0" * 64)
     elif change == "wrong-ref":
@@ -196,25 +232,58 @@ def test_invalid_ack_never_clears(ledger_env: dict[str, str], change: str) -> No
     assert guard.ruling_reread_refusal(os.environ)
 
 
-def test_roll_preserves_claim_ruling_and_ack(ledger_env: dict[str, str]) -> None:
+def test_rows_come_from_the_reader_node_never_a_file(
+    ledger_env: dict[str, str], tmp_path: Path
+) -> None:
+    """With no ledger path variable and no ledger file, the re-read asks the named reader."""
     append(ledger_env, RULING)
+    assert "ONEX_LEDGER_PATH" not in os.environ
+    assert not list(tmp_path.glob("**/ROLLING_WORK_LEDGER*"))
     assert guard.ruling_reread_refusal(os.environ)
-    path = Path(ledger_env["ONEX_LEDGER_PATH"])
-    archive = path.parent / "archive"
-    archive.mkdir()
-    path.rename(archive / "ROLLING_WORK_LEDGER_2026-10-02-split.md")
-    path.write_text("", encoding="utf-8")
+    calls = [
+        json.loads(line)
+        for line in Path(ledger_env["FAKE_READER_LOG"]).read_text().splitlines()
+    ]
+    assert calls, "the reader node was never asked"
+    for reader, _since, _term, _kinds in calls:
+        assert reader == _READER_NAME
+    assert calls[0][2:] == ["lane=worker", ["CLAIM"]]
+    assert calls[1][3] == ["RULING", "ACK"]
+
+
+def test_ack_read_through_the_reader_clears_after_a_roll(
+    ledger_env: dict[str, str],
+) -> None:
+    """A rolled row is still in the node's answer: the CLAIM, ruling and ACK all come from it."""
+    append(ledger_env, RULING)
     assert guard.ruling_reread_refusal(os.environ)
     acknowledge(ledger_env)
     assert guard.ruling_reread_refusal(os.environ) is None
 
 
-def test_missing_claim_or_unreadable_ledger_refuses(ledger_env: dict[str, str]) -> None:
-    path = Path(ledger_env["ONEX_LEDGER_PATH"])
-    path.write_text(RULING + "\n", encoding="utf-8")
+def test_missing_claim_refuses(ledger_env: dict[str, str]) -> None:
+    Path(ledger_env["FAKE_READER_ROWS"]).write_text(RULING + "\n", encoding="utf-8")
     assert "CLAIM" in (guard.ruling_reread_refusal(os.environ) or "")
-    path.unlink()
-    assert guard.ruling_reread_refusal(os.environ)
+
+
+@pytest.mark.parametrize("code", ["2", "69", "1"])
+def test_unanswered_reader_refuses_the_publish(
+    ledger_env: dict[str, str], monkeypatch: pytest.MonkeyPatch, code: str
+) -> None:
+    """A reader that did not answer never reads as no rulings."""
+    append(ledger_env, RULING)
+    acknowledge(ledger_env)
+    monkeypatch.setenv("FAKE_READER_EXIT", code)
+    reason = guard.ruling_reread_refusal(os.environ) or ""
+    assert "could not be verified" in reason
+
+
+def test_no_reader_interpreter_refuses(
+    ledger_env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("ONEX_LEDGER_READER_PYTHON")
+    monkeypatch.delenv("OMNI_HOME", raising=False)
+    assert "could not be verified" in (guard.ruling_reread_refusal(os.environ) or "")
 
 
 @pytest.mark.parametrize(
@@ -229,7 +298,7 @@ def test_missing_claim_or_unreadable_ledger_refuses(ledger_env: dict[str, str]) 
 def test_read_only_commands_do_not_read_ledger(
     ledger_env: dict[str, str], command: str
 ) -> None:
-    Path(ledger_env["ONEX_LEDGER_PATH"]).unlink()
+    Path(ledger_env["FAKE_READER_ROWS"]).unlink()
     result = run_hook(ledger_env, command)
     assert result.returncode == 0, (result.stdout, result.stderr)
 
@@ -363,7 +432,7 @@ def test_ack_removal_reinstates_refusal(ledger_env: dict[str, str]) -> None:
     append(ledger_env, RULING)
     acknowledge(ledger_env)
     assert guard.ruling_reread_refusal(os.environ) is None
-    Path(ledger_env["ONEX_LEDGER_PATH"]).write_text(
+    Path(ledger_env["FAKE_READER_ROWS"]).write_text(
         CLAIM + "\n" + RULING + "\n", encoding="utf-8"
     )
     assert guard.ruling_reread_refusal(os.environ)

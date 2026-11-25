@@ -59,7 +59,6 @@ from scripts import lane_identity as li
 from tests.scripts.conftest import link_canonical_module
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-LEDGER_NAME = "SCRATCH_LEDGER.md"
 
 # A chaining guard with the same shape as the workspace's real one: it does its
 # own work, then hands control to the clone's own hook of the same type. This is
@@ -127,8 +126,6 @@ def workspace(tmp_path: Path) -> dict:
         "ONEX_LANE_REGISTRY_ROOT": str(home / ".onex_state"),
         "ONEX_LANE_PYTHON": sys.executable,
         "ONEX_LEDGER_READER_PYTHON": str(tmp_path / "reader-python"),
-        "ONEX_BRANCH_CLAIM_LEDGER": str(home / LEDGER_NAME),
-        "ONEX_BRANCH_CLAIM_LEDGER_NAME": LEDGER_NAME,
     }
     for leaked in ("GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE"):
         env.pop(leaked, None)
@@ -153,11 +150,19 @@ def workspace(tmp_path: Path) -> dict:
     git("commit", "-q", "-m", "seed")
     git("push", "-q", "origin", "main")
 
-    (home / LEDGER_NAME).write_text("# scratch claim store\n", encoding="utf-8")
-    # The work-ledger reader node, faked (OMN-26527): the backfill reads open claims through it.
+    # The work-ledger reader node, faked: the backfill reads open claims through it (OMN-26527,
+    # ``-m <module> --reader ...``), and the pre-push branch claim check reads the claim rows
+    # through it (OMN-26508, ``-I -c <program> ...``).
     reader = tmp_path / "reader-python"
     reader.write_text(
-        f"#!/bin/sh\ncat {home}/open-claims.txt 2>/dev/null\nexit 0\n", encoding="utf-8"
+        f"""#!/bin/sh
+case "$1" in
+  -I) cat {home}/claim-rows.txt 2>/dev/null ;;
+  *) cat {home}/open-claims.txt 2>/dev/null ;;
+esac
+exit 0
+""",
+        encoding="utf-8",
     )
     reader.chmod(0o755)
 
@@ -190,7 +195,7 @@ def _branch_claim(workspace: dict, *args: str) -> subprocess.CompletedProcess:
 
 
 def _claim(workspace: dict, lane: str, ticket: str, offset_hours: float = 0.0) -> None:
-    ledger = workspace["home"] / LEDGER_NAME
+    ledger = workspace["home"] / "claim-rows.txt"
     with ledger.open("a", encoding="utf-8") as handle:
         handle.write(
             f"{_stamp(offset_hours)} | CLAIM | lane={lane} | tickets={ticket} | taking it\n"
@@ -477,7 +482,7 @@ def test_a_peer_lane_push_onto_a_held_branch_is_refused(
     combined = push.stdout + push.stderr
     assert push.returncode != 0, combined
     assert holder in combined
-    assert LEDGER_NAME in combined
+    assert "the work-ledger reader node" in combined
 
 
 def test_the_holder_pushing_the_same_branch_is_the_green_control(

@@ -55,7 +55,17 @@ from tests.scripts.conftest import link_canonical_module
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TICKET = "OMN-9903"
 BRANCH = "lane/omn-9903-scratch"
-LEDGER_NAME = "SCRATCH_LEDGER.md"
+#: How a refusal cites the claim store when it is the reader node's answer and no file (OMN-26508).
+STORE_NAME = "the work-ledger reader node"
+
+#: The reader node's interpreter, faked: ``<python> -I -c <program> <reader> <since> <kind>...``
+#: answers the rows file FAKE_CLAIM_ROWS names and logs the reader name it was asked for.
+_FAKE_READER = """#!{python}
+import os, sys
+with open(os.environ["FAKE_CLAIM_LOG"], "a", encoding="utf-8") as log:
+    log.write(sys.argv[4] + "\\n")
+sys.stdout.write(open(os.environ["FAKE_CLAIM_ROWS"], encoding="utf-8").read())
+"""
 
 
 def _stamp(offset_hours: float = 0.0) -> str:
@@ -108,8 +118,11 @@ def scratch(tmp_path: Path) -> dict:
     run("commit", "-q", "-m", "seed")
     run("push", "-q", "origin", "main")
 
-    ledger = tmp_path / LEDGER_NAME
-    ledger.write_text("# scratch claim store\n", encoding="utf-8")
+    ledger = tmp_path / "claim-rows.txt"
+    ledger.write_text("", encoding="utf-8")
+    reader = tmp_path / "fake-reader-python"
+    reader.write_text(_FAKE_READER.format(python=sys.executable), encoding="utf-8")
+    reader.chmod(0o755)
 
     registry = tmp_path / "registry"
     registry.mkdir()
@@ -129,8 +142,9 @@ def _hook_env(scratch: dict) -> dict:
     return {
         **scratch["env"],
         "ONEX_LANE_REGISTRY_ROOT": str(scratch["registry"]),
-        "ONEX_BRANCH_CLAIM_LEDGER": str(scratch["ledger"]),
-        "ONEX_BRANCH_CLAIM_LEDGER_NAME": LEDGER_NAME,
+        "ONEX_LEDGER_READER_PYTHON": str(scratch["tmp"] / "fake-reader-python"),
+        "FAKE_CLAIM_ROWS": str(scratch["ledger"]),
+        "FAKE_CLAIM_LOG": str(scratch["tmp"] / "reader.log"),
         "ONEX_LANE_PYTHON": sys.executable,
     }
 
@@ -274,7 +288,10 @@ def test_a_push_to_a_branch_held_by_another_lane_is_refused(scratch: dict) -> No
     assert result.returncode != 0, result.stdout + result.stderr
     combined = result.stdout + result.stderr
     assert "holding-lane" in combined
-    assert f"{LEDGER_NAME}:2" in combined
+    assert f"{STORE_NAME}:1" in combined
+    assert (scratch["tmp"] / "reader.log").read_text().split() == [
+        "branch-claim-pre-push"
+    ]
     assert "RELEASE" in combined
     assert "| CLAIM |" in combined
     assert "supersedes-claim=" in combined
@@ -422,7 +439,7 @@ def test_an_unreadable_claim_store_refuses_the_push(scratch: dict) -> None:
     _commit_on_branch(scratch, "this-lane")
 
     env = _hook_env(scratch)
-    env["ONEX_BRANCH_CLAIM_LEDGER"] = str(scratch["tmp"] / "no-such-store.md")
+    env["ONEX_LEDGER_READER_PYTHON"] = str(scratch["tmp"] / "no-such-reader-python")
     result = subprocess.run(
         ["git", "push", "origin", BRANCH],
         cwd=scratch["repo"],
@@ -432,7 +449,7 @@ def test_an_unreadable_claim_store_refuses_the_push(scratch: dict) -> None:
         env=scrub_git_location_env(env),
     )
     assert result.returncode != 0, result.stdout + result.stderr
-    assert "no-such-store.md" in result.stdout + result.stderr
+    assert "THE CHECK DID NOT RUN" in result.stdout + result.stderr
 
 
 def test_the_installer_refuses_a_hooks_directory_outside_the_repo(

@@ -82,3 +82,70 @@ def install_ancestry_ps(bin_dir: Path, ancestor_comm: str = "/usr/sbin/cron") ->
 
 def _sh_quote(value: str) -> str:
     return "'" + value.replace("'", "'\"'\"'") + "'"
+
+
+# ---------------------------------------------------------------------------
+# A stand-in work-ledger reader node (OMN-26508)
+# ---------------------------------------------------------------------------
+
+#: The dispatch venv interpreter, as the scripts that read the ledger from the work-ledger reader
+#: node run it: ``<python> -I -c <program> <reader> <since> <kind>...``. This one answers from the
+#: rows file FAKE_LEDGER_ROWS names (the rows of the kinds asked for), logs the reader name, and
+#: exits with FAKE_LEDGER_READER_EXIT when that is set.
+_FAKE_LEDGER_READER = """#!{python}
+import json, os, sys
+reader, since, kinds = sys.argv[4], sys.argv[5], sys.argv[6:]
+with open(os.environ["FAKE_LEDGER_READER_LOG"], "a", encoding="utf-8") as log:
+    log.write(json.dumps([reader, since, kinds]) + "\\n")
+code = os.environ.get("FAKE_LEDGER_READER_EXIT")
+if code:
+    sys.stderr.write("reader unavailable\\n")
+    sys.exit(int(code))
+for raw in open(os.environ["FAKE_LEDGER_ROWS"], encoding="utf-8").read().splitlines():
+    cells = [c.strip() for c in raw.split(" | ")]
+    if len(cells) >= 2 and (not kinds or cells[1] in kinds):
+        print(raw)
+"""
+
+
+class FakeLedgerReader:
+    """The rows the reader node answers, set per test; no ledger file exists anywhere."""
+
+    def __init__(self, rows_file: Path, log_file: Path) -> None:
+        self.rows_file = rows_file
+        self.log_file = log_file
+
+    def set_rows(self, *rows: str) -> None:
+        self.rows_file.write_text("".join(f"{row}\n" for row in rows), encoding="utf-8")
+
+    def calls(self) -> list[list[object]]:
+        import json
+
+        if not self.log_file.exists():
+            return []
+        return [json.loads(line) for line in self.log_file.read_text().splitlines()]
+
+
+@pytest.fixture
+def ledger_reader(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> FakeLedgerReader:
+    """Point ``ONEX_LEDGER_READER_PYTHON`` at a stand-in reader that answers no rows."""
+    import sys
+
+    # Its own directory, never the test's tmp_path: a test may count what lies under that.
+    scratch = tmp_path_factory.mktemp("fake-ledger-reader")
+    interpreter = scratch / "python"
+    interpreter.write_text(
+        _FAKE_LEDGER_READER.format(python=sys.executable), encoding="utf-8"
+    )
+    interpreter.chmod(0o755)
+    rows = scratch / "rows.txt"
+    rows.write_text("", encoding="utf-8")
+    log = scratch / "reader.log"
+    monkeypatch.setenv("ONEX_LEDGER_READER_PYTHON", str(interpreter))
+    monkeypatch.setenv("FAKE_LEDGER_ROWS", str(rows))
+    monkeypatch.setenv("FAKE_LEDGER_READER_LOG", str(log))
+    monkeypatch.delenv("FAKE_LEDGER_READER_EXIT", raising=False)
+    monkeypatch.delenv("ONEX_LEDGER_" + "PATH", raising=False)
+    return FakeLedgerReader(rows, log)
