@@ -1,0 +1,41 @@
+schema_version: "1.0.0"
+ticket_id: OMN-24562
+title: Placement admits lanes only for the one lowest red layer; everything else stays parked
+summary: >-
+  This change does not finish the ticket. It carries one fix found while reading the newest lane_identity_missing
+  refusals (tracker row W247): the create gate's CLAIM read made one attempt, and a reader exit 69 (bus session
+  timeout, no rows) read as no CLAIM, so integration:act300 was refused at 2026-11-25T12:20Z with its CLAIM open.
+  The read now makes one more attempt on exit 69. A reader that never answers still refuses.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn24562-claim-read-retries-unreadable
+    statement: An unreadable ledger reader answer is retried once before the create gate reads it as no CLAIM.
+    acceptance:
+      - id: AC2
+        statement: >-
+          AC2: a gate whose CLAIM read gets exit 69 once and then the lane's open CLAIM admits the create, and a
+          reader that never answers still refuses -- falsifier: uv run pytest
+          tests/hooks/test_ticket_creation_guard_reader_unreadable_omn24562.py fails on the code before the fix
+evidence_requirements:
+  - kind: tests
+    description: The two reader-unreadable tests pass at the head and fail at the merge base.
+    command: uv run pytest tests/hooks/test_ticket_creation_guard_reader_unreadable_omn24562.py -q
+emergency_bypass:
+  enabled: false
+  justification: ''
+  follow_up_ticket_id: ''
+dod_evidence:
+  - id: dod-omn24562-ac2-unreadable-reader-retried
+    description: >-
+      A stand-in reader that exits 69 once and then answers admits the act lane; one that always exits 69 still
+      refuses with lane_identity_missing.
+    source: manual
+    execution_scope: hosted_and_local
+    binds_ac:
+      - AC2
+    checks:
+      - check_type: test_passes
+        check_value: uv run pytest tests/hooks/test_ticket_creation_guard_reader_unreadable_omn24562.py -q
+        cwd: ${OMNI_HOME}/omniclaude
