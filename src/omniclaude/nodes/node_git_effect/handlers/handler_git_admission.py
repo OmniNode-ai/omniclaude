@@ -158,7 +158,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Final
 
-from omniclaude.handlers.ruling_reread_rows import ruling_reread_rows
+from omniclaude.handlers import ruling_reread_rows as _rr
 from omniclaude.nodes.node_git_effect.container import container_git_admission
 from omniclaude.nodes.node_git_effect.container.wrapped_command_segments import (
     ASSIGNMENT as _ASSIGNMENT,
@@ -2714,7 +2714,7 @@ def ruling_reread_refusal(
         # The rows come from the work-ledger reader node, never from a file: the lane's own CLAIM
         # and ACK rows, then the RULING rows since its newest CLAIM (two reads inside the bound).
         rows: list[tuple[str, str, dict[str, str], str, str]] = []
-        for raw in ruling_reread_rows(_RULING_REREAD_READER, lane, environ=environ):
+        for raw in _rr.ruling_reread_rows(_RULING_REREAD_READER, lane, environ=environ):
             cells = [cell.strip() for cell in raw.split(" | ")]
             if len(cells) < 2:
                 continue
@@ -2768,10 +2768,11 @@ def ruling_reread_refusal(
                     entries[key] = (stamp, ref, citation, raw)
             store.flush()
             os.fsync(store.fileno())
+
             observed = sorted(
                 (
                     (digest, *value)
-                    for (source, actor, digest), value in entries.items()
+                    for (source, actor, digest), value in _rr.bound(entries, rows, lane)
                     if source == _RULING_REREAD_SOURCE and actor == lane
                 ),
                 key=lambda observation: (observation[1], observation[0]),

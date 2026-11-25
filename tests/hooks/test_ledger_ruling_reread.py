@@ -437,3 +437,43 @@ def test_same_second_ruling_is_conservatively_refused(
 ) -> None:
     append(ledger_env, RULING.replace("00:01:00Z", "00:00:00Z"))
     assert guard.ruling_reread_refusal(os.environ)
+
+
+OTHER = '2026-10-01T00:01:00Z | RULING | lane=operator | ticket=OMN-99999 | kind=decision | "Other ticket."'
+
+
+def test_decision_ruling_on_another_ticket_is_journalled_not_owed(
+    ledger_env: dict[str, str],
+) -> None:
+    append(ledger_env, OTHER)
+    assert guard.ruling_reread_refusal(os.environ) is None
+    journal = Path(ledger_env["ONEX_STATE_DIR"]) / "hooks" / "ruling-reread.jsonl"
+    assert hashlib.sha256(OTHER.encode()).hexdigest() in journal.read_text(
+        encoding="utf-8"
+    )
+
+
+@pytest.mark.parametrize(
+    "ruling",
+    [
+        RULING.replace('"Use', 'kind=decision | "Use'),
+        OTHER.replace("kind=decision", "kind=process"),
+        OTHER.replace(" | ticket=OMN-99999", ""),
+    ],
+)
+def test_same_ticket_process_and_ticketless_rulings_still_refuse(
+    ledger_env: dict[str, str], ruling: str
+) -> None:
+    append(ledger_env, ruling)
+    reason = guard.ruling_reread_refusal(os.environ)
+    assert reason and ruling in reason
+
+
+def test_parent_ticket_ruling_still_refuses(ledger_env: dict[str, str]) -> None:
+    Path(ledger_env["FAKE_LEDGER_ROWS"]).write_text(
+        CLAIM + " | parent_ticket=OMN-77777\n", encoding="utf-8"
+    )
+    parent = OTHER.replace("OMN-99999", "OMN-77777")
+    append(ledger_env, parent)
+    reason = guard.ruling_reread_refusal(os.environ)
+    assert reason and parent in reason
