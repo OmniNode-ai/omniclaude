@@ -6,8 +6,9 @@
 #
 # An Agent/Task call goes through the delegation pipeline (SensitivityGate →
 # TaskClassifier → omnimarket node_hook_delegate_effect). When it is answered,
-# the tool is blocked (exit 2) with the answer on stderr; otherwise exit 0 and
-# the original tool proceeds. Every prompt (AC33) goes to the node's prompt
+# the tool call is denied with the answer as a plain reason (OMN-26688), or, if
+# that reason cannot be built, blocked with exit 2 as before; otherwise exit 0
+# and the original tool proceeds. Every prompt (AC33) goes to the node's prompt
 # handler, and the runner prints this hook's whole output: a "block" carrying
 # the delegated answer, context for Claude, or nothing.
 #
@@ -153,6 +154,24 @@ fi
 if [[ "$DELEGATION_RESULT" == DELEGATED:* ]]; then
     AGENT_NAME=$(printf '%s\n' "$TOOL_INFO" | jq -r '.tool_input.name // .tool_input.subagent_type // "(unnamed)"' 2>/dev/null) || AGENT_NAME="(unnamed)"
     echo "[$TIMESTAMP] [$_OMNICLAUDE_HOOK_NAME] BLOCK tool=${TOOL_NAME} agent=${AGENT_NAME} result=${DELEGATION_RESULT}" >> "$LOG_FILE" 2>/dev/null || true
+    # OMN-26688: a deny with a plain reason. Exit 2 showed Claude the whole hook
+    # command and the runner's telemetry JSON as a "hook error", and Claude retried
+    # the subagent (interactive test 2026-11-26). The runner prints the DELEGATED
+    # line, the telemetry line when there is one (an object naming delegated_to),
+    # then the answer.
+    REASON=$(printf '%s' "$DELEGATION_RESULT" | jq -Rrs '
+        split("\n") as $lines
+        | ($lines[0] | capture("^DELEGATED: \\S+ answered by (?<model>.+) \\(run (?<run>[^)]+)\\)$")) as $head
+        | ($lines[1:]
+           | if ((.[0] // "") | (try (fromjson | type == "object" and has("delegated_to")) catch false))
+             then .[1:] else . end
+           | join("\n") | sub("\\s+$"; "")) as $answer
+        | "Subagent task completed by onex delegation with \($head.model) (run \($head.run)), in place of a Claude subagent. This is the subagent'"'"'s result: relay it as the answer and do not launch the subagent again.\n\nResult:\n\($answer)"
+    ' 2>/dev/null) || REASON=""
+    if [[ -n "$REASON" ]]; then
+        jq -cn --arg reason "$REASON" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $reason}}'
+        exit 0
+    fi
     printf '%s\n' "$TOOL_INFO"
     echo "DELEGATION RESULT: ${DELEGATION_RESULT}" >&2
     # error-guard.sh's EXIT trap turns any non-zero exit into 0, which would let

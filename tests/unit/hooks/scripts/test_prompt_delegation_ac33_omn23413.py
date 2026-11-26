@@ -19,7 +19,8 @@ with a stub runner. Failure modes, each caught below:
   S2  a prompt that passes through injects the raw hook envelope into Claude's
       context (plain stdout of a UserPromptSubmit hook is added as context).
   S3  with the switch OFF a prompt still prints the envelope.
-  S4  the Agent/Task path changes (it must still block with exit 2).
+  S4  the Agent/Task path changes (it must still block the subagent with the
+      answer; since OMN-26688 as a deny with a plain reason, not exit 2).
 """
 
 from __future__ import annotations
@@ -264,7 +265,7 @@ def test_with_the_switch_off_a_prompt_prints_nothing(tmp_path: Path) -> None:
     assert proc.stdout.strip() == ""
 
 
-def test_the_agent_task_path_still_blocks_with_exit_2(tmp_path: Path) -> None:
+def test_the_agent_task_path_still_blocks_the_subagent(tmp_path: Path) -> None:
     """S4: regression control for Amendment 8's subagent path."""
     plugin = _plugin_with_stub_runner(
         tmp_path, f"DELEGATED: research answered by m (run r-agent)\n{_ANSWER}\n"
@@ -276,5 +277,7 @@ def test_the_agent_task_path_still_blocks_with_exit_2(tmp_path: Path) -> None:
         "tool_input": {"prompt": "How do TCP and UDP differ?", "description": "q"},
     }
     proc = _run_shell(tmp_path, plugin, agent)
-    assert proc.returncode == 2
-    assert _ANSWER in proc.stderr
+    assert proc.returncode == 0, proc.stderr
+    decision = json.loads(proc.stdout)["hookSpecificOutput"]
+    assert decision["permissionDecision"] == "deny"
+    assert _ANSWER in decision["permissionDecisionReason"]
