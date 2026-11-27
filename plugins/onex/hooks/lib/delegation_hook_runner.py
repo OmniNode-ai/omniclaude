@@ -191,7 +191,7 @@ def main() -> int:
                 )
                 if telemetry_json:
                     print(telemetry_json)
-                print(result.answer)  # Claude Code's answer in place of the subagent's
+                print(getattr(result, "hook_output", result.answer))  # OMN-26688 deny
                 return 0
         except Exception as error:  # noqa: BLE001 - fail open
             why = f"error:{type(error).__name__}"

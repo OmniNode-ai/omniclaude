@@ -268,7 +268,8 @@ def test_with_the_switch_off_a_prompt_prints_nothing(tmp_path: Path) -> None:
 def test_the_agent_task_path_still_blocks_the_subagent(tmp_path: Path) -> None:
     """S4: regression control for Amendment 8's subagent path."""
     plugin = _plugin_with_stub_runner(
-        tmp_path, f"DELEGATED: research answered by m (run r-agent)\n{_ANSWER}\n"
+        tmp_path,
+        f"DELEGATED: research answered by m (run r-agent)\n{json.dumps({'hookSpecificOutput': {'hookEventName': 'PreToolUse', 'permissionDecision': 'deny', 'permissionDecisionReason': _ANSWER}})}\n",
     )
     agent = {
         "session_id": "ac33",

@@ -16,12 +16,11 @@ Failure modes, each caught below:
 
   A1  an answered subagent call is still an exit-2 error, so Claude sees the hook
       command, and retries.
-  A2  the reason carries the runner's telemetry JSON or "DELEGATION RESULT", or
-      does not say who answered and that the subagent must not run again.
-  A3  the answer is cut: a multi-line answer loses lines, or an answer that is
-      itself JSON is dropped as if it were the telemetry line.
-  A4  a result line the hook cannot read lets the subagent run on Claude after
-      it was delegated (it must still block, as before).
+  A2  a run without the telemetry line is not denied the same way.
+  A3  the reason's wording and an uncut answer are the omnimarket node's
+      (ModelHookDelegateResult.hook_output, tested there); the hook prints it as is.
+  A4  an older node's plain answer (no deny line) lets the subagent run on
+      Claude after it was delegated (it must still block, as before).
   A5  the hook log no longer records the block.
 """
 
@@ -60,55 +59,75 @@ _ANSWER = (
     "Keys are unique and hashable."
 )
 
+_DENY = json.dumps(
+    {
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": (
+                "Subagent task completed by onex delegation with Qwen3.8-27B "
+                "(run 3b917cd9), in place of a Claude subagent. This is the "
+                "subagent's result: relay it as the answer and do not launch "
+                "the subagent again.\n\nResult:\n" + _ANSWER
+            ),
+        }
+    }
+)
 
-def _reason(tmp_path: Path, stub: str) -> str:
+
+def test_an_answered_subagent_prints_the_node_deny(tmp_path: Path) -> None:
+    """A1: A complete delegation with telemetry and deny must exit 0."""
+    stub = f"{_HEAD}\n{_TELEMETRY}\n{_DENY}\n"
     proc = _hook(
-        tmp_path, _plugin_with_stub_runner(tmp_path, stub), "subagents", _AGENT
+        tmp_path,
+        _plugin_with_stub_runner(tmp_path, stub),
+        "subagents",
+        _AGENT,
     )
-    assert proc.returncode == 0, proc.stderr
-    out = json.loads(proc.stdout)
-    decision = out["hookSpecificOutput"]
-    assert decision["hookEventName"] == "PreToolUse"
-    assert decision["permissionDecision"] == "deny"
-    return str(decision["permissionDecisionReason"])
+    assert proc.returncode == 0
+    assert json.loads(proc.stdout) == json.loads(_DENY)
+    assert "DELEGATION RESULT" not in proc.stderr
 
 
-def test_an_answered_subagent_is_a_deny_with_a_plain_reason(tmp_path: Path) -> None:
-    """A1, A2, A3."""
-    reason = _reason(tmp_path, f"{_HEAD}\n{_TELEMETRY}\n{_ANSWER}\n")
-    first, _, rest = reason.partition("\n\n")
-    assert first == (
-        "Subagent task completed by onex delegation with Qwen3.8-27B (run 3b917cd9), "
-        "in place of a Claude subagent. This is the subagent's result: relay it as "
-        "the answer and do not launch the subagent again."
-    )
-    assert rest == f"Result:\n{_ANSWER}"
-    for leaked in ("DELEGATION RESULT", "DELEGATED:", "delegated_to", "{"):
-        assert leaked not in reason
-
-
-@pytest.mark.parametrize("answer", [_ANSWER, '{"name": "dict", "mutable": true}'])
-def test_an_answer_without_telemetry_or_that_is_json_is_kept_whole(
-    tmp_path: Path, answer: str
+def test_an_answered_subagent_without_telemetry_prints_the_node_deny(
+    tmp_path: Path,
 ) -> None:
-    """A3."""
-    assert _reason(tmp_path, f"{_HEAD}\n{answer}\n").endswith(f"Result:\n{answer}")
-
-
-def test_an_unreadable_result_line_still_blocks_the_subagent(tmp_path: Path) -> None:
-    """A4: the fallback is the old exit 2, never a native run."""
-    stub = f"DELEGATED: research answered without a run\n{_ANSWER}\n"
+    """A2: A delegation without telemetry must still exit 0 and print deny."""
+    stub = f"{_HEAD}\n{_DENY}\n"
     proc = _hook(
-        tmp_path, _plugin_with_stub_runner(tmp_path, stub), "subagents", _AGENT
+        tmp_path,
+        _plugin_with_stub_runner(tmp_path, stub),
+        "subagents",
+        _AGENT,
+    )
+    assert proc.returncode == 0
+    assert json.loads(proc.stdout) == json.loads(_DENY)
+    assert "DELEGATION RESULT" not in proc.stderr
+
+
+def test_an_answered_subagent_without_a_deny_line_blocks(tmp_path: Path) -> None:
+    """A4: An older node without a deny line must exit 2 and block."""
+    stub = f"{_HEAD}\n{_ANSWER}\n"
+    proc = _hook(
+        tmp_path,
+        _plugin_with_stub_runner(tmp_path, stub),
+        "subagents",
+        _AGENT,
     )
     assert proc.returncode == 2
     assert "Keys are unique and hashable." in proc.stderr
 
 
-def test_the_block_is_still_logged(tmp_path: Path) -> None:
-    """A5."""
-    _reason(tmp_path, f"{_HEAD}\n{_TELEMETRY}\n{_ANSWER}\n")
-    log = (
-        tmp_path / "state" / "hooks" / "logs" / "pre-tool-delegation.log"
-    ).read_text()
-    assert "[pre_tool_use_delegation.sh[subagents]] BLOCK tool=Agent" in log
+def test_a_delegated_subagent_is_logged_as_blocked(tmp_path: Path) -> None:
+    """A5: The hook must log the blocked delegation with the agent name."""
+    stub = f"{_HEAD}\n{_TELEMETRY}\n{_DENY}\n"
+    _hook(
+        tmp_path,
+        _plugin_with_stub_runner(tmp_path, stub),
+        "subagents",
+        _AGENT,
+    )
+    log_file = tmp_path / "state" / "hooks" / "logs" / "pre-tool-delegation.log"
+    assert "[pre_tool_use_delegation.sh[subagents]] BLOCK tool=Agent" in (
+        log_file.read_text()
+    )
