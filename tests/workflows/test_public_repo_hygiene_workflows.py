@@ -250,8 +250,8 @@ def test_public_repo_hygiene_reusable_hands_the_gate_a_pull_request_diff_base() 
     """OMN-19835: the added-lines scope needs the merge ref's first parent.
 
     Depth 2 fetches exactly that parent. The resolve step refuses a checkout
-    that is not a two-parent merge ref whose second parent is the pull
-    request head, and the gate is handed the first parent as --diff-base.
+    that is not a two-parent merge ref of the pull request head from the
+    event's shas, and the gate is handed the first parent as --diff-base.
     """
     checkout = _step(REUSABLE, "public-repo-hygiene", "Checkout caller repo")
     checkout_with = checkout["with"]
@@ -265,7 +265,7 @@ def test_public_repo_hygiene_reusable_hands_the_gate_a_pull_request_diff_base() 
     assert env["PR_HEAD_SHA"] == "${{ github.event.pull_request.head.sha }}"
     body = str(resolve["run"])
     assert "git rev-list --parents -n 1 HEAD" in body
-    assert body.count("exit 1") == 2
+    assert env["PR_BASE_SHA"] == "${{ github.event.pull_request.base.sha }}"
 
     gate_step = _step(
         REUSABLE, "public-repo-hygiene", "Run the public-repo hygiene gate"
@@ -276,6 +276,141 @@ def test_public_repo_hygiene_reusable_hands_the_gate_a_pull_request_diff_base() 
     run = str(gate_step["run"])
     assert 'diff_args=(--diff-base "${DIFF_BASE}")' in run
     assert "${diff_args[@]+" in run
+
+
+_DIFF_BASE_JOBS = ("public-repo-hygiene", "deployment-config")
+
+
+def _git(cwd: Path, *args: str) -> str:
+    result = subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=True,
+        env={
+            "PATH": "/usr/bin:/bin",
+            "HOME": str(cwd),
+            "GIT_AUTHOR_NAME": "t",
+            "GIT_AUTHOR_EMAIL": "t@example.invalid",
+            "GIT_COMMITTER_NAME": "t",
+            "GIT_COMMITTER_EMAIL": "t@example.invalid",
+            "GIT_CONFIG_NOSYSTEM": "1",
+        },
+    )
+    return result.stdout.strip()
+
+
+def _commit(repo: Path, name: str, text: str) -> str:
+    (repo / name).write_text(text, encoding="utf-8")
+    _git(repo, "add", name)
+    _git(repo, "commit", "-q", "-m", name)
+    return _git(repo, "rev-parse", "HEAD")
+
+
+def _run_diff_base_step(
+    tmp_path: Path, job: str, workspace: Path, head: str, base: str
+) -> tuple[int, str, dict[str, str]]:
+    run = _step(REUSABLE, job, "Resolve the diff base")["run"]
+    assert isinstance(run, str)
+    script = tmp_path / "diff_base.sh"
+    script.write_text(run, encoding="utf-8")
+    github_output = tmp_path / "diff_base_output.txt"
+    env = {
+        "PATH": "/usr/bin:/bin",
+        "HOME": str(tmp_path),
+        "GITHUB_OUTPUT": str(github_output),
+        "PR_HEAD_SHA": head,
+        "PR_BASE_SHA": base,
+    }
+    result = subprocess.run(
+        ["bash", str(script)],
+        cwd=workspace,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    outputs: dict[str, str] = {}
+    if github_output.exists():
+        for line in github_output.read_text(encoding="utf-8").splitlines():
+            key, _, value = line.partition("=")
+            outputs[key] = value
+    return result.returncode, result.stdout + result.stderr, outputs
+
+
+def _pull_request_remote(tmp_path: Path) -> tuple[Path, str, str, str]:
+    """A remote holding a base line and a pull request branch off its middle."""
+    remote = tmp_path / "remote"
+    remote.mkdir()
+    _git(remote, "init", "-q", "-b", "main")
+    _git(remote, "config", "uploadpack.allowAnySHA1InWant", "true")
+    _commit(remote, "a.txt", "a\n")
+    fork_point = _commit(remote, "b.txt", "b\n")
+    _git(remote, "checkout", "-q", "-b", "pr")
+    head = _commit(remote, "pr.txt", "added by the pull request\n")
+    _git(remote, "checkout", "-q", "main")
+    base = _commit(remote, "c.txt", "c\n")
+    return remote, fork_point, base, head
+
+
+@pytest.mark.parametrize("job", _DIFF_BASE_JOBS)
+def test_diff_base_step_keeps_the_two_parent_merge_ref_behaviour(
+    tmp_path: Path, job: str
+) -> None:
+    """A merge ref whose second parent is the head resolves its first parent."""
+    remote, _, base, head = _pull_request_remote(tmp_path)
+    _git(remote, "checkout", "-q", "--detach", base)
+    _git(remote, "merge", "-q", "--no-ff", "-m", "merge", head)
+    merge_ref = _git(remote, "rev-parse", "HEAD")
+    returncode, combined, outputs = _run_diff_base_step(
+        tmp_path, job, remote, head, "0" * 40
+    )
+    assert returncode == 0, combined
+    assert outputs == {"sha": base}
+    assert _git(remote, "rev-parse", "HEAD") == merge_ref
+
+
+@pytest.mark.parametrize("job", _DIFF_BASE_JOBS)
+def test_diff_base_step_scans_the_pull_request_head_on_a_one_parent_checkout(
+    tmp_path: Path, job: str
+) -> None:
+    """A rerun after the merge checks out the base tip, one parent.
+
+    The step fetches the head and base by the event's shas, moves HEAD to the
+    pull request head, and hands the gate the event's base: the scan runs on
+    the pull request's content, never skipped and never vacuous.
+    """
+    remote, _, base, head = _pull_request_remote(tmp_path)
+    workspace = tmp_path / "workspace"
+    _git(tmp_path, "clone", "-q", "--depth", "2", f"file://{remote}", str(workspace))
+    assert _git(workspace, "rev-parse", "HEAD") == base
+    assert len(_git(workspace, "rev-list", "--parents", "-n", "1", "HEAD").split()) == 2
+    returncode, combined, outputs = _run_diff_base_step(
+        tmp_path, job, workspace, head, base
+    )
+    assert returncode == 0, combined
+    assert "THE GATE DID NOT RUN" not in combined
+    assert outputs == {"sha": base}
+    assert _git(workspace, "rev-parse", "HEAD") == head
+    added = _git(workspace, "diff", "--name-only", f"{base}...HEAD")
+    assert added == "pr.txt"
+
+
+@pytest.mark.parametrize("job", _DIFF_BASE_JOBS)
+def test_diff_base_step_refuses_a_head_that_cannot_be_fetched(
+    tmp_path: Path, job: str
+) -> None:
+    """Known bad: a head sha the remote does not hold is a refusal, not a skip."""
+    remote, _, base, _ = _pull_request_remote(tmp_path)
+    workspace = tmp_path / "workspace"
+    _git(tmp_path, "clone", "-q", "--depth", "2", f"file://{remote}", str(workspace))
+    returncode, combined, outputs = _run_diff_base_step(
+        tmp_path, job, workspace, "f" * 40, base
+    )
+    assert returncode != 0
+    assert "THE GATE DID NOT RUN" in combined
+    assert outputs == {}
 
 
 def test_public_repo_hygiene_hook_runs_on_every_commit_with_the_staged_diff() -> None:
