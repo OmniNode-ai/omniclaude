@@ -14,8 +14,8 @@ requirements:
   - id: req-omn26706-hygiene-diff-base
     statement: The hygiene gate's diff-base step never skips the scan on a re-run of a merged pull request.
     acceptance:
-      - id: AC-H1
-        statement: "AC-H1: a one-parent pull_request checkout resolves the diff base from the event's shas in both copies of the step -- falsifier: the one-parent test fails with the error 'not a two-parent merge ref'"
+      - id: AC9
+        statement: "AC9: a one-parent pull_request checkout resolves the diff base from the event's shas in both copies of the step -- falsifier: the one-parent test fails with the error 'not a two-parent merge ref'"
 evidence_requirements:
   - kind: tests
     description: "The hygiene workflow suite passes, with the one-parent, two-parent and unfetchable-head cases"
@@ -28,7 +28,7 @@ dod_evidence:
   - id: dod-omn26706-hygiene-one-parent
     description: "Both copies of the diff-base step, run on a depth-2 checkout of the base tip with the event's head and base shas, fetch the head, check it out and output the base as the diff base; a head the remote does not hold is refused with the gate-did-not-run error. Fails at the merge base, which exits 1 on a one-parent checkout."
     source: manual
-    binds_ac: [AC-H1]
+    binds_ac: [AC9]
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/workflows/test_public_repo_hygiene_workflows.py -q --no-cov -k diff_base"
