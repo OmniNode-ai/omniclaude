@@ -1,0 +1,44 @@
+schema_version: "1.0.0"
+ticket_id: OMN-26688
+title: "A user can add a key for any OpenAI-compatible provider in the models.dev catalog, each under its own name, and delegation routes to it"
+summary: >
+  This omniclaude part serves AC6 (one provider set up end to end in a manual live run). In that live run
+  (2026-11-26) the subagent delegation hook returned the delegated answer as exit 2, so Claude Code showed it
+  as a hook error with the hook command and telemetry, and Claude relaunched the subagent. Now the hook prints
+  the omnimarket node's PreToolUse deny (whose reason is the result) and exits 0; a runner line without that
+  deny (an older node) is still blocked with exit 2. The catalog provider work itself (AC1-AC5) is in
+  omnimarket.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn26688-subagent-answer
+    statement: "An answered subagent reaches Claude as its result, not as a hook error."
+    acceptance:
+      - id: AC6
+        statement: "AC6: an answered subagent reaches Claude as a PreToolUse deny whose reason is the result, and a line without that deny still blocks the subagent -- falsifier: tests/unit/hooks/scripts/test_delegation_subagent_answer_omn26688.py"
+evidence_requirements:
+  - kind: tests
+    description: "The subagent-answer and prompt-delegation hook suites pass."
+    command: "uv run pytest tests/unit/hooks/scripts/test_delegation_subagent_answer_omn26688.py tests/unit/hooks/scripts/test_prompt_delegation_ac33_omn23413.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn26688-ac6-subagent-deny
+    description: "Fails at the merge base, where an answered subagent exits 2 and reaches Claude as a hook error, and that it also proves a runner line without the node deny is still blocked with exit 2."
+    source: manual
+    binds_ac: [AC6]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/hooks/scripts/test_delegation_subagent_answer_omn26688.py tests/unit/hooks/scripts/test_prompt_delegation_ac33_omn23413.py -q --no-cov"
+        cwd: "."
+  - id: dod-omn26688-integration-proof
+    description: "The headless run of the hook tests on a lab host at the pushed head; hosted CI cannot reach the lab runner, so only the local Done gate runs this unbound item."
+    source: manual
+    execution_scope: local_done_gate
+    checks:
+      - check_type: command
+        check_value: "env PYTHONDONTWRITEBYTECODE=1 onex lab-work run --repo OmniNode-ai/omniclaude --sha \"$(git rev-parse HEAD)\" --lane dod-integration-proof-26688 --kind test -- uv run pytest tests/unit/hooks/scripts/test_delegation_subagent_answer_omn26688.py tests/unit/hooks/scripts/test_prompt_delegation_ac33_omn23413.py -q --no-cov"
+        cwd: "."

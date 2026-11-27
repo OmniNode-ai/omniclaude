@@ -143,7 +143,8 @@ def test_the_subagent_hook_answers_in_place_of_the_subagent(tmp_path: Path) -> N
     """H2: the subagents row hands the answer back in place of the subagent, as a
     deny with a plain reason (OMN-26688; test_delegation_subagent_answer_omn26688)."""
     plugin = _plugin_with_stub_runner(
-        tmp_path, f"DELEGATED: research answered by m (run r-agent)\n{_ANSWER}\n"
+        tmp_path,
+        f"DELEGATED: research answered by m (run r-agent)\n{json.dumps({'hookSpecificOutput': {'hookEventName': 'PreToolUse', 'permissionDecision': 'deny', 'permissionDecisionReason': _ANSWER}})}\n",
     )
     proc = _hook(tmp_path, plugin, "subagents", _AGENT)
     assert proc.returncode == 0, proc.stderr
