@@ -1,12 +1,18 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""The delegation hook runs as a customer installed it (OMN-22498, Amendment 2).
+"""The installed delegation hook script runs as the native mod invokes it (OMN-22498, OMN-23413).
 
-``scripts/install-delegation.sh --apply`` registers the delegation hook in
-``~/.claude/settings.json``, pointing at copies under ``~/.omninode/delegation``.
-Claude Code runs that command with no ``CLAUDE_PLUGIN_ROOT``, from the
-customer's own project. These tests install into a scratch HOME and run the
-installed command exactly that way.
+``scripts/install-delegation.sh --apply`` copies the hook tree under
+``~/.omninode/delegation`` and registers the native plugin; nothing is written
+into ``~/.claude/settings.json``. The native mod (``native_delegation_mod.js``) runs
+``hooks/scripts/pre_tool_use_delegation.sh`` with ``PLUGIN_PYTHON_BIN`` taken
+from the plugin's ``hooks/delegation-runtime.json``, with no
+``CLAUDE_PLUGIN_ROOT``, from the customer's own project. These tests install
+into a scratch HOME (stub claude CLI) and run the installed script exactly that
+way: they cover the shell/runner boundary of the installed copy and the switch.
+They do not read a registration; the registration call and the marketplace it
+names are covered by ``test_native_delegation_install.py`` (stub CLI, and the
+real CLI where one is installed).
 
 Failure modes:
   F1. A helper the hook sources (error-guard.sh and what it loads) is not
@@ -18,9 +24,10 @@ Failure modes:
   F3. The installed copy ignores the switch: with bit 11 off it still routes.
   F5. `onex hooks disable` saves the mask in ~/.omnibase/.env; the installed
       hook ignored it, because only common.sh reads that file.
-  F4. No Python is found: Claude Code runs a settings.json hook with no
-      PLUGIN_PYTHON_BIN, so the command itself must carry the interpreter the
-      installer resolved. The test environment sets none.
+  F4. No Python is found: the installed script gets no interpreter from its
+      environment, so the installer's binding (delegation-runtime.json, which
+      the native mod passes as PLUGIN_PYTHON_BIN) must name a usable one. The
+      test environment sets none of its own.
   F6. The scenario is not the customer's: a python3 on the caller's PATH that
       imports a dev-workspace omnibase_core makes mode.sh resolve to full, so
       the lite default is never exercised (dod-closeout-sweep, 2026-11-11). The
@@ -41,6 +48,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -70,7 +78,7 @@ def _install(tmp_path: Path) -> Path:
     stub_bin = tmp_path / "bin"
     stub_bin.mkdir()
     claude = stub_bin / "claude"
-    claude.write_text('#!/usr/bin/env bash\necho "claude 1.0.0-stub"\n')
+    claude.write_text('#!/usr/bin/env bash\necho "claude 2.1.326-stub"\n')
     claude.chmod(0o755)
     env = {
         "HOME": str(home),
@@ -90,15 +98,20 @@ def _install(tmp_path: Path) -> Path:
 
 
 def _installed_pre_tool_command(home: Path) -> str:
-    settings = json.loads((home / ".claude" / "settings.json").read_text())
-    commands = [
-        hook["command"]
-        for group in settings["hooks"].get("PreToolUse", [])
-        for hook in group["hooks"]
-        if "pre_tool_use_delegation.sh" in hook["command"]
-    ]
-    assert len(commands) == 1, commands
-    return commands[0]
+    """The command the native mod runs, built from the installed binding.
+
+    Not read from any registration: registration and Claude's cache loading are
+    covered by test_native_delegation_install.
+    """
+    plugin = home / ".omninode/delegation/plugin/plugins/onex"
+    runtime = json.loads((plugin / "hooks/delegation-runtime.json").read_text())
+    return shlex.join(
+        [
+            "env",
+            f"PLUGIN_PYTHON_BIN={runtime['python']}",
+            str(plugin / "hooks/scripts/pre_tool_use_delegation.sh"),
+        ]
+    )
 
 
 def _customer_path(tmp_path: Path) -> str:
@@ -313,3 +326,79 @@ def test_delegation_switch_onex_hooks_cli_round_trip(tmp_path: Path) -> None:
         for reason in ("failed", "timed_out", "no_onex", "no_answer")
     )
     assert routed or "WARN: runner exited" in on_log, on_log
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("history", ["accepted", "empty", "malformed"])
+def test_paused_installed_hook_clears_pending_history_without_delegation(
+    tmp_path, history
+):
+    """Native OFF removes every entry point and clears pending history.
+
+    Native answers already live in Claude's transcript (real CLI history proof),
+    so nothing pending is kept to be handed to Claude again after a re-enable
+    (OMN-23413 Amendment 17, superseding the earlier keep-on-disk rule).
+    """
+    home = _install(tmp_path)
+    env, project = _customer_env(tmp_path, home)
+    env["ONEX_HOOKS_MASK"] = "0"
+    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[3] / "omnimarket/src")
+    state = Path(env["ONEX_STATE_DIR"])
+    seed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from omnimarket.nodes.node_hook_delegate_effect.handlers.handler_prompt_delegate import HandlerPromptDelegate as H; H._record('history-off', 'Earlier question', 'Accepted answer marker', 'fixture-model', 'history-run-marker')",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert seed.returncode == 0, seed.stderr
+    saved = next((state / "claude_prompt_history").glob("*.json"))
+    if history == "empty":
+        saved.write_text("[]")
+    elif history == "malformed":
+        saved.write_text("not JSON")
+    env["PATH"] = str(tmp_path / "bin") + os.pathsep + env["PATH"]
+    paused = subprocess.run(
+        ["/bin/bash", str(_INSTALLER), "--pause", "--python", sys.executable],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert paused.returncode == 0, paused.stdout + paused.stderr
+    settings = home / ".claude/settings.json"
+    current = json.loads(settings.read_text()) if settings.exists() else {}
+    commands = [
+        h["command"]
+        for g in current.get("hooks", {}).get("UserPromptSubmit", [])
+        for h in g["hooks"]
+    ]
+    assert commands == [], current
+    assert (
+        current.get("enabledPlugins", {}).get("onex-delegation@onex-delegation-local")
+        is not True
+    )
+    assert not saved.exists()
+    removed = subprocess.run(
+        ["/bin/bash", str(_INSTALLER), "--uninstall", "--python", sys.executable],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert removed.returncode == 0, removed.stdout + removed.stderr
+    assert not settings.exists() or "--history-only" not in settings.read_text()
+    (tmp_path / "off-history-proof.json").write_text(
+        json.dumps(
+            {
+                "status": "passed",
+                "history": history,
+                "pending_history_cleared": True,
+                "full_uninstall": True,
+            }
+        )
+    )

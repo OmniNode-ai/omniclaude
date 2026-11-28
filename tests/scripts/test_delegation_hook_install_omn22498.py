@@ -75,7 +75,7 @@ def _apply(tmp_path: Path, home: Path) -> None:
     stub_bin = tmp_path / "bin"
     stub_bin.mkdir(exist_ok=True)
     claude = stub_bin / "claude"
-    claude.write_text('#!/usr/bin/env bash\necho "claude 1.0.0-stub"\n')
+    claude.write_text('#!/usr/bin/env bash\necho "claude 2.1.326-stub"\n')
     claude.chmod(0o755)
     env = {
         "HOME": str(home),
@@ -156,7 +156,9 @@ def test_delegation_hook_install_twice_is_byte_identical_and_keeps_other_rows(
     settings = json.loads(second)
     pre = _commands(settings, "PreToolUse")
     delegation = [c for c in pre if "pre_tool_use_delegation.sh" in c]
-    assert len(delegation) == 1, delegation  # F2
+    assert delegation == [], (
+        delegation
+    )  # Native adapter replaces classic commands (AC45).
     assert not any("/hook-scripts/" in c for c in pre), pre  # F4
 
     assert _other_tool_groups(settings) == _other_tool_groups(seeded)  # F3

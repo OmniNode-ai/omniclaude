@@ -153,7 +153,12 @@ def test_install_delegation_shell_suite() -> None:
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
-        env={**os.environ, "PATH": os.environ.get("PATH", "")},
+        env={
+            **os.environ,
+            "PATH": str(Path(sys.executable).parent)
+            + os.pathsep
+            + os.environ.get("PATH", ""),
+        },
         check=False,
     )
     if result.returncode != 0:

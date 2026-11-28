@@ -1,6 +1,6 @@
 {
   "$schema": "https://claude.ai/schemas/hooks.json",
-  "description": "OmniClaude Delegation Hooks - Minimal hook config for delegation interception and cost accounting, switched by the POST_SKILL_DELEGATION_ENFORCER hook bit",
+  "description": "OmniClaude Delegation Hook - one hook, prompts (UserPromptSubmit) with its history helper; subagents always run on Claude. Switched by the POST_SKILL_DELEGATION_ENFORCER hook bit (OMN-23413 AC39)",
   "version": "1.0.0",
   "hooks": {
     "UserPromptSubmit": [
@@ -12,47 +12,13 @@
             "timeout": 300
           }
         ]
-      }
-    ],
-    "SessionStart": [
+      },
       {
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session-start.sh"
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session-end.sh"
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "^(Agent|Task)$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "ONEX_DELEGATION_HOOK=subagents ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_delegation.sh",
-            "timeout": 300
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "^(Agent|Task)$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_cost_accounting.sh"
+            "command": "${ONEX_DELEGATION_PYTHON} ${CLAUDE_PLUGIN_ROOT}/hooks/lib/delegation_hook_runner.py --history-only 2>/dev/null || true",
+            "timeout": 10
           }
         ]
       }

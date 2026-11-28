@@ -10,9 +10,8 @@
 # What it installs:
 #   1. The omniclaude delegation runner Python package (pip install)
 #   2. SQLite database directory at ~/.omninode/delegation/
-#   3. Delegation hook config rewritten to point at the install location, copied
-#      to ~/.omninode/delegation/hooks-delegation.json, AND merged into
-#      ~/.claude/settings.json hooks block (existing hooks preserved + backed up)
+#   3. A dedicated native delegation plugin, its interpreter binding and ownership
+#      manifest; unrelated Claude Code hooks and settings are preserved.
 #   4. Rollback manifest at ~/.omninode/delegation/rollback-manifest.json
 #
 # Idempotent: re-running detects existing state and only acts on diffs.
@@ -59,11 +58,20 @@ LEGACY_INSTALL_BIFROST="${INSTALL_ROOT}/bifrost_delegation.yaml"
 DRY_RUN=true
 APPLY=false
 UNINSTALL=false
+PAUSE=false
 FROM_SOURCE=""
 PYTHON_BIN=""
 ENDPOINT_URL=""
 SKIP_PIP=false
 SKIP_SMOKE=false
+# Run state: the folder this run moved its owned paths and settings into, so a
+# run that stops before Claude's installer succeeds can put them back. The
+# handler (native_plugin snapshot|restore|recover) owns its layout.
+TREE_SNAPSHOT=""
+# The paths under INSTALL_ROOT a run replaces (the handler's RUN_OWNED_PATHS).
+RUN_OWNED_PATHS=(hooks-delegation.json plugin hook-scripts .claude-plugin)
+# A signal held while Claude's installer runs (hold_signals), as an exit status.
+PENDING_SIGNAL_STATUS=""
 
 # ---------------------------------------------------------------------------
 # Logging helpers
@@ -106,10 +114,12 @@ usage() {
 ${C_BOLD}install-delegation.sh${C_RESET} — install the ONEX delegation feature for Claude Code.
 
 Usage:
-  $0 [--apply | --uninstall] [--from-source <path>] [--python <bin>]
+  $0 [--apply | --pause | --uninstall] [--from-source <path>] [--python <bin>]
 
 Options:
   --apply                 Execute changes (default is dry-run preview).
+  --pause                 Remove delegation entry points; a classic install keeps its
+                          pending-history helper, a native install clears pending history.
   --uninstall             Restore prior state using the rollback manifest.
   --endpoint-url <url>    LLM endpoint URL to write into the bifrost endpoint
                           overlay (e.g. http://llm.example.com:8000). If omitted
@@ -134,6 +144,7 @@ EOF
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --apply)        APPLY=true; DRY_RUN=false; shift; continue ;;
+    --pause)        PAUSE=true; DRY_RUN=false; shift; continue ;;
     --uninstall)    UNINSTALL=true; DRY_RUN=false; shift; continue ;;
     --from-source)  requirement="a path"; destination=FROM_SOURCE ;;
     --python)       requirement="an interpreter path"; destination=PYTHON_BIN ;;
@@ -151,8 +162,8 @@ while [[ $# -gt 0 ]]; do
   shift 2
 done
 
-if "${APPLY}" && "${UNINSTALL}"; then
-  log_err "--apply and --uninstall are mutually exclusive"
+if { "${APPLY}" && { "${UNINSTALL}" || "${PAUSE}"; }; } || { "${UNINSTALL}" && "${PAUSE}"; }; then
+  log_err "--apply, --pause and --uninstall are mutually exclusive"
   exit 2
 fi
 
@@ -167,6 +178,12 @@ check_claude_cli() {
   fi
   local ver
   ver="$(claude --version 2>&1 | head -1 || true)"
+  if [[ ! "$ver" =~ ([0-9]+)\.([0-9]+)\.([0-9]+) ]] ||
+     (( BASH_REMATCH[1] < 2 || (BASH_REMATCH[1] == 2 && BASH_REMATCH[2] < 1) ||
+        (BASH_REMATCH[1] == 2 && BASH_REMATCH[2] == 1 && BASH_REMATCH[3] < 287) )); then
+    log_err "Native delegation output requires Claude Code 2.1.287 or newer (${ver})"
+    return 1
+  fi
   log_ok "Claude Code CLI: ${ver}"
 }
 
@@ -182,6 +199,15 @@ resolve_python() {
       log_err "python3 not found on PATH"
       return 1
     fi
+  fi
+  # The native mod refuses a non-absolute interpreter binding, so a bare name
+  # or relative path becomes absolute here. Symlinks are kept as given: a venv's
+  # python must keep its venv path.
+  if [[ "${PYTHON_BIN}" != */* ]]; then
+    PYTHON_BIN="$(command -v "${PYTHON_BIN}")"
+  fi
+  if [[ "${PYTHON_BIN}" != /* ]]; then
+    PYTHON_BIN="$(cd "$(dirname "${PYTHON_BIN}")" && pwd)/$(basename "${PYTHON_BIN}")"
   fi
   if ! "${PYTHON_BIN}" -c 'import sys; sys.exit(0 if sys.version_info >= (3,12) else 1)' 2>/dev/null; then
     local pyver
@@ -215,7 +241,8 @@ check_source_files() {
 
 ensure_install_dir() {
   log_step "ensure install dirs (${INSTALL_ROOT})"
-  run_or_dry mkdir -p "${INSTALL_SCRIPTS_DIR}" "${CLAUDE_SETTINGS_BACKUP_DIR}"
+  # plugin/ is left to install_hook_config, so it moves aside the tree as it was.
+  run_or_dry mkdir -p "${INSTALL_ROOT}" "${CLAUDE_SETTINGS_BACKUP_DIR}"
 }
 
 install_python_package() {
@@ -385,6 +412,12 @@ PY
   log_ok "wrote bifrost endpoint overlay to ${INSTALL_BIFROST_OVERLAY}"
 }
 
+native_plugin() {
+  PYTHONPATH="${REPO_ROOT}/src${PYTHONPATH:+:$PYTHONPATH}" "${PYTHON_BIN}" -m \
+    omniclaude.nodes.node_skill_omninode_dev_setup_orchestrator.container_onboarding_assets \
+    "$1" "${INSTALL_ROOT}" "${CLAUDE_SETTINGS}" "${PYTHON_BIN}" "${@:2}"
+}
+
 install_hook_config() {
   log_step "install hook config to ${INSTALL_HOOKS_JSON}"
   # Rewrite ${CLAUDE_PLUGIN_ROOT} → INSTALL_ROOT so hook commands work outside
@@ -399,113 +432,125 @@ install_hook_config() {
   # mode.sh and repo_guard.sh by relative path, and run the routing runner and
   # cost_accounting from hooks/lib (OMN-22498). A fresh copy each run keeps a
   # re-install from mixing two versions.
-  rm -rf "${INSTALL_ROOT}/plugin" "${INSTALL_ROOT}/hook-scripts" && mkdir -p "${INSTALL_PLUGIN_ROOT}"
+  # Move this run's owned paths aside first; the last line is the folder.
+  TREE_SNAPSHOT="$(native_plugin snapshot)"
+  TREE_SNAPSHOT="${TREE_SNAPSHOT##*$'\n'}"
+  mkdir -p "${INSTALL_PLUGIN_ROOT}"
   cp -R "${SOURCE_HOOK_SCRIPTS%/hooks/scripts}/hooks" "${SOURCE_HOOK_SCRIPTS%/hooks/scripts}/lib" "${INSTALL_PLUGIN_ROOT}/"
   rm -rf "${INSTALL_PLUGIN_ROOT}/hooks/tests" && find "${INSTALL_PLUGIN_ROOT}" -type d -name __pycache__ -prune -exec rm -rf {} +
-  # Rewrite the JSON so commands run the installed copy with the Python this
-  # installer resolved: Claude Code runs settings.json hooks with neither
-  # CLAUDE_PLUGIN_ROOT nor PLUGIN_PYTHON_BIN set.
-  "${PYTHON_BIN}" - "${SOURCE_HOOK_CONFIG}" "${INSTALL_HOOKS_JSON}" "${INSTALL_PLUGIN_ROOT}" "${PYTHON_BIN}" <<'PY'
-import json, shlex, sys, pathlib
-src, dst, plugin_root, python_bin = sys.argv[1:5]
-data = json.loads(pathlib.Path(src).read_text())
-def rewrite(value, key=""):
-    if isinstance(value, str):
-        v = value.replace("${CLAUDE_PLUGIN_ROOT}", plugin_root)
-        return f"PLUGIN_PYTHON_BIN={shlex.quote(python_bin)} {v}" if key == "command" else v
-    if isinstance(value, list):
-        return [rewrite(v) for v in value]
-    if isinstance(value, dict):
-        return {k: rewrite(v, k) for k, v in value.items()}
-    return value
-pathlib.Path(dst).write_text(json.dumps(rewrite(data), indent=2) + "\n")
-PY
+  native_plugin prepare
   log_ok "wrote ${INSTALL_HOOKS_JSON}"
+}
+
+# Put back what this run replaced (the handler reads it all from the run's
+# snapshot folder). Safe to call twice and from the EXIT trap at any point.
+restore_run_state() {
+  if [[ -n "${TREE_SNAPSHOT}" ]]; then
+    native_plugin restore "${TREE_SNAPSHOT}"
+  fi
+  TREE_SNAPSHOT=""
+}
+
+# Claude's installer succeeded: this run's changes stand. The snapshot folder
+# is renamed out of the install-tree.run.* pattern in one step before it is
+# deleted, so a run killed while deleting it is never taken for a stale run
+# (recover_stale_run_state only clears the leftover).
+commit_run_state() {
+  if [[ -n "${TREE_SNAPSHOT}" ]]; then
+    local committed="${TREE_SNAPSHOT%/*}/install-tree.done.${TREE_SNAPSHOT##*/install-tree.run.}"
+    mv "${TREE_SNAPSHOT}" "${committed}"
+    rm -rf "${committed}"
+  fi
+  TREE_SNAPSHOT=""
+}
+
+# A run killed outright (SIGKILL, power loss) runs no trap and leaves its
+# install-tree.run.* folder in backups/. Its before-state is put back before
+# this run snapshots anything (OMN-23413 review).
+recover_stale_run_state() {
+  local run
+  if ! "${DRY_RUN}"; then
+    for run in "${CLAUDE_SETTINGS_BACKUP_DIR}"/install-tree.done.*; do
+      if [[ -d "${run}" && ! -L "${run}" ]]; then
+        rm -rf "${run}"
+      fi
+    done
+  fi
+  if compgen -G "${CLAUDE_SETTINGS_BACKUP_DIR}/install-tree.run.*" >/dev/null; then
+    resolve_python
+    native_plugin recover "$("${DRY_RUN}" && echo dry || true)"
+  fi
+}
+
+# bash runs a trap only after the foreground command exits, so a signal sent
+# while Claude's installer runs lands after Claude has finished. If Claude
+# succeeded it has registered the plugin from the new tree: restoring the old
+# tree then would leave that registration pointing at deleted files with no
+# manifest. So while it runs a signal is only recorded; Claude's result decides
+# and the signal is acted on after (exit_on_signals) (OMN-23413 review).
+hold_signals() {
+  trap 'PENDING_SIGNAL_STATUS=129' HUP
+  trap 'PENDING_SIGNAL_STATUS=130' INT
+  trap 'PENDING_SIGNAL_STATUS=143' TERM
+}
+
+# A signal becomes an exit, so the EXIT trap (on_install_exit) runs. A signal
+# held by hold_signals is acted on now.
+exit_on_signals() {
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  if [[ -n "${PENDING_SIGNAL_STATUS}" ]]; then
+    log_err "stopped by a signal after Claude's plugin installer finished; the install and its rollback manifest are kept."
+    exit "${PENDING_SIGNAL_STATUS}"
+  fi
+}
+
+# Any exit before commit_run_state (an error under set -e, a signal) restores.
+on_install_exit() {
+  local status=$?
+  if [[ -n "${TREE_SNAPSHOT}" ]]; then
+    restore_run_state
+    log_err "install stopped (exit ${status}) before Claude's plugin installer finished; ${CLAUDE_SETTINGS} and the delegation files in ${INSTALL_ROOT} (hooks-delegation.json, plugin/, .claude-plugin/) are restored to their state before this run."
+  fi
+  return "${status}"
+}
+
+install_native_plugin() {
+  if "${DRY_RUN}"; then
+    log_dry "would install native delegation from ${INSTALL_ROOT} with Claude's plugin installer"
+    return 0
+  fi
+  # Do not load runtime user/project preferences for a plugin ownership change:
+  # Claude otherwise migrates unrelated model aliases (opus -> opus[1m]). Its
+  # scoped plugin writer still preserves and updates the selected user profile.
+  local status=0
+  hold_signals
+  claude --setting-sources "" plugin install onex-delegation --marketplace "${INSTALL_ROOT}" --scope user --json || status=$?
+  if (( status != 0 )); then
+    # merge_user_settings already removed the old owned rows and
+    # install_hook_config replaced the tree they run from. Put both back byte
+    # for byte, so a failed upgrade leaves the previous delegation in place
+    # instead of none, and write no rollback manifest (OMN-23413 review).
+    restore_run_state
+    log_err "Claude's plugin installer failed (exit ${status}); ${CLAUDE_SETTINGS} and the delegation files in ${INSTALL_ROOT} (hooks-delegation.json, plugin/, .claude-plugin/) are restored to their state before this run, so the delegation installed before it is unchanged. Fix the error above and re-run."
+    exit "${PENDING_SIGNAL_STATUS:-1}"
+  fi
+  commit_run_state
 }
 
 merge_user_settings() {
   log_step "merge delegation hooks into ${CLAUDE_SETTINGS}"
-  # PRE_INSTALL_BACKUP holds the backup that captures state from BEFORE this
-  # install ever ran. We only create it once — on the first --apply — and
-  # subsequent runs (idempotent re-installs) do not overwrite it. The rollback
-  # manifest below records this path so --uninstall can always reach the true
-  # pre-install state.
-  PRE_INSTALL_BACKUP=""
-  if [[ -f "${ROLLBACK_MANIFEST}" ]]; then
-    # Read prior backup path from manifest to preserve it.
-    PRE_INSTALL_BACKUP="$("${PYTHON_BIN}" - "${ROLLBACK_MANIFEST}" <<'PY' 2>/dev/null || echo ""
-import json, pathlib, sys
-try:
-    m = json.loads(pathlib.Path(sys.argv[1]).read_text())
-    print(m.get("settings_backup") or "")
-except Exception:
-    print("")
-PY
-)"
-  fi
-  local backup_path="${PRE_INSTALL_BACKUP}"
-  if [[ -z "${backup_path}" && -f "${CLAUDE_SETTINGS}" ]]; then
-    backup_path="${CLAUDE_SETTINGS_BACKUP_DIR}/settings.json.$(date +%Y%m%dT%H%M%S).bak"
-  fi
-
   if "${DRY_RUN}"; then
-    if [[ -n "${backup_path}" && -z "${PRE_INSTALL_BACKUP}" ]]; then
-      log_dry "would back up existing settings → ${backup_path}"
-    elif [[ -n "${PRE_INSTALL_BACKUP}" ]]; then
-      log_dry "would reuse pre-install backup at ${PRE_INSTALL_BACKUP}"
-    else
-      log_dry "would create new settings.json (none exists)"
-    fi
-    log_dry "would merge hooks block from ${INSTALL_HOOKS_JSON} (preserving existing hooks)"
-    PRE_INSTALL_BACKUP="${backup_path}"
+    log_dry "would back up ${CLAUDE_SETTINGS} once (kept across re-installs) and remove owned delegation hook rows, preserving every other hook"
     return 0
   fi
-
-  mkdir -p "$(dirname "${CLAUDE_SETTINGS}")"
-  if [[ -n "${backup_path}" && -z "${PRE_INSTALL_BACKUP}" && -f "${CLAUDE_SETTINGS}" ]]; then
-    cp "${CLAUDE_SETTINGS}" "${backup_path}"
-    log_info "backed up existing settings → ${backup_path}"
-    PRE_INSTALL_BACKUP="${backup_path}"
-  fi
-
-  "${PYTHON_BIN}" - "${CLAUDE_SETTINGS}" "${INSTALL_HOOKS_JSON}" "${INSTALL_ROOT}" <<'PY'
-import json, pathlib, sys
-settings_path = pathlib.Path(sys.argv[1])
-hooks_path = pathlib.Path(sys.argv[2])
-hook_cfg = json.loads(hooks_path.read_text())
-delegation_hooks = hook_cfg.get("hooks", {})
-
-if settings_path.exists():
-    settings = json.loads(settings_path.read_text())
-else:
-    settings = {}
-
-existing = settings.setdefault("hooks", {})
-# Drop every entry this installer wrote (under the install root), then add
-# the current set below, so a re-install also updates an entry's fields such
-# as its timeout (OMN-23413). Every other hook, including other tools' rows
-# such as another tool's hook groups, stays exactly where it is (OMN-22498).
-for event in list(existing):
-    groups = [{**g, "hooks": [h for h in g.get("hooks", []) if f"{sys.argv[3]}/" not in (h.get("command") or "")]} for g in existing[event]]
-    existing[event] = [g for g in groups if g["hooks"]]
-    if not existing[event]: existing.pop(event)
-# Merge per-event arrays without duplicating commands already present.
-for event, new_groups in delegation_hooks.items():
-    cur_groups = existing.setdefault(event, [])
-    existing_cmds = set()
-    for group in cur_groups:
-        for hook in group.get("hooks", []):
-            cmd = hook.get("command")
-            if cmd:
-                existing_cmds.add(cmd)
-    for group in new_groups:
-        filtered_hooks = [h for h in group.get("hooks", []) if h.get("command") not in existing_cmds]
-        if filtered_hooks:
-            new_group = {**group, "hooks": filtered_hooks}
-            cur_groups.append(new_group)
-
-settings_path.write_text(json.dumps(settings, indent=2) + "\n")
-PY
+  # The handler backs settings up on the first install only, snapshots them
+  # for this run so a failed Claude install restores them exactly, and drops
+  # the owned classic rows. Its last line is the pre-install backup, which the
+  # rollback manifest keeps so --uninstall reaches the true pre-install state.
+  PRE_INSTALL_BACKUP="$(native_plugin settings "${TREE_SNAPSHOT}")"
+  PRE_INSTALL_BACKUP="${PRE_INSTALL_BACKUP##*$'\n'}"
   log_ok "merged delegation hooks into ${CLAUDE_SETTINGS}"
 }
 
@@ -515,34 +560,7 @@ write_rollback_manifest() {
     log_dry "would record actions for --uninstall in ${ROLLBACK_MANIFEST}"
     return 0
   fi
-  # Use the pre-install backup tracked in merge_user_settings; this stays
-  # stable across idempotent re-runs so --uninstall always restores the true
-  # pre-install state.
-  "${PYTHON_BIN}" - "${ROLLBACK_MANIFEST}" "${INSTALL_ROOT}" "${CLAUDE_SETTINGS}" "${PRE_INSTALL_BACKUP:-}" "${INSTALL_HOOKS_JSON}" <<'PY'
-import json, sys, pathlib, datetime
-manifest_path, install_root, settings_path, backup_path, hooks_json = sys.argv[1:6]
-manifest = pathlib.Path(manifest_path)
-# Preserve created_at from prior manifest if present.
-created_at = datetime.datetime.now(datetime.UTC).isoformat()
-prior_backup = None
-if manifest.exists():
-    try:
-        prior = json.loads(manifest.read_text())
-        created_at = prior.get("created_at", created_at)
-        prior_backup = prior.get("settings_backup")
-    except Exception:
-        pass
-data = {
-    "version": 1,
-    "created_at": created_at,
-    "install_root": install_root,
-    "claude_settings": settings_path,
-    "settings_backup": (backup_path or prior_backup) or None,
-    "installed_hook_config": hooks_json,
-    "package": "omninode-claude",
-}
-manifest.write_text(json.dumps(data, indent=2) + "\n")
-PY
+  native_plugin manifest "${PRE_INSTALL_BACKUP:-}"
   log_ok "wrote rollback manifest"
 }
 
@@ -587,60 +605,29 @@ uninstall() {
   fi
   log_step "rolling back via ${ROLLBACK_MANIFEST}"
   resolve_python
-  "${PYTHON_BIN}" - "${ROLLBACK_MANIFEST}" <<'PY'
-import json, pathlib, sys
-manifest = json.loads(pathlib.Path(sys.argv[1]).read_text())
-backup = manifest.get("settings_backup")
-settings = manifest.get("claude_settings")
-hooks_config = manifest.get("installed_hook_config")
-settings_path = pathlib.Path(settings) if settings else None
-if settings_path is None:
-    raise SystemExit("rollback manifest missing claude_settings")
-if not settings_path.exists():
-    if backup and pathlib.Path(backup).exists():
-        settings_path.parent.mkdir(parents=True, exist_ok=True)
-        settings_path.write_text(pathlib.Path(backup).read_text())
-        print(f"restored missing {settings} from {backup}")
-    raise SystemExit(0)
-current = json.loads(settings_path.read_text())
-hook_cfg = {}
-if hooks_config and pathlib.Path(hooks_config).exists():
-    hook_cfg = json.loads(pathlib.Path(hooks_config).read_text()).get("hooks", {})
-delegation_commands = {
-    hook.get("command")
-    for groups in hook_cfg.values()
-    for group in groups
-    for hook in group.get("hooks", [])
-    if hook.get("command")
-}
-hooks = current.get("hooks", {})
-for event in list(hooks):
-    filtered_groups = []
-    for group in hooks.get(event, []):
-        filtered_hooks = [
-            hook for hook in group.get("hooks", [])
-            if hook.get("command") not in delegation_commands
-        ]
-        if filtered_hooks:
-            filtered_groups.append({**group, "hooks": filtered_hooks})
-    if filtered_groups:
-        hooks[event] = filtered_groups
-    else:
-        hooks.pop(event, None)
-if hooks:
-    current["hooks"] = hooks
-else:
-    current.pop("hooks", None)
-if current:
-    settings_path.write_text(json.dumps(current, indent=2) + "\n")
-    print(f"removed delegation hooks from {settings}")
-else:
-    settings_path.unlink()
-    print(f"removed {settings} after clearing installer-managed hooks")
-PY
-  rm -f "${INSTALL_HOOKS_JSON}"
-  rm -rf "${INSTALL_ROOT}/plugin" "${INSTALL_ROOT}/hook-scripts"
-  log_ok "removed installed hook config + scripts"
+  local native
+  native="$(native_plugin remove)"
+  # The verdict is the last line the module prints, read as text: running it
+  # as a command would run whatever else reached stdout (OMN-23413 review).
+  native="${native##*$'\n'}"
+  # Native removal is owned by the package handler. Only older command-hook
+  # installs need the legacy consumer's exact-command rollback API, and they
+  # still roll back where omnimarket is not installed (OMN-23413 review).
+  if [[ "${native}" != true ]]; then
+    # The handler's exact-command rollback; a pause keeps the history helper.
+    native_plugin classic-remove "${PAUSE}"
+  fi
+  if "${PAUSE}" && [[ "${native}" != true ]]; then
+    log_ok "delegation paused; pending-history hook retained"
+    return 0
+  fi
+  # Every owned path, .claude-plugin/ included: its marketplace.json names
+  # ./plugin/plugins/onex, which is gone after this.
+  local name
+  for name in "${RUN_OWNED_PATHS[@]}"; do
+    rm -rf "${INSTALL_ROOT:?}/${name}"
+  done
+  log_ok "removed installed hook config, scripts and marketplace metadata"
   log_info "preserved: ${INSTALL_DB} (delete manually to discard telemetry)"
   log_info "uninstall complete"
 }
@@ -674,7 +661,7 @@ ${C_GREEN}${C_BOLD}Installation complete.${C_RESET}
 
 Next steps:
   1. Restart any running Claude Code sessions so the new hooks load.
-  2. Open a new session — delegation hooks fire on Agent/Task tool use.
+  2. Open a new session — eligible prompts use native delegation output.
   3. Inspect telemetry:
        sqlite3 ${INSTALL_DB} '.tables'
   4. To roll back:
@@ -683,10 +670,35 @@ Next steps:
 EOF
 }
 
+# One run at a time on an install root. Without this a second run reads the
+# live run's install-tree.run.* folder as a stale one and restores it under the
+# live run's feet. The lock is an flock on a file in the install root, held on
+# fd 9 until the process exits (the kernel drops it on any exit, SIGKILL
+# included, so a dead run never blocks the next). A dry run writes nothing and
+# takes no lock. Known limit, not fixed: SIGKILL after Claude's installer has
+# written its registry but before commit_run_state restores the old tree while
+# Claude's registry already names the new plugin; the next run (or --uninstall)
+# is what puts that right. Without flock(1) (macOS) runs are not serialised.
+acquire_run_lock() {
+  "${DRY_RUN}" && return 0
+  if ! command -v flock >/dev/null 2>&1; then
+    log_warn "flock is not installed; concurrent install-delegation runs are not prevented."
+    return 0
+  fi
+  mkdir -p "${INSTALL_ROOT}"
+  exec 9>>"${INSTALL_ROOT}/.install.lock"
+  if ! flock -n 9; then
+    log_err "another install-delegation run is in progress on ${INSTALL_ROOT}; wait for it to finish and re-run."
+    exit 1
+  fi
+}
+
 main() {
   print_banner
+  acquire_run_lock
+  recover_stale_run_state
 
-  if "${UNINSTALL}"; then
+  if "${UNINSTALL}" || "${PAUSE}"; then
     uninstall
     return 0
   fi
@@ -704,12 +716,20 @@ if manifest.exists():
         raise SystemExit("Delegation belongs to another Claude profile; uninstall that profile before changing it.")
 PY
 
+  # From here until Claude's installer succeeds, any exit restores this run's
+  # changes; the signal traps turn a signal into an exit so the EXIT trap runs.
+  trap on_install_exit EXIT
+  exit_on_signals
   ensure_install_dir
   install_python_package
   deploy_bifrost_contract
   install_hook_config
   merge_user_settings
+  install_native_plugin
   write_rollback_manifest
+  # Claude's installer has finished and the manifest is written: a signal held
+  # while it ran is acted on now, with the install kept.
+  exit_on_signals
   run_smoke_test
 
   if "${DRY_RUN}"; then

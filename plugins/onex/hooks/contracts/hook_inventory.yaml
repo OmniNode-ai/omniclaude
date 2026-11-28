@@ -2055,12 +2055,13 @@ unregistered_scripts:
     removal_blocker: >
       tests that name it: tests/hooks/test_hook_repo_scoping.py
   - script: "post_tool_use_cost_accounting.sh"
-    kind: "live"
+    kind: "dormant"
     role: "recorder"
     owner: "omniclaude hooks lane"
-    referenced_from: "plugins/onex/hooks/hooks-delegation.v1.json"
     note: >
-      PostToolUse cost recorder of the customer delegation install; never refuses.
+      Nothing registers it on any surface and no script, library or workflow runs it.
+    removal_blocker: >
+      tests that name it: tests/scripts/test_one_delegation_hook_omn23413.py, tests/unit/hooks/scripts/test_delegation_switch_omn22498.py; also named (comments, docs or prose) in: src/omniclaude/contracts/hook_activations.yaml
   - script: "post_tool_use_cron_action_guard.sh"
     kind: "dormant"
     role: "recorder"
@@ -2133,19 +2134,21 @@ unregistered_scripts:
     removal_blocker: >
       also named (comments, docs or prose) in: plugins/onex/hooks/lib/bash_guard.py
   - script: "session-end.sh"
-    kind: "live"
+    kind: "dormant"
     role: "recorder"
     owner: "omniclaude hooks lane"
-    referenced_from: "plugins/onex/hooks/hooks-delegation.v1.json"
     note: >
-      SessionEnd hook of the customer delegation install; records the session end and never refuses.
+      Nothing registers it on any surface and no script, library or workflow runs it.
+    removal_blocker: >
+      tests that name it: tests/hooks/test_error_guard.sh, tests/hooks/test_hook_error_visibility.py, tests/hooks/test_session_outcome.py, tests/hooks/test_session_raw_outcome.py, tests/scripts/test_every_worktree_removal_saves_first.py, tests/scripts/test_launcher_pinning.py, tests/scripts/test_omnimarket_launcher.py, tests/scripts/test_one_delegation_hook_omn23413.py, tests/scripts/test_worktree_remove_partial_removal_omn18826.py, tests/unit/hooks/test_session_end_bus_mirror.py; also named (comments, docs or prose) in: contracts/OMN-17427.yaml, contracts/OMN-18826.yaml, plugins/onex/hooks/lib/node_session_state_adapter.py, plugins/onex/hooks/lib/worktree_manager.py, plugins/onex/hooks/scripts/claude_hook_capture.sh, plugins/onex/hooks/scripts/common.sh, plugins/onex/hooks/scripts/post-tool-use-quality.sh, plugins/onex/hooks/scripts/session-start.sh, plugins/onex/hooks/scripts/session_end_bus_mirror.sh, plugins/onex/hooks/scripts/stop_content_capture.sh, plugins/onex/hooks/scripts/user-prompt-submit.sh, src/omniclaude/hooks/handler_session_cost_emitter.py
   - script: "session-start.sh"
-    kind: "live"
+    kind: "dormant"
     role: "recorder"
     owner: "omniclaude hooks lane"
-    referenced_from: "plugins/onex/hooks/hooks-delegation.v1.json"
     note: >
-      SessionStart hook of the customer delegation install (scripts/install-delegation.sh); injects context and never refuses.
+      Nothing registers it on any surface and no script, library or workflow runs it.
+    removal_blocker: >
+      tests that name it: tests/hooks/test_deployed_registry_redaction_omn17201.py, tests/hooks/test_error_guard.sh, tests/hooks/test_hook_error_visibility.py, tests/hooks/test_session_start_env_sync.py, tests/hooks/test_static_context_snapshot.py, tests/scripts/test_install_delegation.sh, tests/scripts/test_launcher_pinning.py, tests/scripts/test_omnimarket_launcher.py, tests/scripts/test_one_delegation_hook_omn23413.py, tests/unit/hooks/scripts/test_session_start_probe_consumption.py, tests/unit/hooks/test_probe_channel_fails_loud.py, tests/unit/hooks/test_session_start_credential_check.py, tests/unit/hooks/test_session_start_guards.py, tests/unit/hooks/test_session_start_lite.py; also named (comments, docs or prose) in: contracts/OMN-10125.yaml, contracts/OMN-15606.yaml, plugins/onex/hooks/lib/combined_injector.py, plugins/onex/hooks/lib/config.yaml, plugins/onex/hooks/lib/env_health_check_wrapper.py, plugins/onex/hooks/lib/hook_health_probe.py, plugins/onex/hooks/lib/node_session_state_adapter.py, plugins/onex/hooks/lib/skill_suggestion_injector.py, plugins/onex/hooks/lib/ticket_context_injector.py, plugins/onex/hooks/scripts/common.sh, plugins/onex/hooks/scripts/session-end.sh, plugins/onex/hooks/scripts/session_start_bus_mirror.sh, plugins/onex/hooks/scripts/test-hooks.sh, scripts/check_hook_event_names.sh, scripts/demo_runner.py, src/omniclaude/hooks/lib/compliance_result_subscriber.py, src/omniclaude/hooks/lib/decision_record_subscriber.py, src/omniclaude/hooks/lib/hook_health_probe.py, src/omniclaude/hooks/lib/skill_suggestion_injector.py
   - script: "session_start_onex_cli_pin_check.sh"
     kind: "dormant"
     role: "recorder"

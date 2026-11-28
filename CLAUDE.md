@@ -179,23 +179,31 @@ non-OmniNode repos, are passed through untouched.
 
 ---
 
-### Claude Code delegation switch (OMN-22498)
+### Claude Code delegation switch (OMN-22498, OMN-23413)
 
-The dormant delegation hook set (`plugins/onex/hooks/hooks-delegation.v1.json`:
-`pre_tool_use_delegation.sh` on `^(Agent|Task)$`, `post_tool_use_cost_accounting.sh`) is not in
-`hooks.json`; only `scripts/install-delegation.sh --apply` registers it, in `~/.claude/settings.json`.
+The canonical installer (`scripts/install-delegation.sh`) registers the dedicated
+`onex-delegation@onex-delegation-local` native plugin in the selected Claude profile.
+Its `turn.step` adapter calls the existing delegation runner and renders accepted answers as
+assistant turns. Actions, approvals and failed delegation stay with Claude; accepted turns remain
+in conversation history. Upgrades remove owned classic command hooks, so the two answer paths
+never run together. Use `onex delegation on|off|status` or the onex TUI `/delegation`; OFF removes
+the owned native registration and history helpers. Claude's subagents stay with Claude.
 
 - **One switch**: `onex hooks disable POST_SKILL_DELEGATION_ENFORCER` turns it off; with the bit off
-  the PreToolUse hook passes the call through unchanged and cost accounting does nothing. The bit
+  the runner passes every prompt to Claude unchanged. `onex delegation on --no-prompts` keeps
+  the plugin installed but paused (`~/.onex/delegation.json`), with the same effect. The bit
   (`0x800`, ordinal 11) is **borrowed**, as Jake ruled on OMN-22498: no free `EnumHookBit` ordinal
   exists, the same reason as `PRE_TOOL_AGENT_DISPATCH_GATE` above. It is not the delegation hooks'
   own bit, and disabling it also turns off the delegation enforcer.
 - **Customer install**: the installer writes `~/.omninode/delegation/hooks-delegation.json`. When it
-  exists, neither the lite default nor the OmniNode-repo guard silences the two hooks; without it a
-  plugin user keeps the lite no-op.
-- **Exit 2 is kept**: the delegation hook clears `error-guard.sh`'s EXIT trap before `exit 2`, or the
-  trap turns it into exit 0 and Claude Code runs the agent natively after delegating it.
-- Tests: `uv run pytest tests/unit/hooks/scripts/test_delegation_switch_omn22498.py -q`.
+  exists, neither the lite default nor the OmniNode-repo guard silences the hook; without it a
+  plugin user keeps the lite no-op. ONEX installation/status checks verify the native
+  interpreter binding and closure. Adapter failures leave the prompt with Claude.
+- **Exit 2 is kept**: the script's subagents mode, no longer registered, clears `error-guard.sh`'s
+  EXIT trap before `exit 2`, or the trap turns it into exit 0 and Claude Code runs the agent natively
+  after delegating it. Keep that if the mode is ever registered again.
+- Tests: `uv run pytest tests/unit/hooks/scripts/test_delegation_switch_omn22498.py
+  tests/scripts/test_one_delegation_hook_omn23413.py -q`.
 
 ---
 

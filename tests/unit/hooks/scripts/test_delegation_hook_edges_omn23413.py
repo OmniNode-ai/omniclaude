@@ -62,13 +62,17 @@ def _commands(event: str) -> list[tuple[str | None, str]]:
 
 
 def test_each_delegation_hook_is_labelled_in_claude_settings() -> None:
-    """H1."""
+    """H1: one delegation hook, the labelled prompt hook, with its history helper
+    on the same event (OMN-23413 Amendment 14a); no subagent row is registered."""
     assert _commands("UserPromptSubmit") == [
-        (None, f"ONEX_DELEGATION_HOOK=prompts {_SCRIPT}")
+        (None, f"ONEX_DELEGATION_HOOK=prompts {_SCRIPT}"),
+        (
+            None,
+            "${ONEX_DELEGATION_PYTHON} ${CLAUDE_PLUGIN_ROOT}/hooks/lib/"
+            "delegation_hook_runner.py --history-only 2>/dev/null || true",
+        ),
     ]
-    assert _commands("PreToolUse") == [
-        ("^(Agent|Task)$", f"ONEX_DELEGATION_HOOK=subagents {_SCRIPT}")
-    ]
+    assert "PreToolUse" not in json.loads(_MANIFEST.read_text())["hooks"]
 
 
 def _tools_without(tmp_path: Path, *missing: str) -> Path:
