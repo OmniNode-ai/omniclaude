@@ -90,6 +90,24 @@ class ForbiddenUsageVisitor(ast.NodeVisitor):
     def __init__(self, filepath: Path) -> None:
         self.filepath = filepath
         self.violations: list[str] = []
+        self._docstring_nodes: set[int] = set()
+
+    def visit_Module(self, node: ast.Module) -> None:  # noqa: N802
+        # Pre-pass: collect docstring constants (first statement of a Module,
+        # ClassDef, FunctionDef or AsyncFunctionDef when it is a string expression).
+        for scope in ast.walk(node):
+            if not isinstance(
+                scope, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+            ):
+                continue
+            first = scope.body[0] if scope.body else None
+            if (
+                isinstance(first, ast.Expr)
+                and isinstance(first.value, ast.Constant)
+                and isinstance(first.value.value, str)
+            ):
+                self._docstring_nodes.add(id(first.value))
+        self.generic_visit(node)
 
     def visit_Import(self, node: ast.Import) -> None:  # noqa: N802
         for alias in node.names:
@@ -119,6 +137,8 @@ class ForbiddenUsageVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_Constant(self, node: ast.Constant) -> None:  # noqa: N802
+        if id(node) in self._docstring_nodes:
+            return
         if isinstance(node.value, str):
             value_upper = node.value.upper().strip()
             for keyword in FORBIDDEN_ATTR_ACCESS:
