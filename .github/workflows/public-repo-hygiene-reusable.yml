@@ -182,33 +182,59 @@ jobs:
           persist-credentials: false
 
       # OMN-19835. Only a pull request has a base to diff against. The merge
-      # ref's first parent IS that base; its second parent must be the pull
-      # request's head, and anything else means the checkout is not the merge
-      # ref this step reasons about, so it refuses rather than diffing the
-      # wrong pair. Other events pass no diff source, and the gate refuses a
+      # ref's first parent IS that base when its second parent is the pull
+      # request's head. Any other checkout (a re-run after the pull request
+      # merged checks out the base tip) is resolved from the event's shas: the
+      # head and base are fetched and the head is scanned. Other events pass no diff source, and the gate refuses a
       # repository that declares the added-lines scope without one.
       - name: Resolve the diff base
         id: diff-base
         if: github.event_name == 'pull_request'
         env:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           read -r -a commit_and_parents <<< "$(git rev-list --parents -n 1 HEAD)"
-          if [ "${#commit_and_parents[@]}" -ne 3 ]; then
-            echo "::error::the pull_request checkout is not a two-parent merge" \
-                 "ref (got ${#commit_and_parents[@]} ids from rev-list --parents)," \
-                 "so the added-lines diff base cannot be resolved. THE GATE DID NOT RUN."
+          if [ "${#commit_and_parents[@]}" -eq 3 ] \
+             && [ "${commit_and_parents[2]}" = "${PR_HEAD_SHA}" ]; then
+            echo "sha=${commit_and_parents[1]}" >> "$GITHUB_OUTPUT"
+            echo "public-repo-hygiene diff base: ${commit_and_parents[1]} (merge-ref first parent)"
+            exit 0
+          fi
+          # Not the merge ref of this head: a re-run after the pull request
+          # merged checks out the base tip (one parent). Fetch the head and the
+          # base by the event's shas, scan the head, and diff it against the
+          # base. The scan is never skipped.
+          echo "::notice::the checkout is not the merge ref of ${PR_HEAD_SHA}" \
+               "(${#commit_and_parents[@]} ids from rev-list --parents);" \
+               "resolving the diff base from the event shas."
+          auth=()
+          if [ -n "${GH_TOKEN:-}" ]; then
+            auth=(-c "http.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "${GH_TOKEN}" | base64 | tr -d '\n')")
+          fi
+          found=0
+          for depth in 50 500 5000; do
+            if ! git ${auth[@]+"${auth[@]}"} fetch --no-tags --quiet --depth="${depth}" \
+                 origin "${PR_BASE_SHA}" "${PR_HEAD_SHA}"; then
+              echo "::error::could not fetch the pull request head ${PR_HEAD_SHA}" \
+                   "and base ${PR_BASE_SHA}. THE GATE DID NOT RUN."
+              exit 1
+            fi
+            if git merge-base "${PR_BASE_SHA}" "${PR_HEAD_SHA}" > /dev/null 2>&1; then
+              found=1
+              break
+            fi
+          done
+          if [ "${found}" -ne 1 ]; then
+            echo "::error::no merge base between ${PR_BASE_SHA} and" \
+                 "${PR_HEAD_SHA} within the fetched history. THE GATE DID NOT RUN."
             exit 1
           fi
-          if [ "${commit_and_parents[2]}" != "${PR_HEAD_SHA}" ]; then
-            echo "::error::the merge ref's second parent is" \
-                 "${commit_and_parents[2]}, not the pull request head" \
-                 "${PR_HEAD_SHA}. THE GATE DID NOT RUN."
-            exit 1
-          fi
-          echo "sha=${commit_and_parents[1]}" >> "$GITHUB_OUTPUT"
-          echo "public-repo-hygiene diff base: ${commit_and_parents[1]} (merge-ref first parent)"
+          git checkout --quiet --detach "${PR_HEAD_SHA}"
+          echo "sha=${PR_BASE_SHA}" >> "$GITHUB_OUTPUT"
+          echo "public-repo-hygiene diff base: ${PR_BASE_SHA} (event base; head ${PR_HEAD_SHA} checked out)"
 
       # The validator lives in omniclaude. When called from another repo,
       # GITHUB_WORKSPACE holds the CALLER's tree, so pull just the script into
@@ -570,21 +596,49 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           read -r -a commit_and_parents <<< "$(git rev-list --parents -n 1 HEAD)"
-          if [ "${#commit_and_parents[@]}" -ne 3 ]; then
-            echo "::error::the pull_request checkout is not a two-parent merge" \
-                 "ref, so the diff base cannot be resolved. THE GATE DID NOT RUN."
+          if [ "${#commit_and_parents[@]}" -eq 3 ] \
+             && [ "${commit_and_parents[2]}" = "${PR_HEAD_SHA}" ]; then
+            echo "sha=${commit_and_parents[1]}" >> "$GITHUB_OUTPUT"
+            echo "public-repo-hygiene diff base: ${commit_and_parents[1]} (merge-ref first parent)"
+            exit 0
+          fi
+          # Not the merge ref of this head: a re-run after the pull request
+          # merged checks out the base tip (one parent). Fetch the head and the
+          # base by the event's shas, scan the head, and diff it against the
+          # base. The scan is never skipped.
+          echo "::notice::the checkout is not the merge ref of ${PR_HEAD_SHA}" \
+               "(${#commit_and_parents[@]} ids from rev-list --parents);" \
+               "resolving the diff base from the event shas."
+          auth=()
+          if [ -n "${GH_TOKEN:-}" ]; then
+            auth=(-c "http.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "${GH_TOKEN}" | base64 | tr -d '\n')")
+          fi
+          found=0
+          for depth in 50 500 5000; do
+            if ! git ${auth[@]+"${auth[@]}"} fetch --no-tags --quiet --depth="${depth}" \
+                 origin "${PR_BASE_SHA}" "${PR_HEAD_SHA}"; then
+              echo "::error::could not fetch the pull request head ${PR_HEAD_SHA}" \
+                   "and base ${PR_BASE_SHA}. THE GATE DID NOT RUN."
+              exit 1
+            fi
+            if git merge-base "${PR_BASE_SHA}" "${PR_HEAD_SHA}" > /dev/null 2>&1; then
+              found=1
+              break
+            fi
+          done
+          if [ "${found}" -ne 1 ]; then
+            echo "::error::no merge base between ${PR_BASE_SHA} and" \
+                 "${PR_HEAD_SHA} within the fetched history. THE GATE DID NOT RUN."
             exit 1
           fi
-          if [ "${commit_and_parents[2]}" != "${PR_HEAD_SHA}" ]; then
-            echo "::error::the merge ref's second parent is" \
-                 "${commit_and_parents[2]}, not the pull request head" \
-                 "${PR_HEAD_SHA}. THE GATE DID NOT RUN."
-            exit 1
-          fi
-          echo "sha=${commit_and_parents[1]}" >> "$GITHUB_OUTPUT"
+          git checkout --quiet --detach "${PR_HEAD_SHA}"
+          echo "sha=${PR_BASE_SHA}" >> "$GITHUB_OUTPUT"
+          echo "public-repo-hygiene diff base: ${PR_BASE_SHA} (event base; head ${PR_HEAD_SHA} checked out)"
 
       - name: Resolve the gate pin
         id: pin
