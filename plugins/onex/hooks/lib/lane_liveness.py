@@ -222,9 +222,11 @@ def claude_home() -> Path:
 READER = "lane-liveness"
 READER_MODULE = "omnimarket.nodes.node_work_ledger_reader_effect"
 READ_WINDOW_HOURS = 6
-#: The guard calls this on every SendMessage; the reader node can answer slowly, so the read
-#: is bounded. A read that did not answer is "ledger unavailable", which resolves to UNREACHABLE.
-READ_TIMEOUT_S = 25
+#: The guard probes only a SendMessage that claims a lane dead or hands its work over, and the
+#: sender waits for that one read. Nine reads from a lab host took 7.1 to 42.2 s (the answerer's time,
+#: slowest for a lane with no row); 60 s is the slowest plus a margin. A read that did not answer
+#: in it is "ledger unavailable", which resolves to UNREACHABLE.
+READ_TIMEOUT_S = 60
 
 
 # --------------------------------------------------------------------------
