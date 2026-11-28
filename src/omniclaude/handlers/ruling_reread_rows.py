@@ -27,6 +27,7 @@ from omniclaude.handlers.work_ledger_rows import read_rows
 
 #: The reader node's ceiling for a window, in hours (30 days).
 MAX_WINDOW_HOURS = 24 * 30
+_OWNED_KEYS = ("ticket", "parent_ticket")
 _STAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
 
 
@@ -64,3 +65,37 @@ def ruling_reread_rows(
     age_s = ((now or datetime.now(UTC)) - opened).total_seconds()
     hours = min(MAX_WINDOW_HOURS, max(1, math.ceil(age_s / 3600) + 1))
     return [*own, *read_rows(reader, hours, ("RULING",), environ=environ)]
+
+
+def owned_tickets(rows: list[str], lane: str) -> set[str]:
+    """The ticket and parent ticket of the lane's newest CLAIM in ``rows``."""
+    claim = newest_claim_stamp(rows, lane)
+    owned: set[str] = set()
+    for raw in rows:
+        cells = [cell.strip() for cell in raw.split(" | ")]
+        if len(cells) > 2 and cells[1] == "CLAIM" and f"lane={lane}" in cells[2:]:
+            if cells[0].removeprefix("- ").strip() == claim:
+                fields = dict(c.split("=", 1) for c in cells[2:] if "=" in c)
+                owned |= {v for k, v in fields.items() if k in _OWNED_KEYS and v}
+    return owned
+
+
+def ruling_binds(raw: str, owned: set[str]) -> bool:
+    """RULING 2026-11-25T22:10:56Z: a ruling with no ticket, of kind process, or on an owned ticket.
+
+    Any other ticket's ruling is journalled and owes no ACK.
+    """
+    cells = [cell.strip() for cell in raw.split(" | ")]
+    fields = dict(cell.split("=", 1) for cell in cells[2:] if "=" in cell)
+    ticket = fields.get("ticket")
+    return not ticket or fields.get("kind") == "process" or ticket in owned
+
+
+def bound(
+    entries: dict[tuple[str, str, str], tuple[str, str, str, str]],
+    rows: list[tuple[str, str, dict[str, str], str, str]],
+    lane: str,
+) -> list[tuple[tuple[str, str, str], tuple[str, str, str, str]]]:
+    """The journal entries whose ruling binds ``lane``; the rest are journalled, not owed."""
+    owned = owned_tickets([row[4] for row in rows], lane)
+    return [item for item in entries.items() if ruling_binds(item[1][3], owned)]

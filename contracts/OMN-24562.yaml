@@ -1,0 +1,33 @@
+schema_version: "1.0.0"
+ticket_id: OMN-24562
+title: "The push guard binds a lane to rulings on its own ticket, its parent ticket, process rulings and ticketless rulings"
+summary: >
+  The ruling re-read owed an ACK for every ruling since the lane's CLAIM. It now binds the lane to a ruling that
+  names no ticket, is of kind process, or names the ticket or parent ticket of the lane's newest CLAIM; other
+  tickets' rulings are journalled and owe no ACK. The ACK shape, journal and digest are unchanged.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn24562-ruling-binding
+    statement: The push guard binds a lane to the rulings that concern it.
+    acceptance:
+      - id: AC1
+        statement: "AC1: a ruling on another ticket with kind decision does not refuse a publish, and same-ticket, parent-ticket, process and ticketless rulings still refuse without an exact ACK -- falsifier: the other-ticket ruling refuses, or any control passes without an ACK"
+evidence_requirements:
+  - kind: tests
+    description: "The ruling re-read suite passes with the other-ticket RED case and the four controls"
+    command: "uv run pytest tests/hooks/test_ledger_ruling_reread.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn24562-ac1-ruling-binding
+    description: "A decision ruling on another ticket is journalled and owes no ACK; same-ticket, parent-ticket, process and ticketless rulings still refuse. Fails at the merge base, which refuses the other-ticket ruling."
+    source: manual
+    binds_ac: [AC1]
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/hooks/test_ledger_ruling_reread.py -q --no-cov -k 'another_ticket or still_refuse or parent_ticket'"
+        cwd: "."
