@@ -153,7 +153,7 @@ fi
 # Check if delegation was approved
 if [[ "$DELEGATION_RESULT" == DELEGATED:* ]]; then
     echo "[$TIMESTAMP] [$_OMNICLAUDE_HOOK_NAME] BLOCK tool=${TOOL_NAME} agent=$(printf '%s\n' "$TOOL_INFO" | jq -r '.tool_input.name // .tool_input.subagent_type // "(unnamed)"' 2>/dev/null || echo "(unnamed)") result=${DELEGATION_RESULT}" >> "$LOG_FILE" 2>/dev/null || true
-    [[ "${DELEGATION_RESULT##*$'\n'}" == "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\""* ]] && { printf '%s\n' "${DELEGATION_RESULT##*$'\n'}"; exit 0; }
+    printf '%s\n' "${DELEGATION_RESULT##*$'\n'}" | jq -e '.hookSpecificOutput.hookEventName == "PreToolUse" and .hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 && { printf '%s\n' "${DELEGATION_RESULT##*$'\n'}"; exit 0; }
     printf '%s\n' "$TOOL_INFO"
     echo "DELEGATION RESULT: ${DELEGATION_RESULT}" >&2
     trap - EXIT 2>/dev/null || true

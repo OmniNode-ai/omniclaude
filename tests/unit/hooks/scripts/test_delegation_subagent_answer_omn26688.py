@@ -105,6 +105,58 @@ def test_an_answered_subagent_without_telemetry_prints_the_node_deny(
     assert "DELEGATION RESULT" not in proc.stderr
 
 
+def test_an_answered_subagent_preserves_multiline_and_json_in_deny_reason(
+    tmp_path: Path,
+) -> None:
+    """A3: An uncut multi-line answer containing JSON inside deny prints as-is."""
+    rich_answer = 'Line one\n{"name": "dict", "items": [1, 2]}\nLine three'
+    deny = json.dumps(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": f"Result:\n{rich_answer}",
+            }
+        }
+    )
+    stub = f"{_HEAD}\n{_TELEMETRY}\n{deny}\n"
+    proc = _hook(
+        tmp_path,
+        _plugin_with_stub_runner(tmp_path, stub),
+        "subagents",
+        _AGENT,
+    )
+    assert proc.returncode == 0
+    assert proc.stdout.strip() == deny
+    assert (
+        rich_answer
+        in json.loads(proc.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+    )
+
+
+def test_compact_or_reordered_deny_json_exits_zero(tmp_path: Path) -> None:
+    """Valid PreToolUse deny JSON with compact separators and reordered keys exits 0."""
+    compact_deny = json.dumps(
+        {
+            "hookSpecificOutput": {
+                "permissionDecision": "deny",
+                "permissionDecisionReason": _ANSWER,
+                "hookEventName": "PreToolUse",
+            }
+        },
+        separators=(",", ":"),
+    )
+    stub = f"{_HEAD}\n{_TELEMETRY}\n{compact_deny}\n"
+    proc = _hook(
+        tmp_path,
+        _plugin_with_stub_runner(tmp_path, stub),
+        "subagents",
+        _AGENT,
+    )
+    assert proc.returncode == 0
+    assert json.loads(proc.stdout) == json.loads(compact_deny)
+
+
 def test_an_answered_subagent_without_a_deny_line_blocks(tmp_path: Path) -> None:
     """A4: An older node without a deny line must exit 2 and block."""
     stub = f"{_HEAD}\n{_ANSWER}\n"
@@ -116,6 +168,39 @@ def test_an_answered_subagent_without_a_deny_line_blocks(tmp_path: Path) -> None
     )
     assert proc.returncode == 2
     assert "Keys are unique and hashable." in proc.stderr
+
+
+@pytest.mark.parametrize(
+    "last_line",
+    [
+        json.dumps({"name": "dict"}),
+        json.dumps({"hookSpecificOutput": {"other": 1}}),
+        json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "allow",
+                    "permissionDecisionReason": "not a deny",
+                }
+            }
+        ),
+        '{"hookSpecificOutput": {"hookEventName": "PreToolUse"',
+    ],
+)
+def test_a_plain_json_answer_from_an_older_node_still_blocks(
+    tmp_path: Path, last_line: str
+) -> None:
+    """A4 negative: Plain, non-deny, or truncated JSON last lines must exit 2."""
+    stub = f"{_HEAD}\n{last_line}\n"
+    proc = _hook(
+        tmp_path,
+        _plugin_with_stub_runner(tmp_path, stub),
+        "subagents",
+        _AGENT,
+    )
+    assert proc.returncode == 2
+    assert json.loads(proc.stdout) == _AGENT
+    assert last_line in proc.stderr
 
 
 def test_a_delegated_subagent_is_logged_as_blocked(tmp_path: Path) -> None:
