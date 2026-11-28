@@ -191,9 +191,7 @@ def main() -> int:
                 )
                 if telemetry_json:
                     print(telemetry_json)
-                print(
-                    getattr(result, "hook_output", "") or result.answer
-                )  # OMN-26688 deny
+                print(getattr(result, "hook_output", "") or result.answer)
                 return 0
         except Exception as error:  # noqa: BLE001 - fail open
             why = f"error:{type(error).__name__}"
