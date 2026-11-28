@@ -293,9 +293,16 @@ def subagent_lane(
     # act lanes were refused as unclaimed (OMN-26641). ``reader`` is this call's own load of the
     # module, so its read arguments are this call's alone. An unreadable ledger reads as no open
     # CLAIM, which confirms nothing.
-    for lane in dict.fromkeys(x for x in (named, prompted, parent_lane) if x):
+    candidates = tuple(dict.fromkeys(x for x in (named, prompted, parent_lane) if x))
+    for lane in candidates:
         reader.__dict__["READ_ARGS"] += f" --row-lane {reader.lane_cell(lane)}"
     claims = reader.open_claims(environ)
+    # A read that holds no CLAIM of any lane this call resolves may be a read that did not answer
+    # (the reader's bus session timed out: exit 69, no rows) and not a ledger without the CLAIM:
+    # ``integration:act300`` was refused at 2026-11-25T12:20Z with its CLAIM open (OMN-24562). One
+    # more read; a lane with no CLAIM reads the same twice and is refused as before.
+    if candidates and not any(c.get("lane") in candidates for c in claims):
+        claims = reader.open_claims(environ)
     if named and any(claim.get("lane") == named for claim in claims):
         return named, named, LANE_SOURCE_SIDECAR_CLAIM, ""
     if prompted and any(_claim_matches(c, prompted, parent) for c in claims):
