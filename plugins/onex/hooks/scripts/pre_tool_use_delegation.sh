@@ -6,8 +6,9 @@
 #
 # An Agent/Task call goes through the delegation pipeline (SensitivityGate →
 # TaskClassifier → omnimarket node_hook_delegate_effect). When it is answered,
-# the tool is blocked (exit 2) with the answer on stderr; otherwise exit 0 and
-# the original tool proceeds. Every prompt (AC33) goes to the node's prompt
+# the runner's last line is the node's PreToolUse deny, whose reason is the
+# answer, printed as this hook's output (OMN-26688); an older node's plain answer
+# is blocked with exit 2 as before. Otherwise exit 0 and the original tool proceeds. Every prompt (AC33) goes to the node's prompt
 # handler, and the runner prints this hook's whole output: a "block" carrying
 # the delegated answer, context for Claude, or nothing.
 #
@@ -151,12 +152,10 @@ fi
 
 # Check if delegation was approved
 if [[ "$DELEGATION_RESULT" == DELEGATED:* ]]; then
-    AGENT_NAME=$(printf '%s\n' "$TOOL_INFO" | jq -r '.tool_input.name // .tool_input.subagent_type // "(unnamed)"' 2>/dev/null) || AGENT_NAME="(unnamed)"
-    echo "[$TIMESTAMP] [$_OMNICLAUDE_HOOK_NAME] BLOCK tool=${TOOL_NAME} agent=${AGENT_NAME} result=${DELEGATION_RESULT}" >> "$LOG_FILE" 2>/dev/null || true
+    echo "[$TIMESTAMP] [$_OMNICLAUDE_HOOK_NAME] BLOCK tool=${TOOL_NAME} agent=$(printf '%s\n' "$TOOL_INFO" | jq -r '.tool_input.name // .tool_input.subagent_type // "(unnamed)"' 2>/dev/null || echo "(unnamed)") result=${DELEGATION_RESULT}" >> "$LOG_FILE" 2>/dev/null || true
+    printf '%s\n' "${DELEGATION_RESULT##*$'\n'}" | jq -e '.hookSpecificOutput.hookEventName == "PreToolUse" and .hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 && { printf '%s\n' "${DELEGATION_RESULT##*$'\n'}"; exit 0; }
     printf '%s\n' "$TOOL_INFO"
     echo "DELEGATION RESULT: ${DELEGATION_RESULT}" >&2
-    # error-guard.sh's EXIT trap turns any non-zero exit into 0, which would let
-    # Claude Code run the agent natively after delegating it (OMN-22498).
     trap - EXIT 2>/dev/null || true
     exit 2
 fi

@@ -369,3 +369,116 @@ def test_a_node_without_sensitive_is_named_and_sends_nothing(
     err = capsys.readouterr().err
     assert "node_skew" in err
     assert "what is TCP" not in err
+
+
+# ---------------------------------------------------------------------------
+# OMN-26688: subagent PreToolUse deny emission and empty hook_output fallback
+# ---------------------------------------------------------------------------
+
+
+def _delegatable_classifier() -> MagicMock:
+    classifier = MagicMock()
+    classifier.is_delegatable.return_value = SimpleNamespace(
+        delegatable=True,
+        classified_intent="research",
+        delegate_to_model="Qwen3.8-27B",
+    )
+    return classifier
+
+
+@pytest.mark.unit
+def test_real_runner_emits_hook_output_when_present() -> None:
+    """Reverting line 194 to ``result.answer`` must fail this test."""
+    answer = "A Python dictionary maps unique hashable keys to values."
+    deny_json = json.dumps(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": f"Delegated result:\n{answer}",
+            }
+        }
+    )
+
+    class _ResultWithHookOutput(ModelHookDelegateResult):
+        @property
+        def hook_output(self) -> str:
+            return deny_json
+
+    result = _ResultWithHookOutput(
+        outcome=EnumHookDelegateOutcome.ANSWERED,
+        answer=answer,
+        model="Qwen3.8-27B",
+        run_id="run-26688",
+    )
+    with (
+        patch.object(_runner, "_import_gate", return_value=_clean_gate()),
+        patch.object(
+            _runner, "_import_classifier", return_value=_delegatable_classifier()
+        ),
+        patch.object(HandlerHookDelegate, "handle", return_value=result),
+    ):
+        out, code = _run_main(_tool_json("Explain Python dicts"))
+    lines = [ln for ln in out.splitlines() if ln]
+    assert code == 0
+    assert lines[0].startswith("DELEGATED: research answered by Qwen3.8-27B")
+    assert lines[-1] != answer
+    assert json.loads(lines[-1]) == json.loads(deny_json)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("empty_hook_output", ["", None])
+def test_real_runner_falls_back_to_answer_when_hook_output_empty(
+    empty_hook_output: object,
+) -> None:
+    """Empty or None ``hook_output`` falls back to ``result.answer``."""
+    answer = "A Python dictionary maps unique hashable keys to values."
+
+    class _ResultWithEmptyHookOutput(ModelHookDelegateResult):
+        @property
+        def hook_output(self) -> object:
+            return empty_hook_output
+
+    result = _ResultWithEmptyHookOutput(
+        outcome=EnumHookDelegateOutcome.ANSWERED,
+        answer=answer,
+        model="Qwen3.8-27B",
+        run_id="run-26688",
+    )
+    with (
+        patch.object(_runner, "_import_gate", return_value=_clean_gate()),
+        patch.object(
+            _runner, "_import_classifier", return_value=_delegatable_classifier()
+        ),
+        patch.object(HandlerHookDelegate, "handle", return_value=result),
+    ):
+        out, code = _run_main(_tool_json("Explain Python dicts"))
+    lines = [ln for ln in out.splitlines() if ln]
+    assert code == 0
+    assert lines[0].startswith("DELEGATED: research answered by Qwen3.8-27B")
+    assert lines[-1] == answer
+
+
+@pytest.mark.unit
+def test_real_runner_falls_back_to_answer_when_hook_output_absent() -> None:
+    """Older node results without ``hook_output`` emit ``result.answer``."""
+    answer = "A Python dictionary maps unique hashable keys to values."
+    result = SimpleNamespace(
+        answered=True,
+        outcome=EnumHookDelegateOutcome.ANSWERED,
+        answer=answer,
+        model="Qwen3.8-27B",
+        run_id="run-26688",
+    )
+    with (
+        patch.object(_runner, "_import_gate", return_value=_clean_gate()),
+        patch.object(
+            _runner, "_import_classifier", return_value=_delegatable_classifier()
+        ),
+        patch.object(HandlerHookDelegate, "handle", return_value=result),
+    ):
+        out, code = _run_main(_tool_json("Explain Python dicts"))
+    lines = [ln for ln in out.splitlines() if ln]
+    assert code == 0
+    assert lines[0].startswith("DELEGATED: research answered by Qwen3.8-27B")
+    assert lines[-1] == answer

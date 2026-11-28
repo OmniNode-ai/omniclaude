@@ -8,7 +8,7 @@ pre_tool_use_delegation.sh; ONEX_DELEGATION_HOOK labels each row, since the
 operator ruling of 2026-10-01 admits no new scripts. Failure modes:
 
   H1  Claude Code's settings cannot tell the two hooks apart.
-  H2  a labelled hook does not do its job (prompt block, subagent exit 2), or
+  H2  a labelled hook does not do its job (prompt block, subagent deny), or
       its log line does not name it.
   H3  without jq the prompt hook prints its input, which Claude Code adds to the
       conversation: the whole envelope, prompt and transcript path included.
@@ -139,14 +139,18 @@ def test_the_prompt_hook_blocks_with_the_delegated_answer(tmp_path: Path) -> Non
     assert "[pre_tool_use_delegation.sh[prompts]] PROMPT" in log
 
 
-def test_the_subagent_hook_blocks_with_exit_2(tmp_path: Path) -> None:
-    """H2: the subagents row hands the answer back in place of the subagent."""
+def test_the_subagent_hook_answers_in_place_of_the_subagent(tmp_path: Path) -> None:
+    """H2: the subagents row hands the answer back in place of the subagent, as a
+    deny with a plain reason (OMN-26688; test_delegation_subagent_answer_omn26688)."""
     plugin = _plugin_with_stub_runner(
-        tmp_path, f"DELEGATED: research answered by m (run r-agent)\n{_ANSWER}\n"
+        tmp_path,
+        f"DELEGATED: research answered by m (run r-agent)\n{json.dumps({'hookSpecificOutput': {'hookEventName': 'PreToolUse', 'permissionDecision': 'deny', 'permissionDecisionReason': _ANSWER}})}\n",
     )
     proc = _hook(tmp_path, plugin, "subagents", _AGENT)
-    assert proc.returncode == 2
-    assert _ANSWER in proc.stderr
+    assert proc.returncode == 0, proc.stderr
+    decision = json.loads(proc.stdout)["hookSpecificOutput"]
+    assert decision["permissionDecision"] == "deny"
+    assert _ANSWER in decision["permissionDecisionReason"]
 
 
 # --- H3: no jq ---------------------------------------------------------------
