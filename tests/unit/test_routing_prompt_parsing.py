@@ -19,6 +19,7 @@ from uuid import uuid4
 
 import pytest
 
+from omniclaude.enums.enum_llm_parse_status import EnumLlmParseStatus
 from omniclaude.nodes.node_agent_routing_compute.handler_routing_llm import (
     _ROUTING_PROMPT_VERSION,
     HandlerRoutingLlm,
@@ -178,14 +179,17 @@ class TestParseAgentEdgeCases:
     @pytest.mark.unit
     def test_whitespace_only_response_returns_none(self) -> None:
         known = {"agent-debugger"}
-        assert _parse_agent_from_response("   \t\n  ", known) is None
+        assert (
+            _parse_agent_from_response("   \t\n  ", known).status
+            is EnumLlmParseStatus.UNPARSABLE
+        )
 
     @pytest.mark.unit
     def test_newline_in_response_still_matches(self) -> None:
         """LLMs sometimes emit trailing newlines — strip handles this."""
         known = {"agent-debugger"}
         result = _parse_agent_from_response("agent-debugger\n", known)
-        assert result == "agent-debugger"
+        assert result.value == "agent-debugger"
 
     @pytest.mark.unit
     def test_response_with_explanation_still_matches(self) -> None:
@@ -194,35 +198,44 @@ class TestParseAgentEdgeCases:
         result = _parse_agent_from_response(
             "I chose agent-debugger because it handles debugging best.", known
         )
-        assert result == "agent-debugger"
+        assert result.value == "agent-debugger"
 
     @pytest.mark.unit
     def test_longer_name_wins_over_prefix(self) -> None:
         """agent-api-architect must beat agent-api when both present."""
         known = {"agent-api", "agent-api-architect"}
         result = _parse_agent_from_response("agent-api-architect", known)
-        assert result == "agent-api-architect"
+        assert result.value == "agent-api-architect"
 
     @pytest.mark.unit
     def test_response_with_only_punctuation_returns_none(self) -> None:
         known = {"agent-debugger"}
-        assert _parse_agent_from_response("!!!---...", known) is None
+        assert (
+            _parse_agent_from_response("!!!---...", known).status
+            is EnumLlmParseStatus.UNPARSABLE
+        )
 
     @pytest.mark.unit
     def test_numeric_response_returns_none(self) -> None:
         known = {"agent-debugger"}
-        assert _parse_agent_from_response("42", known) is None
+        assert (
+            _parse_agent_from_response("42", known).status
+            is EnumLlmParseStatus.UNPARSABLE
+        )
 
     @pytest.mark.unit
     def test_empty_known_agents_returns_none(self) -> None:
-        assert _parse_agent_from_response("agent-debugger", set()) is None
+        assert (
+            _parse_agent_from_response("agent-debugger", set()).status
+            is EnumLlmParseStatus.UNPARSABLE
+        )
 
     @pytest.mark.unit
     def test_response_with_quoted_agent_name_matches(self) -> None:
         """LLM may quote the name: '"agent-debugger"' must still match."""
         known = {"agent-debugger"}
         result = _parse_agent_from_response('"agent-debugger"', known)
-        assert result == "agent-debugger"
+        assert result.value == "agent-debugger"
 
     @pytest.mark.unit
     def test_response_mixed_case_substring(self) -> None:
@@ -231,7 +244,7 @@ class TestParseAgentEdgeCases:
         result = _parse_agent_from_response(
             "The best agent is AGENT-API-ARCHITECT.", known
         )
-        assert result == "agent-api-architect"
+        assert result.value == "agent-api-architect"
 
 
 # ---------------------------------------------------------------------------
@@ -282,7 +295,7 @@ class TestMalformedApiResponseRecovery:
                 correlation_id=uuid4(),
             )
 
-        assert selected is None
+        assert selected.status is EnumLlmParseStatus.UNPARSABLE
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -304,7 +317,7 @@ class TestMalformedApiResponseRecovery:
                 correlation_id=uuid4(),
             )
 
-        assert selected is None
+        assert selected.status is EnumLlmParseStatus.UNPARSABLE
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -328,7 +341,7 @@ class TestMalformedApiResponseRecovery:
                 correlation_id=uuid4(),
             )
 
-        assert selected is None
+        assert selected.status is EnumLlmParseStatus.UNPARSABLE
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -352,7 +365,7 @@ class TestMalformedApiResponseRecovery:
                 correlation_id=uuid4(),
             )
 
-        assert selected is None
+        assert selected.status is EnumLlmParseStatus.UNPARSABLE
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -374,7 +387,7 @@ class TestMalformedApiResponseRecovery:
                 correlation_id=uuid4(),
             )
 
-        assert selected is None
+        assert selected.status is EnumLlmParseStatus.UNPARSABLE
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -396,7 +409,7 @@ class TestMalformedApiResponseRecovery:
                 correlation_id=uuid4(),
             )
 
-        assert selected is None
+        assert selected.status is EnumLlmParseStatus.UNPARSABLE
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -420,7 +433,7 @@ class TestMalformedApiResponseRecovery:
                 correlation_id=uuid4(),
             )
 
-        assert selected is None
+        assert selected.status is EnumLlmParseStatus.UNPARSABLE
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -453,7 +466,7 @@ class TestMalformedApiResponseRecovery:
                 correlation_id=uuid4(),
             )
 
-        assert selected is None
+        assert selected.status is EnumLlmParseStatus.UNPARSABLE
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -486,4 +499,4 @@ class TestMalformedApiResponseRecovery:
                 correlation_id=uuid4(),
             )
 
-        assert selected == "agent-debugger"
+        assert selected.value == "agent-debugger"

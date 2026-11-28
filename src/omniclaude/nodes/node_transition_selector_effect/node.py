@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING
 import httpx
 from omnibase_core.nodes.node_effect import NodeEffect
 
+from omniclaude.models.model_llm_parse_result import ModelLlmParseResult
 from omniclaude.nodes.node_transition_selector_effect.models.model_contract_state import (
     ModelContractState,
 )
@@ -216,8 +217,8 @@ class NodeTransitionSelectorEffect(NodeEffect):
             )
 
         # Parse model output
-        selected_index = self._parse_selection(raw_output)
-        if selected_index is None:
+        selection = self._parse_selection(raw_output)
+        if not selection.is_parsed or selection.value is None:
             logger.warning(
                 "transition_selector.malformed_output",
                 extra={
@@ -228,7 +229,8 @@ class NodeTransitionSelectorEffect(NodeEffect):
             return ModelTransitionSelectorResult(
                 error_kind=SelectionErrorKind.MALFORMED_OUTPUT,
                 error_detail=(
-                    "Model output could not be parsed as a valid selection. "
+                    "Model output could not be parsed as a valid selection "
+                    f"({selection.reason}). "
                     f"Raw output (truncated): {raw_output[:200]}"
                 ),
                 model_raw_output=raw_output,
@@ -237,6 +239,7 @@ class NodeTransitionSelectorEffect(NodeEffect):
             )
 
         # Validate index against action_set (1-indexed in prompt)
+        selected_index = selection.value
         action_list = request.action_set
         if selected_index < 1 or selected_index > len(action_list):
             logger.warning(
@@ -473,7 +476,7 @@ class NodeTransitionSelectorEffect(NodeEffect):
         return content
 
     @staticmethod
-    def _parse_selection(raw_output: str) -> int | None:
+    def _parse_selection(raw_output: str) -> ModelLlmParseResult[int]:
         """Parse the model's JSON response into a 1-based selection index.
 
         Expects: {"selected": <integer>}
@@ -482,10 +485,13 @@ class NodeTransitionSelectorEffect(NodeEffect):
             raw_output: Raw text from the model.
 
         Returns:
-            1-based integer index, or None if parsing fails for any reason.
+            PARSED with the 1-based integer index, or UNPARSABLE (carrying the
+            raw text and the reason) when parsing fails for any reason.
         """
         if not raw_output or not raw_output.strip():
-            return None
+            return ModelLlmParseResult[int].unparsable(
+                raw_reply=raw_output, reason="model output is empty"
+            )
 
         try:
             data = json.loads(raw_output.strip())
@@ -496,24 +502,32 @@ class NodeTransitionSelectorEffect(NodeEffect):
                 end = raw_output.rindex("}") + 1
                 data = json.loads(raw_output[start:end])
             except (ValueError, json.JSONDecodeError):
-                return None
+                return ModelLlmParseResult[int].unparsable(
+                    raw_reply=raw_output, reason="model output holds no JSON object"
+                )
 
         if not isinstance(data, dict):
-            return None
+            return ModelLlmParseResult[int].unparsable(
+                raw_reply=raw_output, reason="model output is not a JSON object"
+            )
 
         selected = data.get("selected")
         # Reject bool explicitly: isinstance(True, int) is True, but bool is not
         # a valid index — True would map to index 1 silently.
         if isinstance(selected, bool):
-            return None
+            return ModelLlmParseResult[int].unparsable(
+                raw_reply=raw_output, reason="'selected' is a boolean"
+            )
         if not isinstance(selected, int):
             # Try coercing string integer
             try:
                 selected = int(selected)  # type: ignore[arg-type]  # Why: coercing potentially non-int type from model output
             except (TypeError, ValueError):
-                return None
+                return ModelLlmParseResult[int].unparsable(
+                    raw_reply=raw_output, reason="'selected' is not an integer"
+                )
 
-        return selected
+        return ModelLlmParseResult[int].parsed(selected, raw_reply=raw_output)
 
     @staticmethod
     def build_request(

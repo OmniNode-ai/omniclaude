@@ -1,0 +1,51 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-26353
+title: "omniclaude LLM calls return a typed result for an unparsable reply instead of None"
+summary: >
+  Three omniclaude call sites (the routing LLM handler, the transition selector
+  and the consensus quorum) turned an unparsable LLM reply into None, or in the
+  quorum into an invented 0.5 vote, so a caller could not tell an unparsable
+  reply from no answer. Each site now returns ModelLlmParseResult with a status
+  (parsed, unparsable, unavailable) and each caller branches on it.
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+requirements:
+  - id: req-omn26353-typed
+    statement: An unparsable LLM reply returns a typed result at each of the three sites.
+    acceptance:
+      - id: "AC1"
+        statement: "AC1: an unparsable LLM reply returns a typed result at each of the three sites -- falsifier: uv run pytest tests -q -k llm_unparsable_reply_typed breaks while any site returns None"
+  - id: req-omn26353-callers
+    statement: Callers branch on the typed result and none treats it as no answer.
+    acceptance:
+      - id: "AC2"
+        statement: "AC2: callers branch on the typed result and none treats it as no answer -- falsifier: uv run pytest tests -q -k llm_unparsable_reply_callers breaks on a caller that checks is None"
+evidence_requirements:
+  - kind: tests
+    description: "The typed-result and caller tests pass"
+    command: "uv run pytest tests/unit/test_llm_unparsable_reply.py -q --no-cov"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omn26353-ac1-typed
+    description: "Each of the three sites returns ModelLlmParseResult for an unparsable reply."
+    source: manual
+    binds_ac:
+      - "AC1"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/test_llm_unparsable_reply.py -q --no-cov -k llm_unparsable_reply_typed"
+        cwd: "${OMNI_HOME}/omniclaude"
+  - id: dod-omn26353-ac2-callers
+    description: "Each caller branches on the typed result; none compares it with None."
+    source: manual
+    binds_ac:
+      - "AC2"
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest tests/unit/test_llm_unparsable_reply.py -q --no-cov -k llm_unparsable_reply_callers"
+        cwd: "${OMNI_HOME}/omniclaude"
