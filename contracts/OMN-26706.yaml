@@ -14,8 +14,30 @@ requirements:
   - id: req-omn26706-hygiene-diff-base
     statement: The hygiene gate's diff-base step never skips the scan on a re-run of a merged pull request.
     acceptance:
-      - id: AC9
-        statement: "AC9: a one-parent pull_request checkout resolves the diff base from the event's shas in both copies of the step -- falsifier: the one-parent test fails with the error 'not a two-parent merge ref'"
+      - id: "AC1"
+        statement: |-
+          AC1: every declared edge has a test -- falsifier: a test asserts the parametrise list length equals the number of transitions in contract.yaml
+      - id: "AC2"
+        statement: |-
+          AC2: no I/O, clock, UUID or model call in the handler -- falsifier: grep -nE "datetime.now|time.time|uuid4|open(|subprocess|httpx|requests|execute_transition" handlers/handler_lane_work_reducer.py prints nothing
+      - id: "AC3"
+        statement: |-
+          AC3: the state list has one source -- falsifier: node_fsm_single_source_check_compute passes over the node, and a test asserts EnumLaneWorkState equals the contract state names
+      - id: "AC4"
+        statement: |-
+          AC4: the repeat rule counts admissible failures across states and nothing else -- falsifier: tests send unclassified in red and then, after a loop, in fixing (the second goes to help); send push_refused check_failed from pushing, loop through fixing, send it again (help); send a refused push_refused in diagnosing (not counted); send pushed three times across loops (never help); check the counters reset on proof_passed
+      - id: "AC5"
+        statement: |-
+          AC5: worker deadlines fire only as armed -- falsifier: tests arm the deadline on entry to each of the six worker-owned states and fire it (awaiting_worker ends worker_never_started, the other five worker_lost), renew it with a worker input and fire the old arming (refused), and fire one from the previous attempt (refused)
+      - id: "AC6"
+        statement: |-
+          AC6: replay is byte-deterministic for states and intents -- falsifier: a test folds a 30-event sequence twice and compares the serialized states and intents
+      - id: "AC7"
+        statement: |-
+          AC7: an answer for an old handoff request, a handed-off answer naming another head, or a handed-off answer followed by an observation of another head, does not end the workflow -- falsifier: three tests, the last ending in proving
+      - id: "AC8"
+        statement: |-
+          AC8: the pull request cites formal/lane_work_loop and its digest -- falsifier: the pull request body read
 evidence_requirements:
   - kind: tests
     description: "The hygiene workflow suite passes, with the one-parent, two-parent and unfetchable-head cases"
@@ -28,7 +50,6 @@ dod_evidence:
   - id: dod-omn26706-hygiene-one-parent
     description: "Both copies of the diff-base step, run on a depth-2 checkout of the base tip with the event's head and base shas, fetch the head, check it out and output the base as the diff base; a head the remote does not hold is refused with the gate-did-not-run error. Fails at the merge base, which exits 1 on a one-parent checkout."
     source: manual
-    binds_ac: [AC9]
     checks:
       - check_type: test_passes
         check_value: "uv run pytest tests/workflows/test_public_repo_hygiene_workflows.py -q --no-cov -k diff_base"
